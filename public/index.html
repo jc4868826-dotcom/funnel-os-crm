@@ -117,6 +117,7 @@
 .gerente-only{display:none!important;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 function initAnalisisIA(){
   const sel=document.getElementById('iaFiltroVendedor');if(!sel)return;
@@ -697,6 +698,7 @@ async function ejecutarAnalisisIA(){
   <div class="st" style="margin-bottom:0">Leads</div>
   <button id="btnBulkDelete" onclick="bulkDelete()" style="display:none;background:var(--bd2);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">🗑 Borrar Seleccionados</button>
 <button id="btnExportChats" onclick="exportChatsCsv()" style="background:#10b981;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">📥 Exportar a CSV</button>
+<button id="btnExportLeadsXlsx" onclick="exportLeadsExcel()" style="background:#1d6f42;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">📊 Descargar Leads (Excel)</button>
 <button id="btnNuevoLead" onclick="openNuevoLeadModal()" style="background:var(--ac);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px">＋ Nuevo Lead</button>
 </div>
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:10px 14px;margin-bottom:12px">
@@ -2637,6 +2639,67 @@ window.exportChatsCsv = function() {
     a.href = url; a.download = 'RMG_Chats_' + new Date().toISOString().slice(0,10) + '.csv';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     toast('Descarga de CSV iniciada');
+};
+
+// Descarga un resumen de leads en Excel (.xlsx), agrupado por telefono.
+// Si un mismo telefono aparece en mas de un lead (contacto por varios canales),
+// se indica la cantidad y se listan todos los origenes/vehiculos en la misma fila.
+window.exportLeadsExcel = function() {
+    if (typeof XLSX === 'undefined') { toast('Error: la libreria de Excel no cargo. Refresca la pagina e intenta de nuevo.', true); return; }
+
+    const filtCanal = document.getElementById('filtCanal')?.value || '';
+    const filtEstado = document.getElementById('filtEstado')?.value || '';
+    const filtSearch = document.getElementById('filtSearch')?.value.toLowerCase().trim() || '';
+    const FUENTES_COMPRA = ['Compra Directa', 'Compramos tu Auto', 'Compramos tu auto', 'Compra Directa '];
+
+    let leads = (S.leads || []).filter(l => !FUENTES_COMPRA.includes((l.source||'').trim()));
+    if (filtCanal) leads = leads.filter(l => (l.source||'') === filtCanal);
+    if (filtEstado) leads = leads.filter(l => (l.status||'') === filtEstado);
+    if (filtSearch) leads = leads.filter(l => (l.name||'').toLowerCase().includes(filtSearch) || (l.phone||'').includes(filtSearch) || (l.interest||'').toLowerCase().includes(filtSearch));
+
+    if (!leads.length) { toast('No hay leads para exportar con el filtro actual', true); return; }
+
+    // Agrupar por telefono normalizado (mismo cliente puede tener varios registros/origenes)
+    const grupos = {};
+    leads.forEach(l => {
+        const key = (l.phone || '').replace(/\D/g, '') || ('sin_tel_' + l.id);
+        if (!grupos[key]) grupos[key] = [];
+        grupos[key].push(l);
+    });
+
+    const filas = Object.values(grupos).map(arr => {
+        arr.sort((a, b) => new Date(a.createdAt || a.lastInteraction || 0) - new Date(b.createdAt || b.lastInteraction || 0));
+        const nombre = arr.find(l => l.name && l.name !== 'S/N')?.name || arr[0].name || 'S/N';
+        const telefono = arr[0].phone || '—';
+
+        const origenesUnicos = [...new Set(arr.map(l => (l.source || 'Otro').trim()).filter(Boolean))];
+        const origen = origenesUnicos.length > 1
+            ? `${origenesUnicos.length} canales: ${origenesUnicos.join(', ')}`
+            : (origenesUnicos[0] || 'Otro');
+
+        const vehiculosUnicos = [...new Set(arr.map(l => (l.interest || '').trim()).filter(Boolean))];
+        const vehiculo = vehiculosUnicos.length ? vehiculosUnicos.join(' | ') : '—';
+
+        const fechaRaw = arr[0].createdAt || arr[0].lastInteraction || '';
+        const fechaCreacion = fechaRaw ? new Date(fechaRaw).toLocaleDateString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '—';
+
+        return {
+            'Nombre': nombre,
+            'Teléfono': telefono,
+            'Origen': origen,
+            'Vehículo(s) Preguntado': vehiculo,
+            'Fecha de Creación': fechaCreacion
+        };
+    });
+
+    filas.sort((a, b) => a['Nombre'].localeCompare(b['Nombre'], 'es'));
+
+    const ws = XLSX.utils.json_to_sheet(filas);
+    ws['!cols'] = [{ wch: 26 }, { wch: 16 }, { wch: 34 }, { wch: 42 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+    XLSX.writeFile(wb, 'RMG_Leads_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+    toast('Descarga de Excel iniciada ✓');
 };
 </script>
 <script>
