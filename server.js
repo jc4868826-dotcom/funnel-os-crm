@@ -191,10 +191,50 @@ const SLA_YELLOW=50;
 const SLA_REASSIGN=30;
 const FINAL_ST=new Set(['Cerrado','Abandonado','Perdido']);
 const VALID_ST=new Set(['Nuevo','En Proceso','Contactado','Calificado','Agendado','Reservado','Seguimiento','Negociación','Atendido','Cerrado','Abandonado','Perdido','esperando_respuesta_chileautos','esperando_respuesta_general']);
-const read=async f=>{try{return JSON.parse(await fs.readFile(f,'utf8'));}catch{return{};}};
-const write=(f,d)=>fs.writeFile(f,JSON.stringify(d,null,2));
+const read=async f=>{
+  try{
+    return JSON.parse(await fs.readFile(f,'utf8'));
+  }catch(e){
+    // ANTES: esto devolvia {} en silencio, lo que provocaba que tWrite() sobreescribiera
+    // el archivo completo con datos vacios si un JSON.parse fallaba por una carrera de
+    // lectura/escritura. Ahora se loguea siempre y se reintenta una vez antes de rendirse.
+    console.error('[READ-ERROR]', f, '-', e.message, '- reintentando en 150ms...');
+    try{
+      await new Promise(r=>setTimeout(r,150));
+      return JSON.parse(await fs.readFile(f,'utf8'));
+    }catch(e2){
+      console.error('[READ-ERROR-FATAL]', f, '- fallo tambien el reintento:', e2.message);
+      return {};
+    }
+  }
+};
+// write() ahora es atomico: escribe a un archivo temporal y hace rename(), que en POSIX
+// es una operacion atomica. Esto elimina la ventana de tiempo en la que otro proceso
+// podia leer el archivo a medio escribir y encontrar JSON invalido.
+const write=async(f,d)=>{
+  const tmp = f + '.tmp-' + process.pid + '-' + Date.now();
+  await fs.writeFile(tmp, JSON.stringify(d,null,2));
+  await fs.rename(tmp, f);
+};
 const tRead=async(f,t,fb=[])=>{const s=await read(f);return s[t]!==undefined?s[t]:fb;};
-const tWrite=async(f,t,d)=>{const s=await read(f);s[t]=d;await write(f,s);};
+const tWrite=async(f,t,d,opts={})=>{
+  const s=await read(f);
+  // GUARD ANTI-BORRADO: especifico para leads.json. Si el nuevo array viene vacio (o se
+  // desploma >80%) mientras el archivo en disco todavia tiene una cantidad sana de leads
+  // para ese tenant, se rechaza la escritura en vez de destruir los datos. Se puede saltar
+  // explicitamente con opts.force=true (usado solo por el endpoint de restauracion manual).
+  if(f===F.leads && !opts.force){
+    const prevCount = Array.isArray(s[t]) ? s[t].length : 0;
+    const nextCount = Array.isArray(d) ? d.length : 0;
+    const seDesploma = prevCount > 5 && (nextCount === 0 || nextCount < prevCount * 0.2);
+    if(seDesploma){
+      console.error('[LEADS-GUARD] Escritura BLOQUEADA para tenant='+t+': intentaba pasar de '+prevCount+' a '+nextCount+' leads. Se conserva el estado anterior en disco. Revisa Logs para encontrar el origen de esta escritura.');
+      return;
+    }
+  }
+  s[t]=d;
+  await write(f,s);
+};
 const validT=t=>TENANTS.includes(t)?t:TENANTS[0];
 
 // ── Vendedores RMG — pool fijo para ruleta ─────────────────
@@ -1968,6 +2008,39 @@ app.get('/api/backups/download/:filename', auth('admin'), (req, res) => {
     res.download(file, req.params.filename);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+
+// ── RESTAURACION MANUAL DE LEADS (uso excepcional, solo admin) ─────────────
+// Recibe un array completo de leads para un tenant y REEMPLAZA lo que haya
+// en disco. Antes de escribir, guarda una copia de seguridad del estado
+// actual (por si el propio estado actual, aunque luzca corrupto, tuviera
+// algo rescatable) en /var/data/backups/. Usa opts.force para saltar el
+// guard anti-borrado de tWrite(), ya que esta es una restauracion explicita
+// y deliberada, no una escritura automatica del sistema.
+app.post('/api/admin/restore-leads', auth('admin'), async (req, res) => {
+  try {
+    const { tenant, leads } = req.body || {};
+    if (!tenant || !TENANTS.includes(tenant)) return res.status(400).json({ error: 'tenant invalido' });
+    if (!Array.isArray(leads)) return res.status(400).json({ error: 'leads debe ser un array' });
+
+    // Backup de seguridad del estado actual antes de sobreescribir
+    try {
+      const dirBak = require('path').join(DATA, 'backups');
+      if (!fsSync.existsSync(dirBak)) fsSync.mkdirSync(dirBak, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const estadoActual = await read(F.leads);
+      fsSync.writeFileSync(require('path').join(dirBak, `pre-restore-${ts}.json`), JSON.stringify(estadoActual, null, 2));
+    } catch (e) { console.error('[RESTORE-LEADS] No se pudo respaldar el estado previo:', e.message); }
+
+    const antes = (await tRead(F.leads, tenant, [])).length;
+    await tWrite(F.leads, tenant, leads, { force: true });
+    console.log(`[RESTORE-LEADS] Tenant=${tenant} restaurado por ${req.user.username}: ${antes} -> ${leads.length} leads.`);
+    res.json({ ok: true, tenant, leads_antes: antes, leads_despues: leads.length });
+  } catch (e) {
+    console.error('[RESTORE-LEADS] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 
 app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
