@@ -2683,19 +2683,29 @@ window.exportLeadsExcel = function() {
         const fechaRaw = arr[0].createdAt || arr[0].lastInteraction || '';
         const fechaCreacion = fechaRaw ? new Date(fechaRaw).toLocaleDateString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '—';
 
+        const ultimo = arr.reduce((max, l) => {
+            const t = new Date(l.lastClientTs || l.lastInteraction || 0).getTime();
+            return t > max ? t : max;
+        }, 0);
+        const ultimaFecha = ultimo ? new Date(ultimo).toLocaleDateString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '—';
+        const ref = arr[arr.length - 1];
+
         return {
             'Nombre': nombre,
             'Teléfono': telefono,
             'Origen': origen,
             'Vehículo(s) Preguntado': vehiculo,
-            'Fecha de Creación': fechaCreacion
+            'Fecha de Creación': fechaCreacion,
+            'Estado': ref.status || '—',
+            'Asignado': ref.assignedTo || '—',
+            'Última': ultimaFecha
         };
     });
 
     filas.sort((a, b) => a['Nombre'].localeCompare(b['Nombre'], 'es'));
 
     const ws = XLSX.utils.json_to_sheet(filas);
-    ws['!cols'] = [{ wch: 26 }, { wch: 16 }, { wch: 34 }, { wch: 42 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 26 }, { wch: 16 }, { wch: 34 }, { wch: 42 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 14 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Leads');
     XLSX.writeFile(wb, 'RMG_Leads_' + new Date().toISOString().slice(0, 10) + '.xlsx');
