@@ -170,15 +170,15 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
           const ahorroStr = (!isNaN(diff) && diff > 0)
             ? `$${diff >= 1000000 ? (diff/1000000).toFixed(1)+'M' : diff.toLocaleString('es-CL')}`
             : '—';
-          return `  ${v.patente}: ahorro ${ahorroStr} | ${v.lista||'?'} → ${v.promo||'?'}`;
+          return `  ${autoNombre} [interno:${v.patente}]: ahorro ${ahorroStr} | ${v.lista||'?'} → ${v.promo||'?'}`;
         });
         const listaAutos = (p.vehiculos || []).map(v => {
           if(invS) {
             const linea = invS.split('\n').find(l => new RegExp(v.patente,'i').test(l));
             if(linea) { const m = linea.match(/^-\s*([^|]+)/); if(m) return m[1].trim(); }
           }
-          return v.patente;
-        }).join(', ');
+          return null;
+        }).filter(Boolean).join(', ');
         return [
           `[PROMOCIÓN: ${p.nombre} - válida hasta ${p.vigencia}]`,
           `Cuando el lead mencione esta campaña:`,
