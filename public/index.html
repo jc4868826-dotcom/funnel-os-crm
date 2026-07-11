@@ -2844,8 +2844,8 @@ function enviarPlantillaSaludo3() {
   }).then(r => r.json()).then(res => {
     if(res.error) alert('Error WA: ' + JSON.stringify(res.error));
     else {
-      alert('Plantilla enviada con éxito.');
-      window.location.reload();
+      toast('✅ Plantilla enviada con éxito');
+      refreshModalSilent();
     }
   }).catch(e => alert('Fallo de conexión.'));
 }
