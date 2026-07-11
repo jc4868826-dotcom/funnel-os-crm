@@ -141,15 +141,25 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
       } catch(eInv) { console.warn('[marcela] Error leyendo inventario BD:', eInv.message); }
     }
     if (!invS) invS = '(sin inventario disponible temporalmente)';
-    const knowledge = botCfg?.knowledge || [];
+    const knowledgeRaw = botCfg?.knowledge;
+    const knowledge = Array.isArray(knowledgeRaw)
+      ? { inventario: [], promociones: [], comportamiento: knowledgeRaw }
+      : (knowledgeRaw && typeof knowledgeRaw === 'object' ? knowledgeRaw : { inventario: [], promociones: [], comportamiento: [] });
     // Incluir TODAS las notas de Sistema/Bot (sin slice para no perder la nota de portal del primer mensaje)
     const sysNotes = (notes||[]).filter(n => n.author === 'Sistema' || n.author === 'Bot').map(n => n.content).join(' | ');
     const instrucciones = baseSysPrompt.replace(/\{nombreIA\}/g, assignedName || 'Cata');
 
-    const invBlock = '<INVENTARIO_DISPONIBLE>\nREGLA: Esta sección es SOLO lectura de referencia. Úsala únicamente cuando el cliente pregunte por un vehículo específico o pida ver opciones. NUNCA menciones precios de esta sección de forma proactiva en los Pasos 1 o 2.\n' + invS + '\n</INVENTARIO_DISPONIBLE>';
+    const invNotas = (knowledge.inventario || []).map(k => '⚠️ ' + k.content).join('\n');
+    const invBlock = '<INVENTARIO_DISPONIBLE>\nREGLA: Esta sección es SOLO lectura de referencia. Úsala únicamente cuando el cliente pregunte por un vehículo específico o pida ver opciones. NUNCA menciones precios de esta sección de forma proactiva en los Pasos 1 o 2.\n' + invS + (invNotas ? '\n' + invNotas : '') + '\n</INVENTARIO_DISPONIBLE>';
 
-    const knowBlock = knowledge.length > 0
-      ? '<CAMPANAS_Y_CONOCIMIENTO>\nREGLA ABSOLUTA: Esta sección es SOLO lectura de contexto pasivo. La información aquí contenida NO modifica ni interrumpe tu embudo de 6 pasos. Si una campaña aplica al vehículo consultado, menciónala sutilmente DESPUÉS de hacer la pregunta que te corresponde según tu paso actual. NUNCA adelantes precios ni saltes pasos por causa de esta sección.\n' + knowledge.map(k => '- ' + k.content).join('\n') + '\n</CAMPANAS_Y_CONOCIMIENTO>'
+    const promoItems = knowledge.promociones || [];
+    const knowBlock = promoItems.length > 0
+      ? '<CAMPANAS_Y_CONOCIMIENTO>\nREGLA ABSOLUTA: Esta sección es SOLO lectura de contexto pasivo. La información aquí contenida NO modifica ni interrumpe tu embudo de 6 pasos. Si una campaña aplica al vehículo consultado, menciónala sutilmente DESPUÉS de hacer la pregunta que te corresponde según tu paso actual. NUNCA adelantes precios ni saltes pasos por causa de esta sección.\n' + promoItems.map(k => '- ' + k.content).join('\n') + '\n</CAMPANAS_Y_CONOCIMIENTO>'
+      : '';
+
+    const behaviorItems = knowledge.comportamiento || [];
+    const behaviorBlock = behaviorItems.length > 0
+      ? '\n[REGLAS ADICIONALES DE COMPORTAMIENTO]\n' + behaviorItems.map(k => '- ' + k.content).join('\n')
       : '';
 
     const contextBlock = sysNotes ? '<CONTEXTO_DEL_PORTAL>\n' + sysNotes + '\n</CONTEXTO_DEL_PORTAL>' : '';
@@ -157,6 +167,7 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
     const sysPromptFinal = [
       '<INSTRUCCIONES_DEL_SISTEMA>',
       instrucciones,
+      behaviorBlock,
       '</INSTRUCCIONES_DEL_SISTEMA>',
       contextBlock || null,
       invBlock,
@@ -185,6 +196,7 @@ const sessions=new Map();
 const chatSessions=new Map();
 // ── DEBOUNCE: acumula mensajes del mismo número por 5s antes de responder ──
 const botDebounce = new Map();
+const pendingOlvida = new Map();
 const processedMsgIds = new Set();
 const SLA_GREEN=20;
 const SLA_YELLOW=50;
@@ -1472,35 +1484,118 @@ app.post('/webhook',async(req,res)=>{
       if(conocimiento) {
         const botData = await read(F.bot);
         if(!botData.demo_automotora) botData.demo_automotora = {};
-        if(!botData.demo_automotora.knowledge) botData.demo_automotora.knowledge = [];
+        if(!botData.demo_automotora.knowledge || Array.isArray(botData.demo_automotora.knowledge)) {
+          botData.demo_automotora.knowledge = { inventario: [], promociones: [], comportamiento: [] };
+        }
         const entrada = { ts: new Date().toISOString(), content: conocimiento };
-        botData.demo_automotora.knowledge.push(entrada);
+        const txt = conocimiento.toLowerCase();
+        let categoria;
+        if(['no está disponible','no lo consideres','llegó un','ya se vendió','no tenemos','agotado','sin stock'].some(kw => txt.includes(kw))) {
+          botData.demo_automotora.knowledge.inventario.push(entrada);
+          categoria = '📦inventario';
+        } else if(['descuento','dcto','ahorro','promoción','promo','oferta','precio especial','rebaja','campaña'].some(kw => txt.includes(kw))) {
+          botData.demo_automotora.knowledge.promociones.push(entrada);
+          categoria = '🏷️promoción';
+        } else {
+          botData.demo_automotora.knowledge.comportamiento.push(entrada);
+          categoria = '🧠comportamiento';
+        }
         await write(F.bot, botData);
-        await sendWA(from, '✅ Aprendido. Ya tengo esa info para mis próximas conversaciones.');
+        await sendWA(from, `✅ Aprendido (${categoria}). Ya tengo esa info.`);
       } else {
         await sendWA(from, '⚠️ No entendí qué debo aprender. Usa: *cata aprende, [información]*');
       }
       return;
     }
 
-    // ── CATA OLVIDA: borra todo el knowledge ──
+    // ── CATA OLVIDA TODO: borra todo el knowledge ──
     if(from.replace(/\D/g,'').includes('56983302067') && body.toLowerCase().startsWith('cata olvida todo')) {
       const botData = await read(F.bot);
-      if(botData.demo_automotora) botData.demo_automotora.knowledge = [];
+      if(botData.demo_automotora) {
+        botData.demo_automotora.knowledge = { inventario: [], promociones: [], comportamiento: [] };
+      }
       await write(F.bot, botData);
       await sendWA(from, '🗑️ Listo, borré todo lo que había aprendido.');
       return;
     }
 
-    // ── CATA QUÉ SABES: lista el knowledge actual ──
+    // ── CATA OLVIDA, [texto]: búsqueda selectiva con confirmación ──
+    if(from.replace(/\D/g,'').includes('56983302067') && /^cata olvida,/i.test(body)) {
+      const query = body.replace(/^cata olvida,\s*/i,'').trim().toLowerCase();
+      const botData = await read(F.bot);
+      const kw = botData.demo_automotora?.knowledge;
+      const inv   = Array.isArray(kw) ? [] : (kw?.inventario || []);
+      const promo = Array.isArray(kw) ? [] : (kw?.promociones || []);
+      const comp  = Array.isArray(kw) ? (kw || []) : (kw?.comportamiento || []);
+      const matches = [];
+      inv.forEach((k,i)   => { if(k.content.toLowerCase().includes(query)) matches.push({ cat:'inventario',    idx:i, content:k.content }); });
+      promo.forEach((k,i) => { if(k.content.toLowerCase().includes(query)) matches.push({ cat:'promociones',   idx:i, content:k.content }); });
+      comp.forEach((k,i)  => { if(k.content.toLowerCase().includes(query)) matches.push({ cat:'comportamiento',idx:i, content:k.content }); });
+      if(!matches.length) {
+        await sendWA(from, 'No encontré nada relacionado con eso. Usa *cata qué sabes* para ver todo lo que tengo.');
+      } else {
+        const lista = matches.map((m,i) => `${i+1}. [${m.cat}] ${m.content.slice(0,80)}${m.content.length>80?'…':''}`).join('\n');
+        pendingOlvida.set(from, { matches, ts: Date.now() });
+        await sendWA(from, `🔍 Encontré ${matches.length} coincidencia(s):\n${lista}\nResponde con el número que quieres que olvide, o *todos* para eliminar todas, o *cancelar*.`);
+      }
+      return;
+    }
+
+    // ── RESPUESTA A PENDING OLVIDA ──
+    if(from.replace(/\D/g,'').includes('56983302067') && pendingOlvida.has(from)) {
+      const pending = pendingOlvida.get(from);
+      if(Date.now() - pending.ts > 120000) {
+        pendingOlvida.delete(from);
+      } else {
+        const resp = body.trim().toLowerCase();
+        if(resp === 'cancelar') {
+          pendingOlvida.delete(from);
+          await sendWA(from, '👌 No olvidé nada.');
+          return;
+        }
+        const botData = await read(F.bot);
+        if(!botData.demo_automotora?.knowledge || Array.isArray(botData.demo_automotora.knowledge)) {
+          botData.demo_automotora.knowledge = { inventario: [], promociones: [], comportamiento: [] };
+        }
+        let toDelete = [];
+        if(resp === 'todos') {
+          toDelete = pending.matches;
+        } else {
+          const n = parseInt(resp);
+          if(!isNaN(n) && n >= 1 && n <= pending.matches.length) toDelete = [pending.matches[n-1]];
+        }
+        if(toDelete.length) {
+          for(const cat of ['inventario','promociones','comportamiento']) {
+            const idxs = toDelete.filter(m => m.cat === cat).map(m => m.idx);
+            if(idxs.length) {
+              botData.demo_automotora.knowledge[cat] = botData.demo_automotora.knowledge[cat].filter((_,i) => !idxs.includes(i));
+            }
+          }
+          await write(F.bot, botData);
+          pendingOlvida.delete(from);
+          await sendWA(from, toDelete.length === 1
+            ? `🗑️ Olvidé: ${toDelete[0].content.slice(0,80)}`
+            : `🗑️ Olvidé ${toDelete.length} entrada(s).`);
+          return;
+        }
+        // número inválido: deja pasar al flujo normal
+      }
+    }
+
+    // ── CATA QUÉ SABES: lista el knowledge actual por categoría ──
     if(from.replace(/\D/g,'').includes('56983302067') && body.toLowerCase().startsWith('cata qué sabes')) {
       const botData = await read(F.bot);
-      const know = botData.demo_automotora?.knowledge || [];
-      if(know.length === 0) {
+      const know  = botData.demo_automotora?.knowledge;
+      const inv   = Array.isArray(know) ? [] : (know?.inventario || []);
+      const promo = Array.isArray(know) ? [] : (know?.promociones || []);
+      const comp  = Array.isArray(know) ? (know || []) : (know?.comportamiento || []);
+      if(!inv.length && !promo.length && !comp.length) {
         await sendWA(from, 'No tengo conocimiento adicional guardado aún.');
       } else {
-        const lista = know.map((k,i) => `${i+1}. ${k.content}`).join('\n');
-        await sendWA(from, `📚 Lo que sé:\n${lista}`);
+        let msg = `📦 INVENTARIO:\n${inv.length ? inv.map((k,i) => `${i+1}. ${k.content}`).join('\n') : 'Sin entradas'}\n\n`;
+        msg += `🏷️ PROMOCIONES:\n${promo.length ? promo.map((k,i) => `${i+1}. ${k.content}`).join('\n') : 'Sin entradas'}\n\n`;
+        msg += `🧠 COMPORTAMIENTO:\n${comp.length ? comp.map((k,i) => `${i+1}. ${k.content}`).join('\n') : 'Sin entradas'}`;
+        await sendWA(from, msg);
       }
       return;
     }
