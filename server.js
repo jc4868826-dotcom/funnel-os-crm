@@ -149,17 +149,61 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
     const sysNotes = (notes||[]).filter(n => n.author === 'Sistema' || n.author === 'Bot').map(n => n.content).join(' | ');
     const instrucciones = baseSysPrompt.replace(/\{nombreIA\}/g, assignedName || 'Cata');
 
-    const invNotas = (knowledge.inventario || []).map(k => '⚠️ ' + k.content).join('\n');
-    const invBlock = '<INVENTARIO_DISPONIBLE>\nREGLA: Esta sección es SOLO lectura de referencia. Úsala únicamente cuando el cliente pregunte por un vehículo específico o pida ver opciones. NUNCA menciones precios de esta sección de forma proactiva en los Pasos 1 o 2.\n' + invS + (invNotas ? '\n' + invNotas : '') + '\n</INVENTARIO_DISPONIBLE>';
+    const invNotas = (knowledge.inventario || []).map(k =>
+      k.patente && k.nota ? `⚠️ ${k.patente}: ${k.nota}` : `⚠️ ${k.content || ''}`
+    ).join('\n');
 
-    const promoItems = knowledge.promociones || [];
-    const knowBlock = promoItems.length > 0
-      ? '<CAMPANAS_Y_CONOCIMIENTO>\nREGLA ABSOLUTA: Esta sección es SOLO lectura de contexto pasivo. La información aquí contenida NO modifica ni interrumpe tu embudo de 6 pasos. Si una campaña aplica al vehículo consultado, menciónala sutilmente DESPUÉS de hacer la pregunta que te corresponde según tu paso actual. NUNCA adelantes precios ni saltes pasos por causa de esta sección.\n' + promoItems.map(k => '- ' + k.content).join('\n') + '\n</CAMPANAS_Y_CONOCIMIENTO>'
-      : '';
+    const parsePrecio = str => {
+      if(!str) return NaN;
+      if(/M$/i.test(str)) return parseFloat(str.replace(/[$\s]/g,'').replace(/M$/i,'').replace(',','.')) * 1000000;
+      return parseInt(str.replace(/[$.\s]/g,'').replace(',',''), 10);
+    };
+    const promoBlock = (knowledge.promociones || []).map(p => {
+      if(p.tipo === 'campaña') {
+        const vehs = (p.vehiculos || []).map(v => {
+          let autoNombre = v.patente;
+          if(invS) {
+            const linea = invS.split('\n').find(l => new RegExp(v.patente,'i').test(l));
+            if(linea) { const m = linea.match(/^-\s*([^|]+)/); if(m) autoNombre = m[1].trim(); }
+          }
+          const diff = parsePrecio(v.lista) - parsePrecio(v.promo);
+          const ahorroStr = (!isNaN(diff) && diff > 0)
+            ? `$${diff >= 1000000 ? (diff/1000000).toFixed(1)+'M' : diff.toLocaleString('es-CL')}`
+            : '—';
+          return `  ${v.patente}: ahorro ${ahorroStr} | ${v.lista||'?'} → ${v.promo||'?'}`;
+        });
+        const listaAutos = (p.vehiculos || []).map(v => {
+          if(invS) {
+            const linea = invS.split('\n').find(l => new RegExp(v.patente,'i').test(l));
+            if(linea) { const m = linea.match(/^-\s*([^|]+)/); if(m) return m[1].trim(); }
+          }
+          return v.patente;
+        }).join(', ');
+        return [
+          `[PROMOCIÓN: ${p.nombre} - válida hasta ${p.vigencia}]`,
+          `Cuando el lead mencione esta campaña:`,
+          `1. Pregunta cuál le interesa: ${listaAutos}. Una pregunta, no agobies.`,
+          `2. Cuando elija, busca el auto en el inventario de arriba, muestra link de rmgautos.cl, menciona el ahorro con entusiasmo y recalca la urgencia (vigencia).`,
+          `3. Conversa, resuelve dudas. No ofrezcas visita ni ejecutivo todavía.`,
+          `4. Cuando el cliente muestre interés real, sigue tu protocolo normal.`,
+          `Nunca menciones patente al cliente. Una pregunta por mensaje.`,
+          ...vehs,
+          `Condición: ${p.condiciones || 'aplica con todo medio de pago'}`
+        ].join('\n');
+      } else {
+        return [
+          `[PROMO GENERAL - válida hasta ${p.vigencia}]`,
+          p.condicion,
+          `Aplica cuando el vehículo que el cliente eligió cumple la condición. Menciónala después de mostrar el auto.`
+        ].join('\n');
+      }
+    }).join('\n\n');
+
+    const invBlock = '<INVENTARIO_DISPONIBLE>\nREGLA: Esta sección es SOLO lectura de referencia. Úsala únicamente cuando el cliente pregunte por un vehículo específico o pida ver opciones. NUNCA menciones precios de esta sección de forma proactiva en los Pasos 1 o 2.\n' + invS + (invNotas ? '\n' + invNotas : '') + (promoBlock ? '\n\n' + promoBlock : '') + '\n</INVENTARIO_DISPONIBLE>';
 
     const behaviorItems = knowledge.comportamiento || [];
     const behaviorBlock = behaviorItems.length > 0
-      ? '\n[REGLAS ADICIONALES DE COMPORTAMIENTO]\n' + behaviorItems.map(k => '- ' + k.content).join('\n')
+      ? '\n[REGLAS ADICIONALES DE COMPORTAMIENTO]\n' + behaviorItems.map(k => '- ' + (k.content || '')).join('\n')
       : '';
 
     const contextBlock = sysNotes ? '<CONTEXTO_DEL_PORTAL>\n' + sysNotes + '\n</CONTEXTO_DEL_PORTAL>' : '';
@@ -170,8 +214,7 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
       behaviorBlock,
       '</INSTRUCCIONES_DEL_SISTEMA>',
       contextBlock || null,
-      invBlock,
-      knowBlock || null
+      invBlock
     ].filter(Boolean).join('\n\n');
 
     const completion = await openai.chat.completions.create({
@@ -1487,21 +1530,56 @@ app.post('/webhook',async(req,res)=>{
         if(!botData.demo_automotora.knowledge || Array.isArray(botData.demo_automotora.knowledge)) {
           botData.demo_automotora.knowledge = { inventario: [], promociones: [], comportamiento: [] };
         }
-        const entrada = { ts: new Date().toISOString(), content: conocimiento };
-        const txt = conocimiento.toLowerCase();
-        let categoria;
-        if(['no está disponible','no lo consideres','llegó un','ya se vendió','no tenemos','agotado','sin stock'].some(kw => txt.includes(kw))) {
-          botData.demo_automotora.knowledge.inventario.push(entrada);
-          categoria = '📦inventario';
-        } else if(['descuento','dcto','ahorro','promoción','promo','oferta','precio especial','rebaja','campaña'].some(kw => txt.includes(kw))) {
+        const txt = conocimiento;
+        if(/^campaña[,\s]/i.test(txt)) {
+          // A) Campaña estructurada
+          const sinPrefijo = txt.replace(/^campaña[,\s]*/i,'');
+          const segs = sinPrefijo.split(',').map(s => s.trim()).filter(Boolean);
+          const nombre = segs[0] || 'Sin nombre';
+          let vigencia = 'sin definir';
+          const condicionesParts = [];
+          const vehiculos = [];
+          for(let i = 1; i < segs.length; i++) {
+            const seg = segs[i];
+            if(/hasta/i.test(seg)) { vigencia = seg.replace(/^.*?hasta\s*/i,'').trim(); continue; }
+            const precioM = seg.match(/^([A-Z]{4}\d{2})\s+lista\s+(\S+)\s+ahora\s+(\S+)/i);
+            if(precioM) { vehiculos.push({ patente: precioM[1], lista: precioM[2], promo: precioM[3] }); continue; }
+            const pats = seg.match(/\b([A-Z]{4}\d{2})\b/g);
+            if(pats && !/lista|ahora/i.test(seg)) {
+              pats.forEach(p => { if(!vehiculos.find(v => v.patente === p)) vehiculos.push({ patente: p, lista: null, promo: null }); });
+              continue;
+            }
+            condicionesParts.push(seg);
+          }
+          const entrada = { tipo: 'campaña', nombre, vigencia, condiciones: condicionesParts.join(', '), vehiculos, content: `campaña: ${nombre}`, ts: new Date().toISOString() };
           botData.demo_automotora.knowledge.promociones.push(entrada);
-          categoria = '🏷️promoción';
+          await write(F.bot, botData);
+          await sendWA(from, `✅ Campaña '${nombre}' registrada con ${vehiculos.length} vehículo(s). Vigencia: hasta ${vigencia}.`);
+        } else if(/^promo[,\s]/i.test(txt) && !/^promoci/i.test(txt)) {
+          // B) Promo general
+          const condicion = txt.replace(/^promo[,\s]*/i,'').trim();
+          const vigMatch = condicion.match(/hasta\s+([^,]+)/i);
+          const vigencia = vigMatch ? vigMatch[1].trim() : 'sin definir';
+          const entrada = { tipo: 'general', condicion, vigencia, content: condicion, ts: new Date().toISOString() };
+          botData.demo_automotora.knowledge.promociones.push(entrada);
+          await write(F.bot, botData);
+          await sendWA(from, `✅ Promo general registrada: ${condicion}.`);
+        } else if(/\b[A-Z]{4}\d{2}\b/.test(txt)) {
+          // C) Nota de inventario con patente
+          const patenteMatch = txt.match(/\b([A-Z]{4}\d{2})\b/);
+          const patente = patenteMatch[1];
+          const nota = txt.replace(patente,'').replace(/^[,:\s]+|[,:\s]+$/g,'').trim();
+          const entrada = { patente, nota, content: `${patente}: ${nota}`, ts: new Date().toISOString() };
+          botData.demo_automotora.knowledge.inventario.push(entrada);
+          await write(F.bot, botData);
+          await sendWA(from, `✅ Inventario actualizado: ${patente} → ${nota}`);
         } else {
+          // D) Comportamiento
+          const entrada = { content: txt, ts: new Date().toISOString() };
           botData.demo_automotora.knowledge.comportamiento.push(entrada);
-          categoria = '🧠comportamiento';
+          await write(F.bot, botData);
+          await sendWA(from, '✅ Aprendido (🧠 comportamiento). Ya tengo esa info.');
         }
-        await write(F.bot, botData);
-        await sendWA(from, `✅ Aprendido (${categoria}). Ya tengo esa info.`);
       } else {
         await sendWA(from, '⚠️ No entendí qué debo aprender. Usa: *cata aprende, [información]*');
       }
@@ -1592,9 +1670,22 @@ app.post('/webhook',async(req,res)=>{
       if(!inv.length && !promo.length && !comp.length) {
         await sendWA(from, 'No tengo conocimiento adicional guardado aún.');
       } else {
-        let msg = `📦 INVENTARIO:\n${inv.length ? inv.map((k,i) => `${i+1}. ${k.content}`).join('\n') : 'Sin entradas'}\n\n`;
-        msg += `🏷️ PROMOCIONES:\n${promo.length ? promo.map((k,i) => `${i+1}. ${k.content}`).join('\n') : 'Sin entradas'}\n\n`;
-        msg += `🧠 COMPORTAMIENTO:\n${comp.length ? comp.map((k,i) => `${i+1}. ${k.content}`).join('\n') : 'Sin entradas'}`;
+        let msg = '📦 INVENTARIO:\n';
+        msg += inv.length
+          ? inv.map((k,i) => `${i+1}. ${k.patente ? k.patente + ' → ' + k.nota : k.content}`).join('\n')
+          : 'Sin entradas';
+        msg += '\n\n🏷️ PROMOCIONES:\n';
+        msg += promo.length
+          ? promo.map((k,i) => {
+              if(k.tipo === 'campaña') return `${i+1}. 🎯 Campaña "${k.nombre}" (hasta ${k.vigencia}) - ${(k.vehiculos||[]).length} vehículos`;
+              if(k.tipo === 'general') return `${i+1}. 📌 General: ${k.condicion} (hasta ${k.vigencia})`;
+              return `${i+1}. ${k.content || JSON.stringify(k)}`;
+            }).join('\n')
+          : 'Sin entradas';
+        msg += '\n\n🧠 COMPORTAMIENTO:\n';
+        msg += comp.length
+          ? comp.map((k,i) => `${i+1}. ${k.content}`).join('\n')
+          : 'Sin entradas';
         await sendWA(from, msg);
       }
       return;
