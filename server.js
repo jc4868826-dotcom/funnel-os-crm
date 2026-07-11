@@ -631,9 +631,10 @@ async function applySlaRules(tenant){
       }
     }
     if(lead.status==='Nuevo'){
+      if(!enHorarioHabil()) continue;
       const ref=(lead.status==='esperando_respuesta_chileautos'||lead.status==='esperando_respuesta_general')?lead.lastInteraction:(lead.lastClientTs||lead.lastInteraction);
       const mins=ref?businessMinutesBetween(ref, new Date()):0;
-      if(mins>SLA_REASSIGN&&!lead.reassigned && enHorarioHabil()){
+      if(mins>SLA_REASSIGN&&!lead.reassigned){
         console.log('[SLA-REASSIGN]', 'lead='+lead.name, 'mins='+mins.toFixed(1), 'Santiago='+_santiagoNowString());
         const nextObj=await rrNext(tenant,lead.assignedTo);
         if(nextObj&&nextObj.username!==lead.assignedTo){
@@ -644,7 +645,7 @@ async function applySlaRules(tenant){
       }
       if(lead.reassigned&&lead.reassignedAt&&lead.unread&&lead.adminReassignAlertSent===false){
         const minsR=businessMinutesBetween(lead.reassignedAt, new Date());
-        if(minsR>SLA_REASSIGN && enHorarioHabil()){
+        if(minsR>SLA_REASSIGN){
           lead.adminReassignAlertSent=true;changed=true;
           const adminU=allUsers.find(u=>u.role==='admin');
           const aiSumA=lead.ai_summary?' Resumen IA: '+lead.ai_summary:'';
@@ -1963,21 +1964,23 @@ setInterval(async () => {
         if (FINAL_ST.has(lead.status)) continue;
 
         // ─── TAREA 1: Alerta SLA riesgo a los 20 min sin atencion ──────────
-        if (enHorarioHabil() && lead.status === 'Nuevo' && !lead.reassigned && !lead.riskAlertSent) {
-          const ref = lead.lastClientTs || lead.lastInteraction;
-          if (ref) {
-            const minsSinAtencion = businessMinutesBetween(ref, new Date());
-            if (minsSinAtencion >= 20 && minsSinAtencion < 30) {
-              const assigned = users.find(u => u.username === lead.assignedTo)
-                            || RMG_VENDORS.find(v => v.username === lead.assignedTo);
-              if (assigned && assigned.phone) {
-                const msg = '🚨 ALERTA: El lead [' + lead.name + '] lleva 20 min sin atención. '
-                          + 'Te quedan 10 min antes de que el sistema lo reasigne.';
-                sendWA(assigned.phone, msg).catch(() => {});
-                console.log('[SLA-Risk] Alerta 20m enviada a', assigned.username, 'por lead', lead.name);
+        if (enHorarioHabil()) {
+          if (lead.status === 'Nuevo' && !lead.reassigned && !lead.riskAlertSent) {
+            const ref = lead.lastClientTs || lead.lastInteraction;
+            if (ref) {
+              const minsSinAtencion = businessMinutesBetween(ref, new Date());
+              if (minsSinAtencion >= 20 && minsSinAtencion < 30) {
+                const assigned = users.find(u => u.username === lead.assignedTo)
+                              || RMG_VENDORS.find(v => v.username === lead.assignedTo);
+                if (assigned && assigned.phone) {
+                  const msg = '🚨 ALERTA: El lead [' + lead.name + '] lleva 20 min sin atención. '
+                            + 'Te quedan 10 min antes de que el sistema lo reasigne.';
+                  sendWA(assigned.phone, msg).catch(() => {});
+                  console.log('[SLA-Risk] Alerta 20m enviada a', assigned.username, 'por lead', lead.name);
+                }
+                lead.riskAlertSent = true;
+                changed = true;
               }
-              lead.riskAlertSent = true;
-              changed = true;
             }
           }
         }
@@ -2492,20 +2495,22 @@ setInterval(async () => {
             }
         }
 
-        // [PUNTO 4]: Alerta SLA Riesgo (20 min sin atención -> Solo Vendedor)
-        if (enHorarioHabil() && l.status === 'Nuevo' && !l.alertaSla20 && minsSinAtencion >= 20 && minsSinAtencion < 30) {
-            l.alertaSla20 = true; changed = true;
-            if (vend && vend.phone) await sendWATemplate(vend.phone, 'alerta_sla_riesgo', [l.name || 'S/N']).catch(()=>{});
-        }
+        if (enHorarioHabil()) {
+          // [PUNTO 4]: Alerta SLA Riesgo (20 min sin atención -> Solo Vendedor)
+          if (l.status === 'Nuevo' && !l.alertaSla20 && minsSinAtencion >= 20 && minsSinAtencion < 30) {
+              l.alertaSla20 = true; changed = true;
+              if (vend && vend.phone) await sendWATemplate(vend.phone, 'alerta_sla_riesgo', [l.name || 'S/N']).catch(()=>{});
+          }
 
-        // [PUNTO 5]: Alerta Reasignación (30 min -> Al NUEVO vendedor)
-        if (enHorarioHabil() && l.status === 'Nuevo' && !l.reasignado30 && minsSinAtencion >= 30) {
-            l.reasignado30 = true; changed = true;
-            const nextObj = await rrNext(t, l.assignedTo);
-            if (nextObj && nextObj.username !== l.assignedTo) {
-                l.assignedTo = nextObj.username;
-                if (nextObj.phone) await sendWATemplate(nextObj.phone, 'alerta_reasignacion', [l.name || 'S/N', l.interest || 'No especificado']).catch(()=>{});
-            }
+          // [PUNTO 5]: Alerta Reasignación (30 min -> Al NUEVO vendedor)
+          if (l.status === 'Nuevo' && !l.reasignado30 && minsSinAtencion >= 30) {
+              l.reasignado30 = true; changed = true;
+              const nextObj = await rrNext(t, l.assignedTo);
+              if (nextObj && nextObj.username !== l.assignedTo) {
+                  l.assignedTo = nextObj.username;
+                  if (nextObj.phone) await sendWATemplate(nextObj.phone, 'alerta_reasignacion', [l.name || 'S/N', l.interest || 'No especificado']).catch(()=>{});
+              }
+          }
         }
 
         // [PUNTO 3]: Alerta Admin Sin (30 min sin atenderse -> Solo Admins)
