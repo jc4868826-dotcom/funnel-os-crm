@@ -2690,6 +2690,39 @@ window.exportLeadsExcel = function() {
         const ultimaFecha = ultimo ? new Date(ultimo).toLocaleDateString('es-CL', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '—';
         const ref = arr[arr.length - 1];
 
+        const fmtDT = ts => {
+            if (!ts) return '—';
+            const d = new Date(ts);
+            const dd = String(d.getDate()).padStart(2,'0');
+            const mm = String(d.getMonth()+1).padStart(2,'0');
+            const hh = String(d.getHours()).padStart(2,'0');
+            const mi = String(d.getMinutes()).padStart(2,'0');
+            return `${dd}/${mm}/${d.getFullYear()} ${hh}:${mi}`;
+        };
+
+        // Último mensaje del cliente (role === 'user') con ts
+        const histUser = (ref.chatHistory || []).filter(m => m.role === 'user' && m.ts);
+        histUser.sort((a, b) => new Date(a.ts) - new Date(b.ts));
+        const lastUserMsg = histUser.length ? histUser[histUser.length - 1] : null;
+        const tsUltimoMsgCliente = lastUserMsg ? new Date(lastUserMsg.ts).getTime() : null;
+
+        // Última nota de vendedor real (author !== 'Sistema' && !== 'Bot') con ts
+        const notasVendedor = (ref.notes || []).filter(n => n.author !== 'Sistema' && n.author !== 'Bot' && n.ts);
+        notasVendedor.sort((a, b) => new Date(a.ts) - new Date(b.ts));
+        const lastNota = notasVendedor.length ? notasVendedor[notasVendedor.length - 1] : null;
+        const tsUltimaAccion = lastNota ? new Date(lastNota.ts).getTime() : null;
+
+        // Latencia: fecha nota vendedor - createdAt del lead (días)
+        const tsCreado = new Date(ref.createdAt || arr[0].createdAt || 0).getTime();
+        const latencia = tsUltimaAccion && tsCreado
+            ? ((tsUltimaAccion - tsCreado) / 86400000).toFixed(1)
+            : '—';
+
+        // Brecha: último msg cliente - última acción vendedor (días)
+        const brecha = tsUltimoMsgCliente && tsUltimaAccion
+            ? ((tsUltimoMsgCliente - tsUltimaAccion) / 86400000).toFixed(1)
+            : '—';
+
         return {
             'Nombre': nombre,
             'Teléfono': telefono,
@@ -2698,14 +2731,19 @@ window.exportLeadsExcel = function() {
             'Fecha de Creación': fechaCreacion,
             'Estado': ref.status || '—',
             'Asignado': ref.assignedTo || '—',
-            'Última': ultimaFecha
+            'Última': ultimaFecha,
+            'Último Msg Cliente': fmtDT(tsUltimoMsgCliente),
+            'Última Acción Vendedor': fmtDT(tsUltimaAccion),
+            'Detalle Bitácora': lastNota ? (lastNota.content || '') : '',
+            'Latencia (días)': latencia,
+            'Brecha (días)': brecha
         };
     });
 
     filas.sort((a, b) => a['Nombre'].localeCompare(b['Nombre'], 'es'));
 
     const ws = XLSX.utils.json_to_sheet(filas);
-    ws['!cols'] = [{ wch: 26 }, { wch: 16 }, { wch: 34 }, { wch: 42 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 26 }, { wch: 16 }, { wch: 34 }, { wch: 42 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 40 }, { wch: 13 }, { wch: 13 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Leads');
     XLSX.writeFile(wb, 'RMG_Leads_' + new Date().toISOString().slice(0, 10) + '.xlsx');
