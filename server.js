@@ -299,7 +299,7 @@ const RMG_VENDORS = [
 ];
 
 // ── Web Scraper Heurístico — rmgautos.cl/usados/ ───────────
-const RMG_SCRAPE_URL = 'https://rmgautos.cl/usados/';
+const RMG_SCRAPE_URL = 'https://rmgautos.cl/';
 const MARCAS_RE = /\b(Toyota|Peugeot|Kia|Volkswagen|Ford|Chevrolet|Hyundai|Nissan|Suzuki|Mazda|Honda|Mitsubishi|Jeep|Land Rover|BMW|Mercedes|Audi|Subaru|Volvo|Chery|MG|BAIC|Renault|Opel|Ram|Ssangyong|Karry|Alfa Romeo|Changan|Citroen|Fiat|Seat|Skoda|Haval|Geely|BYD|DFSK|JAC|Foton)\b/i;
 let scrapeCache = { ts: 0, data: '' };
 
@@ -417,7 +417,7 @@ async function scrapeRMG() {
       }
 
       // LINK: usar autoIdx directo porque linkMap ahora es unico
-      const cardLink   = linkMap[autoIdx] || 'https://rmgautos.cl/usados/';
+      const cardLink   = linkMap[autoIdx] || 'https://rmgautos.cl/';
       const modeloDisp = (modelo && modelo.toUpperCase() !== marca) ? modelo : '';
       const fullModel  = [marca, modeloDisp, version].filter(Boolean).join(' ');
       const highlights = [anno?'Ano '+anno:'', km?km.toLocaleString('es-CL')+' km':'', fuel, trans, tipo].filter(Boolean).join(' . ');
@@ -2294,10 +2294,17 @@ app.post('/api/tasacion/offer', auth('admin'), async (req, res) => {
     if (lead.assignedTo) {
       const users = await tRead(F.users, tenant, []);
       const vendedor = users.find(u => u.username === lead.assignedTo);
-      // Solo notificar si el vendedor tiene teléfono (ej: usuario 'comprador' no tiene)
-      if (vendedor && vendedor.phone) {
+      if (!vendedor) {
+        console.warn(`[TASACION-WA] vendedor no encontrado para assignedTo=${lead.assignedTo}`);
+      } else if (!vendedor.phone) {
+        console.warn(`[TASACION-WA] vendedor sin telefono: ${vendedor.username}`);
+      } else {
         const msg = `✅ TASACIÓN LISTA\nLead: ${lead.name}\nRetoma: ${lead.tradeIn.make} ${lead.tradeIn.model} ${lead.tradeIn.year}\nRango estimado: ${fmt}\nYa puedes informar al cliente.`;
-        await sendWA(vendedor.phone, msg).catch(e => console.warn('[TASACION-WA]', e.message));
+        try {
+          await sendWA(vendedor.phone, msg);
+        } catch (waErr) {
+          console.error(`[TASACION-WA-FAIL] assignedTo=${lead.assignedTo} phone=${vendedor.phone} — ${waErr.message} (probable: ventana 24h cerrada, usar plantilla Meta aprobada como alerta_sla_riesgo/alerta_reasignacion)`);
+        }
       }
     }
     // Registrar rango en notas de bitácora
