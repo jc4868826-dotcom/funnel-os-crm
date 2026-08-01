@@ -502,12 +502,79 @@ const SHIELD=['body elite','bodyelite','botox','lipo','lipoescultura','liposucci
 const SHIELD_R='¡Hola! Este número es de Automotora Andes 🚗 Para Body Elite ve a su Instagram. ¡Gracias!';
 function isShield(t){if(!t)return false;const n=t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');return SHIELD.some(k=>n.includes(k.normalize('NFD').replace(/[\u0300-\u036f]/g,'')));}
 
+function esFormularioComprasRMG(body) {
+  if (!body || typeof body !== 'string') return false;
+  const b = body.toLowerCase();
+  const signals = [
+    /complet[e\u00e9] el formulario/i.test(b),
+    /full name\s*:/i.test(b),
+    /marca y modelo\s*:/i.test(b),
+    /patente\s*:/i.test(b),
+    /precio estimado.*recibir\s*:/i.test(b)
+  ].filter(Boolean).length;
+  return signals >= 3;
+}
+
+function parseFormularioComprasRMG(body) {
+  const grab = (rx) => { const m = body.match(rx); return m ? m[1].trim() : ''; };
+  return {
+    nombre: grab(/full name\s*:\s*([^\n]+?)(?=\s+(?:A\u00f1o|A[\u00f1n]o|WhatsApp|Marca|Email|Patente|Precio)|$)/i),
+    marcaModelo: grab(/marca y modelo\s*:\s*([^\n]+?)(?=\s+(?:A\u00f1o|A[\u00f1n]o|WhatsApp|Full|Email|Patente|Precio)|$)/i),
+    a\u00f1o: grab(/a[\u00f1n]o y kilometraje\s*:\s*(\d{4})/i),
+    km: grab(/a[\u00f1n]o y kilometraje\s*:\s*\d{4}\s+(\d+)/i),
+    precio: grab(/precio estimado[^:]*:\s*([\d\.\,]+)/i),
+    patente: grab(/patente\s*:\s*([^\n,]+?)(?=[,\n]|$)/i),
+    email: grab(/email\s*:\s*([^\s,]+@[^\s,]+)/i),
+    telefono: grab(/whatsapp number\s*:\s*(\+?\d[\d\s]+)/i)
+  };
+}
+
 async function getSellers(tenant) {
   const allUsers = await tRead(F.users, tenant);
   return allUsers.filter(u => u.role === 'vendedor' && (!u.status || u.status === 'Activo'));
 }
 async function rrNext(tenant,exclude=null){const sl=await getSellers(tenant);if(!sl.length)return null;const pool=exclude?sl.filter(s=>s.username!==exclude):sl;const list=pool.length?pool:sl;const rr=await read(F.rr);const idx=(rr[tenant]||0)%list.length;rr[tenant]=(idx+1)%list.length;await write(F.rr,rr);return list[idx];}
 
+async function readConfigWithRouting(tenant) {
+  const cfg = await read(F.config);
+  if (!cfg[tenant]) cfg[tenant] = {};
+  if (!cfg[tenant].leadRouting) cfg[tenant].leadRouting = { defaultAssignee: null, comprasAssignees: [] };
+  return cfg;
+}
+
+async function getDefaultAssignee(tenant) {
+  try {
+    const cfg = await readConfigWithRouting(tenant);
+    const username = cfg[tenant].leadRouting.defaultAssignee;
+    if (username) {
+      const users = await tRead(F.users, tenant);
+      const u = users.find(x => x.username === username && (!x.status || x.status === 'Activo'));
+      if (u) return u;
+    }
+  } catch(e) { console.error('[getDefaultAssignee]', e.message); }
+  // fallback: admin
+  const users = await tRead(F.users, tenant);
+  return users.find(u => u.role === 'admin') || { username: 'vendedor1' };
+}
+
+async function getComprasAssignee(tenant) {
+  try {
+    const cfg = await readConfigWithRouting(tenant);
+    const list = cfg[tenant].leadRouting.comprasAssignees || [];
+    if (list.length) {
+      const users = await tRead(F.users, tenant);
+      const rr = await read(F.rr);
+      const key = tenant + '_compras';
+      const idx = (rr[key] || 0) % list.length;
+      rr[key] = (idx + 1) % list.length;
+      await write(F.rr, rr);
+      const username = list[idx];
+      const u = users.find(x => x.username === username);
+      if (u) return u;
+    }
+  } catch(e) { console.error('[getComprasAssignee]', e.message); }
+  return await getDefaultAssignee(tenant);
+}
 
 function _santiagoNowString() {
   try {
@@ -634,6 +701,7 @@ async function applySlaRules(tenant){
       if(!enHorarioHabil()) continue;
       const ref=(lead.status==='esperando_respuesta_chileautos'||lead.status==='esperando_respuesta_general')?lead.lastInteraction:(lead.lastClientTs||lead.lastInteraction);
       const mins=ref?businessMinutesBetween(ref, new Date()):0;
+      /* SLA CONGELADO — modelo cambió a asignador único con reasignación manual
       if(mins>SLA_REASSIGN&&!lead.reassigned){
         console.log('[SLA-REASSIGN]', 'lead='+lead.name, 'mins='+mins.toFixed(1), 'Santiago='+_santiagoNowString());
         const nextObj=await rrNext(tenant,lead.assignedTo);
@@ -652,6 +720,7 @@ async function applySlaRules(tenant){
           alertStaff(tenant, adminU, '📢 Alerta Admin', '📢 ALERTA ADMIN: ['+lead.name+'] lleva 30+ min sin atención tras reasignación.'+aiSumA);
         }
       }
+      */
     }
     const lvl=calcAlert(lead);
     if(lvl!==prev){lead.alertLevel=lvl;changed=true;}
@@ -739,19 +808,37 @@ const auth=(...roles)=>async(req,res,next)=>{
 };
 const byRole=(leads,user)=>user.role==='vendedor'?leads.filter(l=>l.assignedTo===user.username):leads;
 
+function defaultPermsForRole(role) {
+  if (role === 'admin') {
+    const full = {};
+    ['operacion','leads','chileautos','espera','compras','pipeline','analitica','equipo','inventario','bi','analisis','auditoria','config'].forEach(m => full[m] = 3);
+    return full;
+  }
+  return {
+    operacion: 2, leads: 2, chileautos: 1, espera: 1, compras: 0,
+    pipeline: 2, analitica: 1, equipo: 1, inventario: 1,
+    bi: 0, analisis: 0, auditoria: 0, config: 0
+  };
+}
+function hydrateUser(u) {
+  if (!u.permissions) u.permissions = defaultPermsForRole(u.role);
+  if (u.canReassign === undefined) u.canReassign = u.role === 'admin';
+  return u;
+}
+
 app.post('/api/auth/login',async(req,res)=>{
   const{username,password,tenant}=req.body||{};const t=validT(tenant);const users=await tRead(F.users,t);
   const u=users.find(x=>x.username===username&&x.password===password);
   if(!u)return res.status(401).json({error:'Credenciales incorrectas'});
-  const token=crypto.randomBytes(24).toString('hex');const safe={username:u.username,name:u.name,role:u.role};
+  const token=crypto.randomBytes(24).toString('hex');const hydrated=hydrateUser({...u});const safe={username:hydrated.username,name:hydrated.name,role:hydrated.role,permissions:hydrated.permissions,canReassign:hydrated.canReassign};
   sessions.set(token,{user:safe,tenant:t});res.json({token,user:safe,tenant:t,expires:Date.now()+86400000});
 });
 app.post('/api/auth/logout',(req,res)=>{sessions.delete(req.header('X-Auth-Token'));res.json({ok:true});});
 app.get('/api/me',auth(),(req,res)=>res.json({user:req.user,tenant:req.tenant}));
 
-app.get('/api/users',auth('admin'),async(req,res)=>{const users=await tRead(F.users,req.tenant);res.json(users.map(u=>({username:u.username,name:u.name,role:u.role,status:u.status||'Activo',phone:u.phone||''})));});
-app.post('/api/users',auth('admin'),async(req,res)=>{const{username,password,name,role,phone,status}=req.body||{};if(!username||!name||!role)return res.status(400).json({error:'username,name,role requeridos'});const users=await tRead(F.users,req.tenant);if(users.find(u=>u.username===username))return res.status(409).json({error:'Ya existe'});const nu={username,password:password||'demo',name,role,phone:phone||'',status:status||'Activo'};users.push(nu);await tWrite(F.users,req.tenant,users);res.status(201).json(nu);});
-app.put('/api/users/:username',auth('admin'),async(req,res)=>{const users=await tRead(F.users,req.tenant);const idx=users.findIndex(u=>u.username===req.params.username);if(idx===-1)return res.status(404).json({error:'No encontrado'});const{name,role,phone,status,password}=req.body||{};if(name)users[idx].name=name;if(role)users[idx].role=role;if(phone!==undefined)users[idx].phone=phone;if(status)users[idx].status=status;if(password)users[idx].password=password;await tWrite(F.users,req.tenant,users);res.json(users[idx]);});
+app.get('/api/users',auth('admin'),async(req,res)=>{const users=await tRead(F.users,req.tenant);res.json(users.map(u=>{const h=hydrateUser({...u});return{username:h.username,name:h.name,role:h.role,status:h.status||'Activo',phone:h.phone||'',permissions:h.permissions,canReassign:h.canReassign};}));});
+app.post('/api/users',auth('admin'),async(req,res)=>{const{username,password,name,role,phone,status,permissions,canReassign}=req.body||{};if(!username||!name||!role)return res.status(400).json({error:'username,name,role requeridos'});const users=await tRead(F.users,req.tenant);if(users.find(u=>u.username===username))return res.status(409).json({error:'Ya existe'});const nu={username,password:password||'demo',name,role,phone:phone||'',status:status||'Activo',permissions:permissions||defaultPermsForRole(role),canReassign:canReassign!==undefined?canReassign:role==='admin'};users.push(nu);await tWrite(F.users,req.tenant,users);res.status(201).json(nu);});
+app.put('/api/users/:username',auth('admin'),async(req,res)=>{const users=await tRead(F.users,req.tenant);const idx=users.findIndex(u=>u.username===req.params.username);if(idx===-1)return res.status(404).json({error:'No encontrado'});const{name,role,phone,status,password,permissions,canReassign}=req.body||{};if(name)users[idx].name=name;if(role)users[idx].role=role;if(phone!==undefined)users[idx].phone=phone;if(status)users[idx].status=status;if(password)users[idx].password=password;if(permissions)users[idx].permissions=permissions;if(canReassign!==undefined)users[idx].canReassign=canReassign;await tWrite(F.users,req.tenant,users);res.json(users[idx]);});
 app.delete('/api/users/:username',auth('admin'),async(req,res)=>{const users=await tRead(F.users,req.tenant);const idx=users.findIndex(u=>u.username===req.params.username);if(idx===-1)return res.status(404).json({error:'No encontrado'});if(users[idx].role==='admin')return res.status(403).json({error:'No se puede eliminar admin'});users.splice(idx,1);await tWrite(F.users,req.tenant,users);res.json({ok:true});});
 
 
@@ -820,9 +907,32 @@ app.post('/api/leads/:id/send-media', auth('admin','vendedor'), uploadWA.single(
   }
 });
 
+async function filterLeadsForUser(leads, user, tenant) {
+  try {
+    const cfg = await readConfigWithRouting(tenant);
+    const comprasList = cfg[tenant].leadRouting.comprasAssignees || [];
+    const users = await tRead(F.users, tenant);
+    const me = users.find(u => u.username === user.username);
+    const perms = me ? hydrateUser({...me}).permissions : defaultPermsForRole(user.role);
+    return leads.filter(l => {
+      const esCompra = l.source === 'Compramos tu Auto' || l.source === 'Compra Directa' || l.isCompraRmg === true;
+      if (esCompra) {
+        if ((perms.compras || 0) === 0) return false;
+        if (user.role !== 'admin' && !comprasList.includes(user.username)) return false;
+        return true;
+      }
+      if (user.role === 'vendedor' && l.assignedTo !== user.username) return false;
+      return true;
+    });
+  } catch(e) {
+    console.error('[filterLeadsForUser]', e.message);
+    return user.role === 'vendedor' ? leads.filter(l => l.assignedTo === user.username) : leads;
+  }
+}
+
 app.get('/api/leads',auth(),async(req,res)=>{
   const all=await applySlaRules(req.tenant);const{s,e}=parseDateRange(req.query.start,req.query.end);
-  let leads=byRole(all,req.user);if(s!==null||e!==null)leads=leads.filter(l=>inRange(l,s,e));
+  let leads=await filterLeadsForUser(all,req.user,req.tenant);if(s!==null||e!==null)leads=leads.filter(l=>inRange(l,s,e));
   if(req.query.seller&&req.user.role==='admin')leads=leads.filter(l=>l.assignedTo===req.query.seller);
   leads.forEach(l=>{if(!Array.isArray(l.chatHistory))l.chatHistory=[];if(!Array.isArray(l.notes))l.notes=[];if(!l.intentSignal)l.intentSignal='NONE';if(!l.lastClientTs)l.lastClientTs=l.lastInteraction||new Date().toISOString();});
   leads.sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0));res.json(leads);
@@ -1695,7 +1805,48 @@ app.post('/webhook',async(req,res)=>{
     const ld=await read(F.leads);if(!ld[tenant])ld[tenant]=[];
     let idx=ld[tenant].findIndex(l=>l.phone&&l.phone.replace(/\D/g,'').includes(from.replace(/\D/g,'')));
     if(idx===-1){
-      const assignedObj=await rrNext(tenant)||{username:'vendedor1'};const n=new Date().toISOString();
+      const assignedObj=await getDefaultAssignee(tenant);const n=new Date().toISOString();
+
+      // ── Formulario Compras RMG (Meta) — prioridad sobre portales ──
+      if (esFormularioComprasRMG(body)) {
+        const datos = parseFormularioComprasRMG(body);
+        const nombreReal = datos.nombre || contactName;
+        const detalleVehiculo = [
+          datos.marcaModelo,
+          datos.año,
+          datos.km ? datos.km + ' km' : '',
+          datos.patente ? 'Patente ' + datos.patente : ''
+        ].filter(Boolean).join(' · ');
+        const comprasObj = await getComprasAssignee(tenant);
+        ld[tenant].unshift({
+          id: Date.now(),
+          name: nombreReal,
+          phone: '+' + from,
+          source: 'Compramos tu Auto',
+          isCompraRmg: true,
+          status: 'Nuevo',
+          interest: detalleVehiculo || 'Vehículo a tasar',
+          formData: datos,
+          lastInteraction: n,
+          lastClientTs: n,
+          assignedTo: comprasObj.username,
+          botActive: true,
+          alertLevel: 'none',
+          intentSignal: 'NONE',
+          unread: true,
+          notes: [{
+            content: `📋 Lead Compras RMG (formulario Meta):\n• Nombre: ${datos.nombre}\n• Vehículo: ${datos.marcaModelo}\n• Año: ${datos.año}\n• KM: ${datos.km}\n• Patente: ${datos.patente}\n• Precio esperado: ${datos.precio}\n• Email: ${datos.email}`,
+            author: 'Sistema',
+            ts: Date.now()
+          }],
+          chatHistory: [],
+          adTracing: adTracing
+        });
+        alertStaff(tenant, comprasObj, '🚗 Nuevo Lead Compras RMG',
+          `🚗 NUEVO LEAD COMPRAS RMG asignado a ti: ${nombreReal} — ${detalleVehiculo}. Revísalo en pestaña Compras RMG.`);
+        await tWrite(F.leads, tenant, ld[tenant]);
+        return;
+      }
 
       // ── Detectar origen portal (Yapo, MercadoLibre, Chileautos WA directo) ──
       let detectedSource = 'WhatsApp';
@@ -1963,6 +2114,7 @@ setInterval(async () => {
       for (const lead of leads) {
         if (FINAL_ST.has(lead.status)) continue;
 
+        /* SLA CONGELADO — modelo cambió a asignador único con reasignación manual
         // ─── TAREA 1: Alerta SLA riesgo a los 20 min sin atencion ──────────
         if (enHorarioHabil()) {
           if (lead.status === 'Nuevo' && !lead.reassigned && !lead.riskAlertSent) {
@@ -1984,6 +2136,7 @@ setInterval(async () => {
             }
           }
         }
+        */
 
         /* ─── TAREA 2: ANULADA ─── 
  Choque de trenes resuelto. IA Proactiva maneja el retargeting ahora. 
@@ -2022,6 +2175,22 @@ app.put('/api/config/password',auth('admin'),async(req,res)=>{
   await tWrite(F.users,req.tenant,users);
   console.log('[CONFIG] Clave actualizada para tenant:',req.tenant);
   res.json({ok:true,updated:users.length});
+});
+
+app.get('/api/config/routing',auth('admin'),async(req,res)=>{
+  try{
+    const cfg=await readConfigWithRouting(req.tenant);
+    res.json(cfg[req.tenant].leadRouting||{defaultAssignee:null,comprasAssignees:[]});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+app.put('/api/config/routing',auth('admin'),async(req,res)=>{
+  try{
+    const{defaultAssignee,comprasAssignees}=req.body||{};
+    const cfg=await readConfigWithRouting(req.tenant);
+    cfg[req.tenant].leadRouting={defaultAssignee:defaultAssignee||null,comprasAssignees:Array.isArray(comprasAssignees)?comprasAssignees:[]};
+    await write(F.config,cfg);
+    res.json({ok:true});
+  }catch(e){res.status(500).json({error:e.message});}
 });
 
 app.use(express.static(path.join(__dirname,'public')));
@@ -2502,6 +2671,7 @@ setInterval(async () => {
             }
         }
 
+        /* SLA CONGELADO — modelo cambió a asignador único con reasignación manual
         if (enHorarioHabil()) {
           // [PUNTO 4]: Alerta SLA Riesgo (20 min sin atención -> Solo Vendedor)
           if (l.status === 'Nuevo' && !l.alertaSla20 && minsSinAtencion >= 20 && minsSinAtencion < 30) {
@@ -2525,6 +2695,7 @@ setInterval(async () => {
             l.alertaAdminSin30 = true; changed = true;
             for (const a of admins) { if (a.phone) await sendWATemplate(a.phone, 'alerta_admin_sin_atencion', [l.name || 'S/N']).catch(()=>{}); }
         }
+        */
 
         // [PUNTOS 7 y 8]: Automatización Sala de Espera (Plantillas Meta a Clientes)
         if (fCliente && l.sala_espera === true && !l.replied) {
