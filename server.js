@@ -931,11 +931,13 @@ async function filterLeadsForUser(leads, user, tenant) {
 }
 
 app.get('/api/leads',auth(),async(req,res)=>{
-  const all=await applySlaRules(req.tenant);const{s,e}=parseDateRange(req.query.start,req.query.end);
-  let leads=await filterLeadsForUser(all,req.user,req.tenant);if(s!==null||e!==null)leads=leads.filter(l=>inRange(l,s,e));
-  if(req.query.seller&&req.user.role==='admin')leads=leads.filter(l=>l.assignedTo===req.query.seller);
-  leads.forEach(l=>{if(!Array.isArray(l.chatHistory))l.chatHistory=[];if(!Array.isArray(l.notes))l.notes=[];if(!l.intentSignal)l.intentSignal='NONE';if(!l.lastClientTs)l.lastClientTs=l.lastInteraction||new Date().toISOString();});
-  leads.sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0));res.json(leads);
+  try{
+    const all=await applySlaRules(req.tenant);const{s,e}=parseDateRange(req.query.start,req.query.end);
+    let leads=await filterLeadsForUser(all,req.user,req.tenant);if(s!==null||e!==null)leads=leads.filter(l=>inRange(l,s,e));
+    if(req.query.seller&&req.user.role==='admin')leads=leads.filter(l=>l.assignedTo===req.query.seller);
+    leads.forEach(l=>{if(!Array.isArray(l.chatHistory))l.chatHistory=[];if(!Array.isArray(l.notes))l.notes=[];if(!l.intentSignal)l.intentSignal='NONE';if(!l.lastClientTs)l.lastClientTs=l.lastInteraction||new Date().toISOString();});
+    leads.sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0));res.json(leads);
+  }catch(err){console.error('[GET /api/leads]',err.message);res.status(500).json({error:'Error cargando leads'});}
 });
 app.get('/api/leads/:id',auth(),async(req,res)=>{await applySlaRules(req.tenant);const leads=await tRead(F.leads,req.tenant);const l=leads.find(x=>x.id==req.params.id);if(!l)return res.status(404).json({error:'No encontrado'});if(req.user.role==='vendedor'&&l.assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});res.json(l);});
 app.patch('/api/leads/:id',auth(),async(req,res)=>{
