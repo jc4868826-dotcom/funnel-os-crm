@@ -1236,7 +1236,7 @@ async function requestNotifPermission(){
 function renderDashVendedor(){if(!S.vendKpi)return;const k=S.vendKpi;const scF=$('scF'),scR=$('scR'),scC=$('scC'),scRS=$('scRS');if(scF)scF.textContent=k.sla?.fresh??'—';if(scR)scR.textContent=k.sla?.risk??'—';if(scC)scC.textContent=k.sla?.critical??'—';if(scRS)scRS.textContent=k.sla?.reassigned??'—';renderFunnel();}
 function renderAll(){const isA=S.user?.role==='admin';if(isA)renderDash();else renderDashVendedor();renderLeads();renderChileautos();renderEsperaGeneral();renderKanban(); if(typeof renderComprasFull === "function") renderComprasFull();renderCalendar();if(isA){renderAnalytics();renderTeam();}if(S.mid&&$('mbg').classList.contains('show'))refreshModalSilent();if(S.slaOpen)renderSlaPanel(S.slaOpen);if(S.funOpen)renderFunPanel(S.funOpen);try{checkNotifications();}catch(e){}}
 
-function normLeads(){return(S.leads||[]).filter(l=>!l.isCompraRmg&&l.source!=='Compramos tu Auto'&&l.source!=='Compra Directa');}
+function normLeads(){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(S.leads||[]).filter(l=>l.isCompraRmg!==true&&!FC.includes((l.source||'').trim()));}
 
 function renderSlaCards(){
   const nv=normLeads().filter(l=>l.status==='Nuevo');
@@ -1264,8 +1264,7 @@ function renderLeads(){
   const filtCanal = document.getElementById('filtCanal')?.value || '';
   const filtEstado = document.getElementById('filtEstado')?.value || '';
   const filtSearch = document.getElementById('filtSearch')?.value.toLowerCase().trim() || '';
-  const FUENTES_COMPRA = ['Compra Directa', 'Compramos tu Auto', 'Compramos tu auto', 'Compra Directa '];
-  let leads = (S.leads || []).filter(l => !l.isCompraRmg && !FUENTES_COMPRA.includes((l.source||'').trim()));
+  let leads = normLeads();
   if(filtCanal) leads = leads.filter(l => (l.source||'') === filtCanal);
   if(filtEstado) leads = leads.filter(l => (l.status||'') === filtEstado);
   if(filtSearch) leads = leads.filter(l => (l.name||'').toLowerCase().includes(filtSearch) || (l.phone||'').includes(filtSearch) || (l.interest||'').toLowerCase().includes(filtSearch));
@@ -2777,9 +2776,7 @@ window.exportLeadsExcel = function() {
     const filtCanal = document.getElementById('filtCanal')?.value || '';
     const filtEstado = document.getElementById('filtEstado')?.value || '';
     const filtSearch = document.getElementById('filtSearch')?.value.toLowerCase().trim() || '';
-    const FUENTES_COMPRA = ['Compra Directa', 'Compramos tu Auto', 'Compramos tu auto', 'Compra Directa '];
-
-    let leads = (S.leads || []).filter(l => !l.isCompraRmg && !FUENTES_COMPRA.includes((l.source||'').trim()));
+    let leads = normLeads();
     if (filtCanal) leads = leads.filter(l => (l.source||'') === filtCanal);
     if (filtEstado) leads = leads.filter(l => (l.status||'') === filtEstado);
     if (filtSearch) leads = leads.filter(l => (l.name||'').toLowerCase().includes(filtSearch) || (l.phone||'').includes(filtSearch) || (l.interest||'').toLowerCase().includes(filtSearch));
