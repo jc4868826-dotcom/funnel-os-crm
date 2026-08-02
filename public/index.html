@@ -697,6 +697,7 @@ async function ejecutarAnalisisIA(){
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
   <div class="st" style="margin-bottom:0">Leads</div>
   <button id="btnBulkDelete" onclick="bulkDelete()" style="display:none;background:var(--bd2);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">🗑 Borrar Seleccionados</button>
+  <button id="btnMoveToCompras" onclick="moveToComprasRmg()" style="display:none;background:#d97706;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">🚗 Mover a Compras RMG</button>
 <button id="btnExportChats" onclick="exportChatsCsv()" style="background:#10b981;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">📥 Exportar a CSV</button>
 <button id="btnExportLeadsXlsx" onclick="exportLeadsExcel()" style="background:#1d6f42;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">📊 Descargar Leads (Excel)</button>
 <button id="btnNuevoLead" onclick="openNuevoLeadModal()" style="background:var(--ac);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px">＋ Nuevo Lead</button>
@@ -2426,9 +2427,23 @@ function bulkDelete() {
     refresh();
   }).catch(e => toast(e.message, true));
 }
+async function moveToComprasRmg() {
+  const checks = document.querySelectorAll('.blk-chk:checked');
+  const ids = Array.from(checks).map(c => Number(c.value));
+  if(!ids.length) return toast('Selecciona al menos un lead', true);
+  try {
+    await Promise.all(ids.map(id => api('PATCH', '/api/leads/' + id, {isCompraRmg: true, source: 'Compramos tu Auto'})));
+    toast('🚗 ' + ids.length + ' lead' + (ids.length !== 1 ? 's movidos' : ' movido') + ' a Compras RMG ✓');
+    if(window.selBulk) window.selBulk.clear();
+    refresh();
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
 setInterval(()=>{
+  const isAdmin = S.user && S.user.role === 'admin';
   const btn = document.getElementById('btnBulkDelete');
-  if(btn) btn.style.display = (S.user && S.user.role === 'admin') ? 'inline-flex' : 'none';
+  if(btn) btn.style.display = isAdmin ? 'inline-flex' : 'none';
+  const btnMC = document.getElementById('btnMoveToCompras');
+  if(btnMC) btnMC.style.display = isAdmin ? 'inline-flex' : 'none';
 }, 1000);
 </script>
 <script>
