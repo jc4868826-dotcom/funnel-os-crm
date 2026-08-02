@@ -371,7 +371,7 @@ async function scrapeRMG() {
         model:          fullTitle,
         year:           anno,
         stock:          1,
-        price:          precioCredito || precioLista,
+        price:          precioLista || precioCredito,
         precio_lista:   precioLista,
         precio_credito: precioCredito,
         km:             km ? km.toLocaleString('es-CL')+' km' : '',
