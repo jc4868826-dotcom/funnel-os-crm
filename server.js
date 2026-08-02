@@ -314,9 +314,15 @@ async function scrapeRMG() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const html = await r.text();
 
-    // Nueva estructura: cada auto es un <li> con <h3> título y <p> datos
-    const liRE = /<li>([\s\S]*?)<\/li>/gi;
-    const parsePrecio = s => parseInt((s||'').replace(/\./g,'').replace(',','').replace(/[^\d]/g,''), 10) || 0;
+    // Estructura WooCommerce real: <li class="...product..."> con h2 y divs rmg-*
+    // v7 fallaba porque <li> tiene atributos, título en <h2> no <h3>, y precios en <bdi>
+    const liRE = /<li[^>]*class="[^"]*\bproduct\b[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
+    const parsePrecio = s => parseInt((s||'').replace(/\./g,'').replace(/,/g,'').replace(/[^\d]/g,''), 10) || 0;
+    // Lee <div class="rmg-k">KEY</div><div class="rmg-v">VALUE</div>
+    const getSpec = (key, blk) => {
+      const mm = blk.match(new RegExp('class="rmg-k">\\s*' + key + '\\s*<\\/div>\\s*<div[^>]*class="rmg-v">([^<]+)<\\/div>', 'i'));
+      return mm ? mm[1].trim() : '';
+    };
 
     const structuredItems = [];
     const autos = [];
@@ -326,29 +332,30 @@ async function scrapeRMG() {
     while ((m = liRE.exec(html)) !== null) {
       const block = m[1];
 
-      // Solo cards de producto tienen link /producto/ y <h3>
+      // Link: primer href /producto/
       const linkM = block.match(/href="(https:\/\/rmgautos\.cl\/producto\/[^"]+)"/);
       if (!linkM) continue;
-      const h3M = block.match(/<h3[^>]*>([^<]+)<\/h3>/i);
-      if (!h3M) continue;
+      // Título: <a class="woocommerce-LoopProduct-link-title...">NOMBRE</a>
+      const titleM = block.match(/woocommerce-LoopProduct-link-title[^>]*>([^<]+)<\/a>/i);
+      if (!titleM) continue;
 
       const cardLink  = linkM[1].replace(/\/$/, '');
-      const fullTitle = h3M[1].trim();
+      const fullTitle = titleM[1].trim();
 
-      const getP = rx => { const mm = block.match(rx); return mm ? mm[1].trim() : ''; };
-
-      const precioCredito = parsePrecio(getP(/Precio Cr[^:]+:\s*\$?([\d.,]+)/i));
-      const precioLista   = parsePrecio(getP(/Precio Lista\s*:\s*\$?([\d.,]+)/i));
+      // Precios en <bdi>: primero=crédito, segundo=lista
+      const allBdi = [...block.matchAll(/<bdi>[\s\S]*?<\/span>([\d.,]+)<\/bdi>/gi)];
+      const precioCredito = parsePrecio(allBdi[0]?.[1] || '');
+      const precioLista   = parsePrecio(allBdi[1]?.[1] || '');
       if (!precioCredito && !precioLista) continue;
 
-      const modeloStr = getP(/MODELO\s*:\s*([^<\n]+)/i);
-      const annoStr   = getP(/A[ÑN]O\s*:\s*(\d{4})/i);
-      const fuelStr   = getP(/COMBUSTIBLE\s*:\s*([^<\n]+)/i).toUpperCase();
-      const kmStr     = getP(/KILOMETRAJE\s*:\s*([\d.,]+)/i);
-      const tipoM     = block.match(/<p>([A-Za-záéíóúüñÁÉÍÓÚÜÑ]+)<\/p>/i);
+      const modeloStr = getSpec('MODELO:', block);
+      const annoStr   = getSpec('A.O:', block);   // cubre AÑO y ANO
+      const fuelStr   = getSpec('COMBUSTIBLE:', block).toUpperCase();
+      const kmFull    = getSpec('KILOMETRAJE:', block);
+      const tipoM     = block.match(/class="rmg-chip">([^<]+)<\/span>/i);
       const tipo      = tipoM ? tipoM[1].trim() : '';
 
-      const km   = parseInt((kmStr||'').replace(/[.,]/g,''), 10) || 0;
+      const km   = parseInt(kmFull.replace(/[^\d]/g, ''), 10) || 0;
       const anno = annoStr ? parseInt(annoStr, 10) : null;
 
       const marcaM = fullTitle.match(MARCAS_RE);
@@ -380,7 +387,7 @@ async function scrapeRMG() {
     if (structuredItems.length === 0) throw new Error('0 autos encontrados en rmgautos.cl');
 
     scrapeCache = { ts: now, data: [...new Set(autos)].join('\n'), items: structuredItems };
-    console.log('[RMG-Scraper v7] ' + structuredItems.length + ' autos OK');
+    console.log('[RMG-Scraper v8] ' + structuredItems.length + ' autos OK');
     return scrapeCache.data;
   } catch(e) {
     console.warn('[RMG-Scraper] Error:', e.message, '- usando cache');
