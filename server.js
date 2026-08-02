@@ -505,6 +505,8 @@ function isShield(t){if(!t)return false;const n=t.toLowerCase().normalize('NFD')
 function esFormularioComprasRMG(body) {
   if (!body || typeof body !== 'string') return false;
   const b = body.toLowerCase();
+
+  // Detecci\u00f3n 1: formulario completo Meta (patr\u00f3n exacto)
   const signals = [
     /complet[e\u00e9] el formulario/i.test(b),
     /full name\s*:/i.test(b),
@@ -512,7 +514,18 @@ function esFormularioComprasRMG(body) {
     /patente\s*:/i.test(b),
     /precio estimado.*recibir\s*:/i.test(b)
   ].filter(Boolean).length;
-  return signals >= 3;
+  if (signals >= 3) return true;
+
+  // Detecci\u00f3n 2: mensajes libres de venta de veh\u00edculo
+  const keywordsFuertes = [
+    /compramos tu auto/i,
+    /compramos tu veh[i\u00ed]culo/i,
+    /vendo mi (auto|veh[i\u00ed]culo|camioneta|suv)/i,
+    /quiero vender mi (auto|veh[i\u00ed]culo|camioneta|suv)/i,
+    /tengo un auto para vender/i,
+    /me gustar[i\u00ed]a vender mi (auto|veh[i\u00ed]culo)/i
+  ];
+  return keywordsFuertes.some(rx => rx.test(b));
 }
 
 function parseFormularioComprasRMG(body) {
@@ -561,17 +574,21 @@ async function getComprasAssignee(tenant) {
   try {
     const cfg = await readConfigWithRouting(tenant);
     const list = cfg[tenant].leadRouting.comprasAssignees || [];
+    const users = await tRead(F.users, tenant);
     if (list.length) {
-      const users = await tRead(F.users, tenant);
-      const rr = await read(F.rr);
-      const key = tenant + '_compras';
-      const idx = (rr[key] || 0) % list.length;
-      rr[key] = (idx + 1) % list.length;
-      await write(F.rr, rr);
-      const username = list[idx];
-      const u = users.find(x => x.username === username);
-      if (u) return u;
+      const active = list.map(un => users.find(u => u.username === un && u.status !== 'Inactivo')).filter(Boolean);
+      if (active.length) {
+        const rr = await read(F.rr);
+        const key = tenant + '_compras';
+        const i = (rr[key] || 0) % active.length;
+        rr[key] = i + 1;
+        await write(F.rr, rr);
+        return active[i];
+      }
     }
+    // Fallback: usuario 'comprador' si existe y está activo
+    const comprador = users.find(u => u.username === 'comprador' && u.status !== 'Inactivo');
+    if (comprador) return comprador;
   } catch(e) { console.error('[getComprasAssignee]', e.message); }
   return await getDefaultAssignee(tenant);
 }
@@ -842,6 +859,29 @@ app.put('/api/users/:username',auth('admin'),async(req,res)=>{const users=await 
 app.delete('/api/users/:username',auth('admin'),async(req,res)=>{const users=await tRead(F.users,req.tenant);const idx=users.findIndex(u=>u.username===req.params.username);if(idx===-1)return res.status(404).json({error:'No encontrado'});if(users[idx].role==='admin')return res.status(403).json({error:'No se puede eliminar admin'});users.splice(idx,1);await tWrite(F.users,req.tenant,users);res.json({ok:true});});
 
 
+app.post('/api/admin/migrate-comprador-to-compras', auth('admin'), async (req,res) => {
+  const leads = await tRead(F.leads, req.tenant);
+  let migrated = 0;
+  for (const l of leads) {
+    if (l.assignedTo === 'comprador' && !l.isCompraRmg) {
+      l.isCompraRmg = true;
+      if (l.source !== 'Compramos tu Auto' && l.source !== 'Compra Directa') {
+        l.sourceOriginal = l.source;
+        l.source = 'Compramos tu Auto';
+      }
+      l.notes = l.notes || [];
+      l.notes.push({
+        content: '🔄 Migrado a Compras RMG (batch admin).',
+        author: 'Sistema',
+        ts: Date.now()
+      });
+      migrated++;
+    }
+  }
+  await tWrite(F.leads, req.tenant, leads, {force: true});
+  res.json({ok:true, migrated, total: leads.length});
+});
+
 // [NUEVO ENDPOINT: ENVIAR ARCHIVO A WA]
 const multer = require('multer');
 const uploadWA = multer({ dest: '/tmp/' }); // Guardado temporal
@@ -918,7 +958,7 @@ async function filterLeadsForUser(leads, user, tenant) {
       const esCompra = l.source === 'Compramos tu Auto' || l.source === 'Compra Directa' || l.isCompraRmg === true;
       if (esCompra) {
         if ((perms.compras || 0) === 0) return false;
-        if (user.role !== 'admin' && !comprasList.includes(user.username)) return false;
+        if (user.role !== 'admin' && !comprasList.includes(user.username) && user.username !== 'comprador') return false;
         return true;
       }
       if (user.role === 'vendedor' && l.assignedTo !== user.username) return false;
