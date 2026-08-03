@@ -1750,6 +1750,11 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
               <input id="ti-color" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:5px 8px;font-size:13px;" value="${ti.color||''}">
             </label>
           </div>
+          <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <button onclick="enviarPlantillaRetoma('seguimiento_compra')" style="width:32px;height:32px;border-radius:50%;background:#2563eb;color:#fff;border:none;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Enviar seguimiento_compra">S</button>
+            <button onclick="enviarPlantillaRetoma('recupera_compra')" style="width:32px;height:32px;border-radius:50%;background:#d97706;color:#fff;border:none;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Enviar recupera_compra">R</button>
+            <span style="font-size:11px;color:var(--tm);align-self:center">Plantillas WA</span>
+          </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <button onclick="saveTiFields('${lead.id}')" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;">💾 Guardar Datos</button>
             <button onclick="solicitarTasacion('${lead.id}')" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;">🔧 Solicitar Tasación a Taller</button>
@@ -1877,6 +1882,11 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
             <input id="ti-color" placeholder="Color (Blanco)" value="${ti.color||''}" style="width:100%; padding:6px; background:var(--p3); border:1px solid var(--bd); border-radius:4px; font-size:11.5px; color:var(--tx);">
             <input id="ti-km" placeholder="Kilometraje (ej: 45.000 km)" value="${ti.km||''}" style="width:100%; padding:6px; background:var(--p3); border:1px solid var(--bd); border-radius:4px; font-size:11.5px; color:var(--tx);">
             <input id="ti-version" placeholder="Version/Equipamiento (ej: 4x4 Full)" value="${ti.version||''}" style="width:100%; padding:6px; background:var(--p3); border:1px solid var(--bd); border-radius:4px; font-size:11.5px; color:var(--tx);">
+          </div>
+          <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <button onclick="enviarPlantillaRetoma('seguimiento_compra')" style="width:32px;height:32px;border-radius:50%;background:#2563eb;color:#fff;border:none;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Enviar seguimiento_compra">S</button>
+            <button onclick="enviarPlantillaRetoma('recupera_compra')" style="width:32px;height:32px;border-radius:50%;background:#d97706;color:#fff;border:none;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Enviar recupera_compra">R</button>
+            <span style="font-size:11px;color:var(--tm);align-self:center">Plantillas WA</span>
           </div>
           <div style="display:flex; gap:6px;">
             <button onclick="saveTiFields('${lead.id}')" style="flex:1; background:var(--ac); color:#fff; border:none; padding:6px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">💾 Guardar</button>
@@ -2062,6 +2072,16 @@ window.solicitarTasacion = async function(leadId) {
   const h = {'Content-Type':'application/json','X-Auth-Token': S.token||''};
   const r = await fetch('/api/tasacion/request', { method:'POST', headers:h, body:JSON.stringify({leadId}) });
   toast(r.ok ? 'Tasación solicitada a taller 🔧' : 'Error al solicitar', !r.ok);
+};
+window.enviarPlantillaRetoma = async function(template) {
+  if(!S.mid) return toast('No hay lead activo', true);
+  const lead = S.leads.find(l => l.id === S.mid);
+  if(!lead || !lead.phone) return toast('Lead sin teléfono', true);
+  if(!confirm('¿Enviar plantilla "' + template + '" a ' + lead.name + '?')) return;
+  try {
+    await api('POST', '/api/leads/' + S.mid + '/send-template', {template, variables: []});
+    toast('Plantilla enviada ✓');
+  } catch(e) { toast(e.message, true); }
 };
 window.preseleccionarRango = function preseleccionarRango(){
   // Pre-seleccionar el rango guardado si existe

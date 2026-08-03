@@ -2588,24 +2588,28 @@ async function sendWATemplate(phone, templateName, params) {
 }
 
 // [PUNTO 9]: Disparo manual por botón verde desde el CRM
-app.post('/api/leads/:id/send-template', auth('admin','vendedor'), async (req, res) => {
+app.post('/api/leads/:id/send-template', auth(), async (req, res) => {
   try {
-    const { templateName, params } = req.body;
-    if (!templateName) return res.status(400).json({ error: 'Falta templateName' });
+    const templateName = req.body.templateName || req.body.template;
+    const params = req.body.params || req.body.variables || [];
+    if (!templateName) return res.status(400).json({ error: 'Falta template' });
     const leads = await tRead(F.leads, req.tenant);
     const idx = leads.findIndex(x => x.id == req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Lead no encontrado' });
-    
     const pClean = String(leads[idx].phone || '').replace(/\D/g, '');
-    const ok = await sendWATemplate(pClean, templateName, params || [leads[idx].name || 'Estimado']);
+    const ok = await sendWATemplate(pClean, templateName, params.length ? params : [leads[idx].name || 'Estimado']);
     if (ok) {
+        leads[idx].chatHistory = leads[idx].chatHistory || [];
         leads[idx].chatHistory.push({ role: 'agent', content: `[META] Plantilla ${templateName} enviada manualmente`, ts: Date.now() });
+        leads[idx].notes = leads[idx].notes || [];
+        leads[idx].notes.push({ content: '📤 Plantilla WA enviada: ' + templateName, author: req.user.username, ts: Date.now() });
+        leads[idx].lastInteraction = new Date().toISOString();
         await tWrite(F.leads, req.tenant, leads);
-        return res.json({ success: true });
+        return res.json({ ok: true, success: true });
     } else {
         return res.status(500).json({ error: 'Rechazo de Meta al disparar plantilla' });
     }
-  } catch(e) { return res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[SEND-TEMPLATE]', e.message); return res.status(500).json({ error: e.message }); }
 });
 
 // [PUNTOS 1 al 8]: Super-Cron Maestro de Lógica Comercial
