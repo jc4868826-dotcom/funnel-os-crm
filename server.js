@@ -1107,6 +1107,9 @@ app.get('/api/analytics/channels',auth('admin'),async(req,res)=>{
 app.get('/api/pipeline',auth(),async(req,res)=>{const cfg=await tRead(F.config,req.tenant,{});const all=await applySlaRules(req.tenant);const{s,e}=parseDateRange(req.query.start,req.query.end);let leads=byRole(all,req.user);if(s!==null||e!==null)leads=leads.filter(l=>inRange(l,s,e));if(req.query.seller&&req.user.role==='admin')leads=leads.filter(l=>l.assignedTo===req.query.seller);res.json((cfg.stages||[]).map(st=>({stage:st,leads:leads.filter(l=>l.status===st)})));});
 app.get('/api/config',auth(),async(req,res)=>res.json(await tRead(F.config,req.tenant,{})));
 app.put('/api/config',auth('admin'),async(req,res)=>{const u={...await tRead(F.config,req.tenant,{}),...req.body};await tWrite(F.config,req.tenant,u);res.json(u);});
+const CANALES_DEFAULT=['WhatsApp','Chileautos','Yapo','MercadoLibre','Meta Ads','Referido','Llamada','Duty','Otro'];
+app.get('/api/config/canales',auth(),async(req,res)=>{const cfg=await tRead(F.config,req.tenant,{});res.json(cfg.canales||CANALES_DEFAULT);});
+app.put('/api/config/canales',auth('admin'),async(req,res)=>{const{canales}=req.body||{};if(!Array.isArray(canales)||!canales.length)return res.status(400).json({error:'canales debe ser un array no vacío'});const cfg={...await tRead(F.config,req.tenant,{}),canales};await tWrite(F.config,req.tenant,cfg);res.json(canales);});
 app.get('/api/bot',auth('admin'),async(req,res)=>res.json(await tRead(F.bot,req.tenant,{})));
 app.put('/api/bot',auth('admin'),async(req,res)=>{const u={...await tRead(F.bot,req.tenant,{}),...req.body};await tWrite(F.bot,req.tenant,u);res.json(u);});
 app.get('/api/inventory',auth('admin','vendedor'),async(req,res)=>res.json(await tRead(F.inventory,req.tenant)));
