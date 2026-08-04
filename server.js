@@ -2563,27 +2563,26 @@ app.post('/markAsRead', express.json(), (req, res) => {
 // ─── ARQUITECTURA OFICIAL DE REGLAS DE NEGOCIO (MAPA JC) ─────────────────
 
 // [PUNTOS 7, 8, 9]: Motor de envío Meta con soporte de variables dinámicas
-async function sendWATemplate(phone, templateName, params, languageCode = 'es_LA') {
+async function sendWATemplate(phone, templateName, params, languageCode = 'es') {
   const token = (process.env.WA_TOKEN || '').trim(), phoneId = (process.env.WA_PHONE_ID || '').trim();
   if (!token || !phoneId || !phone) return false;
 
   let components = [];
   if (params && params.length > 0) {
-      components = [{
-          type: 'body',
-          parameters: params.map(p => ({ type: 'text', text: String(p || '') }))
-      }];
+    components = [{
+      type: 'body',
+      parameters: params.map(p => ({ type: 'text', text: String(p || '') }))
+    }];
   }
   const pClean = String(phone).replace(/\D/g, '');
+  const templateBody = { name: templateName, language: { code: languageCode } };
+  if (components.length > 0) templateBody.components = components;
   const res = await fetch(`https://graph.facebook.com/v19.0/${phoneId}/messages`, {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp', to: pClean, type: 'template',
-      template: { name: templateName, language: { code: languageCode }, components }
-    })
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: pClean, type: 'template', template: templateBody })
   });
-  if(!res.ok) console.error(`[META ERR ${templateName}]:`, await res.text());
+  if (!res.ok) console.error(`[META ERR ${templateName}]:`, await res.text());
   return res.ok;
 }
 
