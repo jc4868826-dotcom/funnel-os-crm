@@ -1280,7 +1280,7 @@ app.post('/api/leads/manual', auth('admin','vendedor'), async (req, res) => {
           headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messaging_product: 'whatsapp', to: phoneClean, type: 'template',
-            template: { name: templateName, language: { code: 'es_LA' } }
+            template: { name: templateName, language: { code: 'es' } }
           })
         });
         const waJson = await waRes.json();
@@ -1397,7 +1397,7 @@ app.post('/api/chileautos/webhook', async (req, res) => {
           body: JSON.stringify({
             messaging_product: 'whatsapp', to: phoneClean,
             type: 'template',
-            template: { name: templateName, language: { code: 'es_LA' } }
+            template: { name: templateName, language: { code: 'es' } }
           })
         });
         const waJson = await waRes.json();

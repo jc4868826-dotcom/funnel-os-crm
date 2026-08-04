@@ -2979,14 +2979,12 @@ function enviarPlantillaSaludo3() {
   
   const tName = prompt('Confirmar Nombre de Plantilla:', 'saludo3');
   if(!tName) return;
-  const lang = prompt('Confirmar Idioma (ej: es_LA, es, es_CL):', 'es_LA');
-  if(!lang) return;
-  
+
   const token = S.token;
   fetch('/api/leads/' + S.mid + '/send-template', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Auth-Token': token },
-    body: JSON.stringify({ templateName: tName.trim(), language: lang.trim(), params: [] })
+    body: JSON.stringify({ templateName: tName.trim(), params: [] })
   }).then(r => r.json()).then(res => {
     if(res.error) alert('Error WA: ' + JSON.stringify(res.error));
     else {
