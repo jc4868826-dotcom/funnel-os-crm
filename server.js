@@ -1280,7 +1280,7 @@ app.post('/api/leads/manual', auth('admin','vendedor'), async (req, res) => {
           headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messaging_product: 'whatsapp', to: phoneClean, type: 'template',
-            template: { name: templateName, language: { code: 'es' } }
+            template: { name: templateName, language: { code: 'es_LA' } }
           })
         });
         const waJson = await waRes.json();
@@ -1397,7 +1397,7 @@ app.post('/api/chileautos/webhook', async (req, res) => {
           body: JSON.stringify({
             messaging_product: 'whatsapp', to: phoneClean,
             type: 'template',
-            template: { name: templateName, language: { code: 'es' } }
+            template: { name: templateName, language: { code: 'es_LA' } }
           })
         });
         const waJson = await waRes.json();
@@ -2563,10 +2563,10 @@ app.post('/markAsRead', express.json(), (req, res) => {
 // ─── ARQUITECTURA OFICIAL DE REGLAS DE NEGOCIO (MAPA JC) ─────────────────
 
 // [PUNTOS 7, 8, 9]: Motor de envío Meta con soporte de variables dinámicas
-async function sendWATemplate(phone, templateName, params) {
+async function sendWATemplate(phone, templateName, params, languageCode = 'es_LA') {
   const token = (process.env.WA_TOKEN || '').trim(), phoneId = (process.env.WA_PHONE_ID || '').trim();
   if (!token || !phoneId || !phone) return false;
-  
+
   let components = [];
   if (params && params.length > 0) {
       components = [{
@@ -2580,7 +2580,7 @@ async function sendWATemplate(phone, templateName, params) {
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       messaging_product: 'whatsapp', to: pClean, type: 'template',
-      template: { name: templateName, language: { code: 'es' }, components }
+      template: { name: templateName, language: { code: languageCode }, components }
     })
   });
   if(!res.ok) console.error(`[META ERR ${templateName}]:`, await res.text());
