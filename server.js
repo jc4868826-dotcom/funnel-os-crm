@@ -2596,7 +2596,7 @@ app.post('/api/leads/:id/send-template', auth(), async (req, res) => {
     const idx = leads.findIndex(x => x.id == req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Lead no encontrado' });
     const pClean = String(leads[idx].phone || '').replace(/\D/g, '');
-    const ok = await sendWATemplate(pClean, templateName, params.length ? params : [leads[idx].name || 'Estimado']);
+    const ok = await sendWATemplate(pClean, templateName, params || []);
     if (ok) {
         leads[idx].chatHistory = leads[idx].chatHistory || [];
         leads[idx].chatHistory.push({ role: 'agent', content: `[META] Plantilla ${templateName} enviada manualmente`, ts: Date.now() });
