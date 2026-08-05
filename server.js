@@ -1248,7 +1248,7 @@ app.post('/api/leads/inbound', async (req, res) => {
 app.post('/api/leads/manual', auth('admin','vendedor'), async (req, res) => {
   try {
     const tenant = req.tenant || 'demo_automotora';
-    const { nombre, phone='Pendiente', canal='WhatsApp', asignado, interes='', nota='', status='Nuevo' } = req.body;
+    const { nombre, phone='Pendiente', canal='WhatsApp', asignado, interes='', nota='', status='Nuevo', isCompraRmg=false } = req.body;
     if (!nombre) return res.status(400).json({ error: 'Nombre obligatorio' });
     const n = new Date().toISOString();
     const leads = await tRead(F.leads, tenant);
@@ -1262,7 +1262,7 @@ app.post('/api/leads/manual', auth('admin','vendedor'), async (req, res) => {
     initNotes.push({ content: 'Lead creado manualmente. Canal: ' + canal, author: 'Sistema', ts: Date.now() });
     const lead = {
       id: Date.now(), name: nombre, phone, source: canal, interest: interes,
-      status, botActive: status === 'Nuevo',
+      status, botActive: status === 'Nuevo', isCompraRmg: isCompraRmg === true,
       alertLevel: 'none', intentSignal: 'NONE', unread: true,
       assignedTo: asignado || req.user?.username || 'vendedor1',
       lastInteraction: n, lastClientTs: status === 'Nuevo' ? n : new Date().toISOString(), createdAt: n,

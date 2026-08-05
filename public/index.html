@@ -806,10 +806,11 @@ async function ejecutarAnalisisIA(){
 <section id="view-compras" class="view">
 <div class="st" style="color:#d97706; margin-bottom: 4px;">🛍 Sub-mundo: Compras RMG</div>
 <div style="font-size:13px;color:var(--tm);margin-bottom:14px">Entorno aislado exclusivo para la gerencia de adquisición de vehículos.</div>
-<div style="display:flex; gap:16px; margin-bottom:15px; border-bottom: 2px solid var(--bd);">
+<div style="display:flex; align-items:center; gap:16px; margin-bottom:15px; border-bottom: 2px solid var(--bd);">
     <button class="mtab" style="color:#d97706; padding:8px 4px; background:none; border:none; border-bottom:2px solid #d97706; cursor:pointer; font-weight:600; font-size:13px;" onclick="switchComprasTab('leads', this)">📋 Lista de Leads</button>
     <button class="mtab" style="color:var(--tm); padding:8px 4px; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; font-weight:600; font-size:13px;" onclick="switchComprasTab('pipeline', this)">🗂 Pipeline Kanban</button>
     <button class="mtab" style="color:var(--tm); padding:8px 4px; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; font-weight:600; font-size:13px;" onclick="switchComprasTab('analitica', this)">📈 Analítica</button>
+    <button onclick="openNuevoProspectoCompras()" style="margin-left:auto;margin-bottom:6px;background:#d97706;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer">+ Nuevo Prospecto</button>
 </div>
 <div id="compras-leads" style="display:block;">
     <div class="tw" id="compras-leads-tbl"></div>
@@ -2915,21 +2916,24 @@ async function renderComprasFull() {
       const fresh = await api('GET', '/api/leads');
       if (Array.isArray(fresh)) allLeads = fresh;
     } catch(e) { /* usar S.leads como fallback */ }
-    const leads = allLeads.filter(l => FUENTES_COMPRA_RMG.includes((l.source||'').trim()));
-    
+    const leads = allLeads.filter(l => l.isCompraRmg === true || FUENTES_COMPRA_RMG.includes((l.source||'').trim()));
+
     const cl = document.getElementById('compras-leads-tbl');
     if(cl) {
         const gc = 'grid-template-columns:10px 1.5fr 1fr 1.5fr 1fr 1fr 0.8fr 0.8fr auto';
         let lh = `<div class="tr2 hd" style="${gc}"><div></div><div>Cliente</div><div>Teléfono</div><div>Vehículo a vender</div><div>Estado</div><div>Ingreso</div><div>Últ. Acción</div><div></div></div>`;
         let lr = leads.length ? leads.map(l => {
-            return `<div class="tr2" style="${gc}" onclick="if(typeof openModal==='function')openModal(${l.id})">
-                <div class="sd b"></div>
-                <div><strong>${esc(l.name)}</strong></div>
+            const unreadDot = l.unread ? '<div class="ud" style="width:12px;height:12px;background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,0.8);animation:pl 1.2s infinite;margin:auto"></div>' : '<div></div>';
+            const nameStyle = l.unread ? 'color:var(--tx);font-weight:800;font-size:13px' : 'color:var(--ts);font-weight:600';
+            const rowBg = l.unread ? 'background:rgba(239,68,68,0.04)' : '';
+            return `<div class="tr2" style="${gc};${rowBg}" onclick="if(typeof openModal==='function')openModal(${l.id})">
+                ${unreadDot}
+                <div><strong style="${nameStyle};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.name)}</strong></div>
                 <div style="font-size:11.5px;color:var(--tm)">${esc(l.phone||'')}</div>
                 <div style="font-size:11.5px;color:var(--tm);font-weight:600">${esc(l.interest||'Vehículo a tasar')}</div>
                 <div><span class="sb3 y">${esc(l.status)}</span></div>
                 <div style="font-size:11px;color:var(--tm)">${fDT(l.createdAt||l.lastInteraction)}</div>
-                <div style="font-size:11px;color:var(--tm)">${fMin(mAgo(l.lastInteraction))}</div>
+                <div style="font-size:11px;color:var(--tm);font-weight:${l.unread?'700':'400'}">${fMin(mAgo(l.lastInteraction))}</div>
                 <div><button class="bs" style="padding:2px 6px;font-size:10px">Abrir</button></div>
             </div>`;
         }).join('') : '<div class="ke" style="padding:20px">No hay leads de compra registrados aún.</div>';
@@ -2938,9 +2942,17 @@ async function renderComprasFull() {
     const cont = document.getElementById('kbnCompras');
     if(cont) {
         const stages = ['Nueva Oferta', 'Evaluando', 'Oferta Lanzada', 'Comprado', 'Descartado'];
+        function _comprasStage(status) {
+            if (status === 'Nuevo') return 'Nueva Oferta';
+            if (status === 'Contactado' || status === 'En Proceso') return 'Evaluando';
+            if (status === 'Reservado') return 'Oferta Lanzada';
+            if (status === 'Cerrado') return 'Comprado';
+            if (status === 'Abandonado' || status === 'Perdido') return 'Descartado';
+            return 'Nueva Oferta';
+        }
         let khtml = '';
         stages.forEach(st => {
-            const stLeads = leads.filter(l => l.status === st);
+            const stLeads = leads.filter(l => _comprasStage(l.status) === st);
             khtml += `<div class="kbc" style="flex:0 0 240px;max-width:240px;background:var(--p);border:1px solid var(--bd);border-radius:var(--r);display:flex;flex-direction:column;max-height:calc(80vh - 40px)">
                 <div class="kbh" style="padding:8px 10px;border-bottom:1px solid var(--bd);font-size:11px;font-weight:700;color:var(--tm);text-transform:uppercase;">
                     ${st} <span class="cnt" style="background:var(--p2);color:var(--ts);padding:2px 6px;border-radius:999px;margin-left:auto">${stLeads.length}</span>
@@ -2959,9 +2971,9 @@ async function renderComprasFull() {
     const ca = document.getElementById('compras-analitica-box');
     if(ca) {
          const total = leads.length;
-         const evaluando = leads.filter(l=>l.status==='Evaluando').length;
-         const ofertados = leads.filter(l=>l.status==='Oferta Lanzada').length;
-         const comprados = leads.filter(l=>l.status==='Comprado').length;
+         const evaluando = leads.filter(l=>l.status==='Contactado'||l.status==='En Proceso').length;
+         const ofertados = leads.filter(l=>l.status==='Reservado').length;
+         const comprados = leads.filter(l=>l.status==='Cerrado').length;
          ca.innerHTML = `<div class="kpi-grid">
             <div class="kpi-card"><div class="kpi-stat"><div class="ks-n">${total}</div><div class="ks-l">Total Solicitudes</div></div></div>
             <div class="kpi-card"><div class="kpi-stat"><div class="ks-n" style="color:#f59e0b">${evaluando}</div><div class="ks-l">En Evaluación</div></div></div>
@@ -2971,6 +2983,64 @@ async function renderComprasFull() {
     }
 }
 
+
+function openNuevoProspectoCompras() {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML = `<div style="background:var(--p);border:1px solid var(--bd);border-radius:12px;padding:24px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto">
+        <h3 style="margin:0 0 18px;color:var(--tx);font-size:15px">🚗 Nuevo Prospecto — Compras RMG</h3>
+        <div style="display:flex;flex-direction:column;gap:11px">
+            <div><label style="font-size:11.5px;font-weight:600;color:var(--tm);display:block;margin-bottom:3px">Nombre *</label>
+                <input id="npc-nombre" style="width:100%;padding:7px 10px;background:var(--p2);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:13px;box-sizing:border-box" placeholder="Nombre del cliente"></div>
+            <div><label style="font-size:11.5px;font-weight:600;color:var(--tm);display:block;margin-bottom:3px">Teléfono</label>
+                <input id="npc-phone" style="width:100%;padding:7px 10px;background:var(--p2);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:13px;box-sizing:border-box" placeholder="+56 9 XXXX XXXX"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div><label style="font-size:11.5px;font-weight:600;color:var(--tm);display:block;margin-bottom:3px">Vehículo (Marca/Modelo)</label>
+                    <input id="npc-vehiculo" style="width:100%;padding:7px 10px;background:var(--p2);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:13px;box-sizing:border-box" placeholder="Ej: Toyota Corolla"></div>
+                <div><label style="font-size:11.5px;font-weight:600;color:var(--tm);display:block;margin-bottom:3px">Año</label>
+                    <input id="npc-anio" style="width:100%;padding:7px 10px;background:var(--p2);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:13px;box-sizing:border-box" placeholder="2019"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div><label style="font-size:11.5px;font-weight:600;color:var(--tm);display:block;margin-bottom:3px">Kilometraje</label>
+                    <input id="npc-km" style="width:100%;padding:7px 10px;background:var(--p2);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:13px;box-sizing:border-box" placeholder="Ej: 85.000 km"></div>
+                <div><label style="font-size:11.5px;font-weight:600;color:var(--tm);display:block;margin-bottom:3px">Patente</label>
+                    <input id="npc-patente" style="width:100%;padding:7px 10px;background:var(--p2);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:13px;box-sizing:border-box" placeholder="ABCD-12"></div>
+            </div>
+            <div><label style="font-size:11.5px;font-weight:600;color:var(--tm);display:block;margin-bottom:3px">Precio esperado</label>
+                <input id="npc-precio" style="width:100%;padding:7px 10px;background:var(--p2);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:13px;box-sizing:border-box" placeholder="Ej: $8.500.000"></div>
+            <div><label style="font-size:11.5px;font-weight:600;color:var(--tm);display:block;margin-bottom:3px">Notas iniciales</label>
+                <textarea id="npc-notas" style="width:100%;padding:7px 10px;background:var(--p2);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:13px;box-sizing:border-box;resize:vertical;min-height:64px" placeholder="Observaciones, condición del vehículo, etc."></textarea></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:18px">
+            <button id="npc-save" style="flex:1;background:#d97706;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">Crear Prospecto</button>
+            <button id="npc-cancel" style="background:var(--p2);color:var(--ts);border:1px solid var(--bd);border-radius:8px;padding:10px 16px;font-size:13px;cursor:pointer">Cancelar</button>
+        </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#npc-cancel').onclick = () => overlay.remove();
+    overlay.querySelector('#npc-save').onclick = async () => {
+        const nombre = overlay.querySelector('#npc-nombre').value.trim();
+        if (!nombre) { alert('El nombre es obligatorio.'); return; }
+        const phone   = overlay.querySelector('#npc-phone').value.trim() || 'Pendiente';
+        const vehiculo= overlay.querySelector('#npc-vehiculo').value.trim();
+        const anio    = overlay.querySelector('#npc-anio').value.trim();
+        const km      = overlay.querySelector('#npc-km').value.trim();
+        const patente = overlay.querySelector('#npc-patente').value.trim();
+        const precio  = overlay.querySelector('#npc-precio').value.trim();
+        const notas   = overlay.querySelector('#npc-notas').value.trim();
+        const parts = [vehiculo, anio && 'Año '+anio, km && km+' km', patente && 'Pat. '+patente, precio].filter(Boolean);
+        const interes = parts.join(' · ') || 'Vehículo a tasar';
+        const notaFinal = [precio && 'Precio esperado: '+precio, notas].filter(Boolean).join(' — ');
+        const btn = overlay.querySelector('#npc-save');
+        btn.disabled = true; btn.textContent = '…';
+        try {
+            await api('POST', '/api/leads/manual', { nombre, phone, canal: 'Compramos tu Auto', interes, nota: notaFinal, isCompraRmg: true });
+            toast('🚗 Prospecto creado en Compras RMG ✓');
+            overlay.remove();
+            if (typeof renderComprasFull === 'function') renderComprasFull();
+        } catch(e) { toast(e.message || 'Error al crear', true); btn.disabled = false; btn.textContent = 'Crear Prospecto'; }
+    };
+}
 
 function enviarPlantillaSaludo3() {
   if(!S.mid) return alert('Selecciona un lead primero.');
