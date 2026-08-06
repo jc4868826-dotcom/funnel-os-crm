@@ -654,7 +654,7 @@ async function ejecutarAnalisisIA(){
 <button id="btnInstallApp" onclick="installApp()" style="display:none;margin-top:8px;background:linear-gradient(135deg,#D4A843,#F2C955);color:#0f172a;border:none;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;align-items:center;gap:6px;letter-spacing:.04em">📲 Instalar App</button>
 <button class="lout" id="loutB">Cerrar sesión</button></aside>
 <main class="mn">
-<div class="tb" id="mainTb"><span class="lbl">Rango</span><div class="qk"><button data-q="all">Todo</button><button data-q="today">Hoy</button><button data-q="yesterday">Ayer</button><button data-q="7d">7d</button><button data-q="30d">30d</button></div><span class="lbl">Desde</span><input type="date" id="dS"><span class="lbl">Hasta</span><input type="date" id="dE"><button class="clr" id="dC">Limpiar</button><span class="lbl" id="lblS">Vendedor</span><select id="selF"><option value="">Todos</option></select><span class="ri" id="rI">Sin filtro</span></div>
+<div class="tb" id="mainTb"><span class="lbl">Rango</span><div class="qk"><button data-q="all">Todo</button><button data-q="today">Hoy</button><button data-q="yesterday">Ayer</button><button data-q="7d">7d</button><button data-q="30d">30d</button><button data-q="month">📅 Mes</button></div><span class="lbl">Desde</span><input type="date" id="dS"><span class="lbl">Hasta</span><input type="date" id="dE"><button class="clr" id="dC">Limpiar</button><span class="lbl" id="lblS">Vendedor</span><select id="selF"><option value="">Todos</option></select><span class="ri" id="rI">Sin filtro</span></div>
 <section id="view-dashboard" class="view active">
 <div class="st">Dashboard Operativo</div>
 <div class="bt">① SLA Primera Respuesta — leads Nuevos</div>
@@ -813,6 +813,20 @@ async function ejecutarAnalisisIA(){
     <button onclick="openNuevoProspectoCompras()" style="margin-left:auto;margin-bottom:6px;background:#d97706;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer">+ Nuevo Prospecto</button>
 </div>
 <div id="compras-leads" style="display:block;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <input id="comprasBuscar" oninput="renderComprasFull()" placeholder="🔍 Buscar nombre, teléfono, vehículo..." style="background:var(--p2);border:1px solid var(--bd);color:var(--tx);padding:6px 10px;border-radius:7px;font-family:inherit;font-size:12px;width:100%;max-width:280px">
+      <select id="comprasEstadoFilt" onchange="renderComprasFull()" style="background:var(--p2);border:1px solid var(--bd);color:var(--tx);padding:6px 10px;border-radius:7px;font-family:inherit;font-size:12px">
+        <option value="">Todos los estados</option>
+        <option value="Nueva Oferta">🆕 Nueva Oferta</option>
+        <option value="Evaluando">🔎 Evaluando</option>
+        <option value="Peritaje">🔧 Peritaje</option>
+        <option value="Oferta Lanzada">💰 Oferta Lanzada</option>
+        <option value="Negociando Compra">🤝 Negociando Compra</option>
+        <option value="Comprado">✅ Comprado</option>
+        <option value="Descartado">❌ Descartado</option>
+      </select>
+      <span id="comprasFiltCount" style="font-size:11px;color:var(--tm);margin-left:auto"></span>
+    </div>
     <div class="tw" id="compras-leads-tbl"></div>
 </div>
 <div id="compras-pipeline" style="display:none;">
@@ -1035,8 +1049,10 @@ function applyMenuPermissions(){if(!S.user||!S.user.permissions)return;const MAP
 async function enterApp(){$('lv').style.display='none';$('av').style.display='grid';requestNotifPermission();setTimeout(()=>initWebPush().catch(()=>{}),2000);try{const me=await api('GET','/api/me');if(me&&me.user){S.user=me.user;localStorage.setItem('fu',JSON.stringify(me.user));}}catch(e){}$('uBadge').textContent=(S.user?.name||'')+' · '+(S.user?.role||'');const isA=S.user?.role==='admin';['navA','navT','navC','lblS','selF','navCompras'].forEach(id=>{const el=$(id);if(el)el.style.display=isA?'':'none';});applyMenuPermissions();try{S.config=await api('GET','/api/config');$('bizName').textContent=S.config.businessName||'FunnelOS';if(S.config.accentColor)document.documentElement.style.setProperty('--ac',S.config.accentColor);// Carga usuarios siempre (admin y vendedor) para que cUsr() resuelva nombres reales
   const users=await api('GET','/api/users').catch(()=>[]);S.users=users;
   const _cCfg=await api('GET','/api/config/canales').catch(()=>[]);if(_cCfg.length){S.canales=_cCfg;const _fc=$('filtCanal');if(_fc){const _prev=_fc.value;_fc.innerHTML='<option value="">Todos</option>'+_cCfg.map(c=>'<option value="'+c+'">'+c+'</option>').join('');_fc.value=_prev;}}
-  if(isA){const sel=$('selF');sel.innerHTML='<option value="">Todos</option>';users.filter(u=>u.role==='vendedor').forEach(u=>{const o=document.createElement('option');o.value=u.username;o.textContent=u.name;sel.appendChild(o);});}}catch(e){}await refresh();if(S.pollTimer)clearInterval(S.pollTimer);S.pollTimer=setInterval(refresh,4000);}
-function setQ(q){S.range.quick=q;const t=new Date();t.setHours(0,0,0,0);const fmt=d=>d.toISOString().slice(0,10);if(q==='all'){S.range.start=null;S.range.end=null;}else if(q==='today'){S.range.start=fmt(t);S.range.end=fmt(t);}else if(q==='yesterday'){const y=new Date(t);y.setDate(y.getDate()-1);S.range.start=fmt(y);S.range.end=fmt(y);}else if(q==='7d'){const s=new Date(t);s.setDate(s.getDate()-6);S.range.start=fmt(s);S.range.end=fmt(t);}else if(q==='30d'){const s=new Date(t);s.setDate(s.getDate()-29);S.range.start=fmt(s);S.range.end=fmt(t);}$('dS').value=S.range.start||'';$('dE').value=S.range.end||'';syncQ();updRI();refresh();}
+  if(isA){const sel=$('selF');sel.innerHTML='<option value="">Todos</option>';users.filter(u=>u.role==='vendedor').forEach(u=>{const o=document.createElement('option');o.value=u.username;o.textContent=u.name;sel.appendChild(o);});}}catch(e){}// Iniciar con mes en curso por defecto
+  {const t=new Date();t.setHours(0,0,0,0);const fmt=d=>d.toISOString().slice(0,10);const s=new Date(t.getFullYear(),t.getMonth(),1);S.range={start:fmt(s),end:fmt(t),quick:'month'};$('dS').value=S.range.start;$('dE').value=S.range.end;syncQ();updRI();}
+await refresh();if(S.pollTimer)clearInterval(S.pollTimer);S.pollTimer=setInterval(refresh,4000);}
+function setQ(q){S.range.quick=q;const t=new Date();t.setHours(0,0,0,0);const fmt=d=>d.toISOString().slice(0,10);if(q==='all'){S.range.start=null;S.range.end=null;}else if(q==='today'){S.range.start=fmt(t);S.range.end=fmt(t);}else if(q==='yesterday'){const y=new Date(t);y.setDate(y.getDate()-1);S.range.start=fmt(y);S.range.end=fmt(y);}else if(q==='7d'){const s=new Date(t);s.setDate(s.getDate()-6);S.range.start=fmt(s);S.range.end=fmt(t);}else if(q==='30d'){const s=new Date(t);s.setDate(s.getDate()-29);S.range.start=fmt(s);S.range.end=fmt(t);}else if(q==='month'){const s=new Date(t.getFullYear(),t.getMonth(),1);S.range.start=fmt(s);S.range.end=fmt(t);}$('dS').value=S.range.start||'';$('dE').value=S.range.end||'';syncQ();updRI();refresh();}
 function syncQ(){document.querySelectorAll('.qk button').forEach(b=>b.classList.toggle('active',b.dataset.q===S.range.quick));}
 function updRI(){$('rI').textContent=(S.range.start||S.range.end)?'Filtrando: '+(S.range.start||'—')+' → '+(S.range.end||'—'):'Sin filtro';}
 document.querySelectorAll('.qk button').forEach(b=>b.addEventListener('click',()=>setQ(b.dataset.q)));
@@ -1681,7 +1697,7 @@ $('cfgSB').addEventListener('click',async()=>{const btn=$('cfgSB');btn.disabled=
 $('addUB').addEventListener('click',()=>{$('nuF').style.display='block';$('addUB').style.display='none';$('nuU').focus();(function populatePermsTable(){const body=$('nuPermsBody');if(!body)return;const MODULE_LABELS={operacion:'📊 Operación',leads:'📋 Leads',chileautos:'🚗 Chileautos',espera:'⏳ En Espera',compras:'🛒 Compras RMG',pipeline:'📌 Pipeline',analitica:'📈 Analítica',equipo:'👥 Equipo',inventario:'🚙 Inventario',bi:'🧠 BI',analisis:'🔍 Análisis IA',auditoria:'🔎 Auditoría',config:'⚙️ Config'};const defaultPerms={operacion:2,leads:2,chileautos:1,espera:1,compras:0,pipeline:2,analitica:1,equipo:1,inventario:1,bi:0,analisis:0,auditoria:0,config:0};body.innerHTML=Object.entries(MODULE_LABELS).map(([mod,label])=>{const def=defaultPerms[mod]||0;return`<tr><td style="font-size:11.5px;font-weight:600;padding:4px 6px">${label}</td>${[0,1,2,3].map(v=>`<td style="text-align:center;padding:4px"><input type="radio" name="perm_${mod}" value="${v}" ${def===v?'checked':''}></td>`).join('')}</tr>`;}).join('');})();});
 $('nuCn').addEventListener('click',()=>{$('nuF').style.display='none';$('addUB').style.display='';});
 $('nuSv').addEventListener('click',async()=>{const btn=$('nuSv');btn.disabled=true;btn.textContent='…';try{const u=$('nuU').value.trim(),pw=$('nuPw').value.trim()||'demo',n=$('nuN').value.trim(),r=$('nuR').value,ph=$('nuPh').value.trim(),st=$('nuSt').value;if(!u||!n)throw new Error('Username y nombre requeridos');const perms={};['operacion','leads','chileautos','espera','compras','pipeline','analitica','equipo','inventario','bi','analisis','auditoria','config'].forEach(mod=>{const sel=document.querySelector('input[name="perm_'+mod+'"]:checked');perms[mod]=sel?parseInt(sel.value):0;});const canReassign=$('nuCanReassign')?.checked||false;await api('POST','/api/users',{username:u,password:pw,name:n,role:r,phone:ph,status:st,permissions:perms,canReassign});toast(u+' creado ✓');[$('nuU'),$('nuPw'),$('nuN'),$('nuPh')].forEach(i=>i.value='');if($('nuCanReassign'))$('nuCanReassign').checked=false;$('nuF').style.display='none';$('addUB').style.display='';await loadUsers();}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='Crear';}});
-const ALL_ST=['esperando_respuesta_chileautos','esperando_respuesta_general','Nuevo','En Proceso','Contactado','Calificado','Negociación','Agendado','Reservado','Seguimiento','Cerrado','Abandonado'];
+const ALL_ST=['esperando_respuesta_chileautos','esperando_respuesta_general','Nuevo','En Proceso','Contactado','Calificado','Negociación','Agendado','Reservado','Seguimiento','Cerrado','Abandonado','Peritaje','Negociando Compra','Oferta Lanzada','Comprado','Descartado'];
 function findLead(id){let l=S.leads.find(x=>x.id===id);if(l)return l;for(const v of S.team||[]){const f=(v.leads||[]).find(x=>x.id===id);if(f)return f;}return null;}
 function openModal(id){S.mid=id;renderModal();$('mbg').classList.add('show');(function(){var mp=document.getElementById('mMainPane'),hp=document.getElementById('mHistPane'),g=document.getElementById('mtabGestion'),h=document.getElementById('mtabHistorial');if(mp){mp.style.display='grid';if(hp)hp.style.display='none';var _gp=document.getElementById('mGestion2Pane');if(_gp)_gp.style.display='none';if(g){g.style.color='var(--ac)';g.style.borderBottomColor='var(--ac)';}if(h){h.style.color='var(--tm)';h.style.borderBottomColor='transparent';}var _g2=document.getElementById('mtabGestion2');if(_g2){_g2.style.color='var(--tm)';_g2.style.borderBottomColor='transparent';}}})();
   // Marcar como leído si tiene mensajes sin leer
@@ -1714,7 +1730,28 @@ function renderModalHistory(l){
 
 function closeModal(){S.mid=null;$('mbg').classList.remove('show');$('mNt').value='';$('aMsg').value='';}
 function refreshModalSilent(){const l=findLead(S.mid);if(!l)return;renderModalChat(l);renderModalNotes(l);renderModalCtx(l);}
-function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mTit').innerHTML='<span onclick="window.editLeadName('+l.id+')" style="cursor:pointer;border-bottom:1px dashed var(--tm)" title="Editar Nombre">'+esc(l.name)+' ✏️</span>' + (l.phone?' <span style="color:var(--tm);font-size:0.9em">· '+esc(l.phone)+'</span>':'');$('mMet').innerHTML=`${cSrc(l.source)} ${cUsr(l.assignedTo)} <span style="color:var(--tm)">📅 ${fDT(l.lastClientTs||l.lastInteraction)}</span> ${sbdg(l.intentSignal||'NONE')}  ${l.unread?'<span style="color:var(--bd2);font-size:11px;font-weight:600">● Sin respuesta</span>':''}`;$('mSt').innerHTML=(l.status==='esperando_respuesta_chileautos'?['esperando_respuesta_chileautos','esperando_respuesta_general',...ALL_ST.filter(x=>x!=='esperando_respuesta_chileautos'&&x!=='esperando_respuesta_general')]:ALL_ST).map(s=>`<option value="${esc(s)}" ${s===l.status?'selected':''}>${s==='esperando_respuesta_chileautos'?'🏷 En Espera Chileautos':s==='esperando_respuesta_general'?'⏳ En Espera General':esc(s)}</option>`).join('');const bOn=l.botActive!==false;$('bChk').checked=bOn;$('bTxt').textContent=bOn?'ON':'OFF';$('bTxt').className='bst '+(bOn?'on':'of');$('aMsg').value=''; const isW=(l.status==='esperando_respuesta_chileautos'||l.status==='esperando_respuesta_general'); const cR=isW&&l.chatHistory?.some(m=>m.role==='user'); const blk=isW&&!cR; $('aMsg').disabled=blk; $('aSnd').disabled=blk; $('aMsg').placeholder=blk?'⏳ Bloqueado: Esperando respuesta...':'Escribe un mensaje...';
+function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mTit').innerHTML='<span onclick="window.editLeadName('+l.id+')" style="cursor:pointer;border-bottom:1px dashed var(--tm)" title="Editar Nombre">'+esc(l.name)+' ✏️</span>' + (l.phone?' <span style="color:var(--tm);font-size:0.9em">· '+esc(l.phone)+'</span>':'');$('mMet').innerHTML=`${cSrc(l.source)} ${cUsr(l.assignedTo)} <span style="color:var(--tm)">📅 ${fDT(l.lastClientTs||l.lastInteraction)}</span> ${sbdg(l.intentSignal||'NONE')}  ${l.unread?'<span style="color:var(--bd2);font-size:11px;font-weight:600">● Sin respuesta</span>':''}`;(function(){
+  const isCompra = l.isCompraRmg===true||['Compramos tu Auto','Compramos tu auto','Compra Directa'].includes(l.source||'');
+  const ST_VENTA=['Nuevo','En Proceso','Contactado','Calificado','Negociación','Agendado','Reservado','Seguimiento','Cerrado','Abandonado'];
+  const ST_COMPRA=['Nuevo','Evaluando','Peritaje','Negociando Compra','Oferta Lanzada','Comprado','Descartado'];
+  const ST_SALA=['esperando_respuesta_chileautos','esperando_respuesta_general'];
+  const ST_SALA_LABELS={'esperando_respuesta_chileautos':'🏷 En Espera Chileautos','esperando_respuesta_general':'⏳ En Espera General'};
+  let html='';
+  if(l.status==='esperando_respuesta_chileautos'||l.status==='esperando_respuesta_general'){
+    html+=ST_SALA.map(s=>`<option value="${esc(s)}" ${s===l.status?'selected':''}>${ST_SALA_LABELS[s]}</option>`).join('');
+  }
+  if(isCompra){
+    html+='<optgroup label="─── Pipeline Compras ───">';
+    html+=ST_COMPRA.map(s=>`<option value="${esc(s)}" ${s===l.status?'selected':''}>${esc(s)}</option>`).join('');
+    html+='</optgroup>';
+    html+='<optgroup label="─── Estados Generales ───">';
+    html+=ST_VENTA.map(s=>`<option value="${esc(s)}" ${s===l.status?'selected':''}>${esc(s)}</option>`).join('');
+    html+='</optgroup>';
+  } else {
+    html+=ST_VENTA.map(s=>`<option value="${esc(s)}" ${s===l.status?'selected':''}>${esc(s)}</option>`).join('');
+  }
+  $('mSt').innerHTML=html;
+})();const bOn=l.botActive!==false;$('bChk').checked=bOn;$('bTxt').textContent=bOn?'ON':'OFF';$('bTxt').className='bst '+(bOn?'on':'of');$('aMsg').value=''; const isW=(l.status==='esperando_respuesta_chileautos'||l.status==='esperando_respuesta_general'); const cR=isW&&l.chatHistory?.some(m=>m.role==='user'); const blk=isW&&!cR; $('aMsg').disabled=blk; $('aSnd').disabled=blk; $('aMsg').placeholder=blk?'⏳ Bloqueado: Esperando respuesta...':'Escribe un mensaje...';
   renderAgendaDetails(l);
   renderModalCtx(l);renderModalChat(l);renderModalNotes(l);
   renderModalHistory(l);var _ab=$("mAssignBlock"),_ms=$("mAssign");if(_ab&&S.user&&S.user.role==="admin"){_ab.style.display="block";_ms.innerHTML=(S.users||[]).filter(function(u){return u.role==="vendedor";}).map(function(u){return'<option value="'+esc(u.username)+'"'+(u.username===l.assignedTo?' selected':'')+'>'+esc(u.name)+'</option>';}).join("");}else if(_ab){_ab.style.display="none";}
@@ -1768,6 +1805,7 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
             <span style="color:#94a3b8;font-size:12px;">Registrar Oferta Taller ($)</span>
             <select id="offerInput" style="flex:1; padding:6px; background:var(--p3); border:1px solid var(--bd); border-radius:4px; font-size:11.5px; color:var(--tx);">
               <option value="">Seleccionar oferta...</option>
+              <option value="0" style="color:#ef4444;font-weight:700">🚫 $0 — Fuera de parámetros</option>
               <option value="500000">$500.000</option>
               <option value="1000000">$1.000.000</option>
               <option value="1500000">$1.500.000</option>
@@ -1902,6 +1940,7 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
           <div style="margin-top:10px; border-top:1px solid var(--bd); padding-top:10px; display:flex; gap:6px; align-items:center;">
             <select id="offerInput" style="flex:1; padding:6px; background:var(--p3); border:1px solid var(--bd); border-radius:4px; font-size:11.5px; color:var(--tx);">
               <option value="">Seleccionar oferta...</option>
+              <option value="0" style="color:#ef4444;font-weight:700">🚫 $0 — Fuera de parámetros</option>
               <option value="500000">$500.000</option>
               <option value="1000000">$1.000.000</option>
               <option value="1500000">$1.500.000</option>
@@ -2099,10 +2138,21 @@ window.preseleccionarRango = function preseleccionarRango(){
 registrarOferta = async function(leadId) {
   const sel = document.getElementById('offerInput');
   const rango = sel ? sel.value : '';
-  if (!rango) return toast('Selecciona un rango de precio', true);
+  if (rango === '') return toast('Selecciona un rango de precio', true);
+  // Si es $0 (fuera de parámetros), confirmar con mensaje especial
+  if (rango === '0') {
+    if (!confirm('¿Registrar como FUERA DE PARÁMETROS ($0)? Se enviará mensaje de rechazo al cliente por WhatsApp.')) return;
+  }
   const hd = {'Content-Type':'application/json','X-Auth-Token': S.token||''};
   const r = await fetch('/api/tasacion/offer', { method:'POST', headers:hd, body:JSON.stringify({leadId, offerAmount: rango}) });
-  if (r.ok) { toast('✅ Oferta registrada. Vendedor notificado por WhatsApp'); refreshModalSilent(); refresh(); }
+  if (r.ok) {
+    if (rango === '0') {
+      toast('⛔ Registrado como fuera de parámetros');
+    } else {
+      toast('✅ Oferta registrada. Vendedor notificado por WhatsApp');
+    }
+    refreshModalSilent(); refresh();
+  }
 };
 </script>
 
@@ -2908,6 +2958,22 @@ function switchComprasTab(tab, btn) {
     document.getElementById('compras-' + tab).style.display = 'block';
 }
 
+// Función global para mapear status interno → etapa pipeline compras
+function _comprasStageGlobal(status) {
+    const s = (status || '').toLowerCase().trim();
+    if (s === 'nuevo') return 'Nueva Oferta';
+    if (['contactado','en proceso','calificado','agendado'].includes(s)) return 'Evaluando';
+    if (s === 'peritaje') return 'Peritaje';
+    if (['negociación','negociacion','seguimiento'].includes(s)) return 'Negociando Compra';
+    if (s === 'reservado') return 'Oferta Lanzada';
+    if (s === 'cerrado') return 'Comprado';
+    if (['abandonado','perdido'].includes(s)) return 'Descartado';
+    // Si ya viene como etapa pipeline directa
+    const etapas = ['Nueva Oferta','Evaluando','Peritaje','Negociando Compra','Oferta Lanzada','Comprado','Descartado'];
+    if (etapas.includes(status)) return status;
+    return 'Evaluando';
+}
+
 async function renderComprasFull() {
     const FUENTES_COMPRA_RMG = ['Compra Directa', 'Compramos tu Auto', 'Compramos tu auto'];
     // Llamada directa sin filtros de fecha/vendedor para siempre ver todos los leads de compra
@@ -2920,9 +2986,17 @@ async function renderComprasFull() {
 
     const cl = document.getElementById('compras-leads-tbl');
     if(cl) {
+        // Aplicar filtros de búsqueda y estado
+        const busq = (document.getElementById('comprasBuscar')||{}).value?.toLowerCase().trim()||'';
+        const estFilt = (document.getElementById('comprasEstadoFilt')||{}).value||'';
+        let leadsVis = leads;
+        if(busq) leadsVis = leadsVis.filter(l => (l.name||'').toLowerCase().includes(busq)||(l.phone||'').includes(busq)||(l.interest||'').toLowerCase().includes(busq));
+        if(estFilt) leadsVis = leadsVis.filter(l => _comprasStageGlobal(l.status) === estFilt);
+        const cfc = document.getElementById('comprasFiltCount');
+        if(cfc) cfc.textContent = (busq||estFilt) ? leadsVis.length+' resultado'+(leadsVis.length!==1?'s':'') : leadsVis.length+' prospectos';
         const gc = 'grid-template-columns:10px 1.5fr 1fr 1.5fr 1fr 1fr 0.8fr 0.8fr auto';
-        let lh = `<div class="tr2 hd" style="${gc}"><div></div><div>Cliente</div><div>Teléfono</div><div>Vehículo a vender</div><div>Estado</div><div>Ingreso</div><div>Últ. Acción</div><div></div></div>`;
-        let lr = leads.length ? leads.map(l => {
+        let lh = `<div class="tr2 hd" style="${gc}"><div></div><div>Cliente</div><div>Teléfono</div><div>Vehículo a vender</div><div>Estado Compra</div><div>Ingreso</div><div>Últ. Acción</div><div></div></div>`;
+        let lr = leadsVis.length ? leadsVis.map(l => {
             const unreadDot = l.unread ? '<div class="ud" style="width:12px;height:12px;background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,0.8);animation:pl 1.2s infinite;margin:auto"></div>' : '<div></div>';
             const nameStyle = l.unread ? 'color:var(--tx);font-weight:800;font-size:13px' : 'color:var(--ts);font-weight:600';
             const rowBg = l.unread ? 'background:rgba(239,68,68,0.04)' : '';
@@ -2931,7 +3005,7 @@ async function renderComprasFull() {
                 <div><strong style="${nameStyle};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.name)}</strong></div>
                 <div style="font-size:11.5px;color:var(--tm)">${esc(l.phone||'')}</div>
                 <div style="font-size:11.5px;color:var(--tm);font-weight:600">${esc(l.interest||'Vehículo a tasar')}</div>
-                <div><span class="sb3 y">${esc(l.status)}</span></div>
+                <div><span class="sb3 y">${esc(_comprasStageGlobal(l.status))}</span></div>
                 <div style="font-size:11px;color:var(--tm)">${fDT(l.createdAt||l.lastInteraction)}</div>
                 <div style="font-size:11px;color:var(--tm);font-weight:${l.unread?'700':'400'}">${fMin(mAgo(l.lastInteraction))}</div>
                 <div><button class="bs" style="padding:2px 6px;font-size:10px">Abrir</button></div>
@@ -2941,16 +3015,8 @@ async function renderComprasFull() {
     }
     const cont = document.getElementById('kbnCompras');
     if(cont) {
-        const stages = ['Nueva Oferta', 'Evaluando', 'Oferta Lanzada', 'Comprado', 'Descartado'];
-        function _comprasStage(status) {
-            const s = (status || '').toLowerCase().trim();
-            if (['nuevo'].includes(s)) return 'Nueva Oferta';
-            if (['contactado','en proceso','calificado','negociación','negociacion','agendado','seguimiento'].includes(s)) return 'Evaluando';
-            if (['reservado'].includes(s)) return 'Oferta Lanzada';
-            if (['cerrado'].includes(s)) return 'Comprado';
-            if (['abandonado','perdido'].includes(s)) return 'Descartado';
-            return 'Evaluando';
-        }
+        const stages = ['Nueva Oferta', 'Evaluando', 'Peritaje', 'Negociando Compra', 'Oferta Lanzada', 'Comprado', 'Descartado'];
+        function _comprasStage(status) { return _comprasStageGlobal(status); }
         let khtml = '';
         stages.forEach(st => {
             const stLeads = leads.filter(l => _comprasStage(l.status) === st);
@@ -3382,8 +3448,17 @@ document.addEventListener('DOMContentLoaded',function(){
 async function enviarPrecioCliente(leadId){
   var sel=document.getElementById('offerInput');
   var rango=sel?sel.value:'';
-  if(!rango)return toast('Selecciona primero un rango de precio',true);
-  if(!confirm('¿Enviar el rango "'+rango+'" al cliente por WhatsApp?'))return;
+  if(rango===''||rango===null||rango===undefined)return toast('Selecciona primero un rango de precio',true);
+  // Precio $0 = rechazo
+  if(rango==='0'){
+    var MSG_RECHAZO='Estimado/a, lamentablemente su vehículo no está dentro de nuestros parámetros de compra. Agradecemos su interés y quedamos a su disposición para cualquier otra consulta.';
+    if(!confirm('¿Enviar mensaje de rechazo al cliente?\n\n'+MSG_RECHAZO))return;
+    var r2=await fetch('/api/tasacion/enviar-precio',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':S.token||''},body:JSON.stringify({leadId,rango:'0',mensajeRechazo:MSG_RECHAZO})});
+    var d2=await r2.json();
+    if(r2.ok){toast('⛔ Mensaje de rechazo enviado al cliente');refresh();}else{toast(d2.error||'Error al enviar rechazo',true);}
+    return;
+  }
+  if(!confirm('¿Enviar el rango "'+new Intl.NumberFormat("es-CL",{style:"currency",currency:"CLP",maximumFractionDigits:0}).format(Number(rango))+'" al cliente por WhatsApp?'))return;
   var r=await fetch('/api/tasacion/enviar-precio',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':S.token||''},body:JSON.stringify({leadId,rango})});
   var d=await r.json();
   if(r.ok){toast('Precio enviado al cliente ✓');refresh();}else{toast(d.error||'Error al enviar',true);}
