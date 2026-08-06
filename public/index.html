@@ -2943,12 +2943,13 @@ async function renderComprasFull() {
     if(cont) {
         const stages = ['Nueva Oferta', 'Evaluando', 'Oferta Lanzada', 'Comprado', 'Descartado'];
         function _comprasStage(status) {
-            if (status === 'Nuevo') return 'Nueva Oferta';
-            if (status === 'Contactado' || status === 'En Proceso') return 'Evaluando';
-            if (status === 'Reservado') return 'Oferta Lanzada';
-            if (status === 'Cerrado') return 'Comprado';
-            if (status === 'Abandonado' || status === 'Perdido') return 'Descartado';
-            return 'Nueva Oferta';
+            const s = (status || '').toLowerCase().trim();
+            if (['nuevo'].includes(s)) return 'Nueva Oferta';
+            if (['contactado','en proceso','calificado','negociación','negociacion','agendado','seguimiento'].includes(s)) return 'Evaluando';
+            if (['reservado'].includes(s)) return 'Oferta Lanzada';
+            if (['cerrado'].includes(s)) return 'Comprado';
+            if (['abandonado','perdido'].includes(s)) return 'Descartado';
+            return 'Evaluando';
         }
         let khtml = '';
         stages.forEach(st => {
@@ -2970,10 +2971,11 @@ async function renderComprasFull() {
     }
     const ca = document.getElementById('compras-analitica-box');
     if(ca) {
-         const total = leads.length;
-         const evaluando = leads.filter(l=>l.status==='Contactado'||l.status==='En Proceso').length;
-         const ofertados = leads.filter(l=>l.status==='Reservado').length;
-         const comprados = leads.filter(l=>l.status==='Cerrado').length;
+         const comprasLeads = (S.leads||[]).filter(l => l.isCompraRmg || l.source === 'Compramos tu Auto' || l.source === 'Compra Directa' || l.source === 'Compramos tu auto');
+         const total = comprasLeads.length;
+         const evaluando = comprasLeads.filter(l => !['nuevo','cerrado','abandonado','perdido','reservado'].includes((l.status||'').toLowerCase().trim())).length;
+         const ofertados = comprasLeads.filter(l => (l.status||'').toLowerCase().trim() === 'reservado').length;
+         const comprados = comprasLeads.filter(l => (l.status||'').toLowerCase().trim() === 'cerrado').length;
          ca.innerHTML = `<div class="kpi-grid">
             <div class="kpi-card"><div class="kpi-stat"><div class="ks-n">${total}</div><div class="ks-l">Total Solicitudes</div></div></div>
             <div class="kpi-card"><div class="kpi-stat"><div class="ks-n" style="color:#f59e0b">${evaluando}</div><div class="ks-l">En Evaluación</div></div></div>
