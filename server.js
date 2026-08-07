@@ -314,15 +314,8 @@ async function scrapeRMG() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const html = await r.text();
 
-    // Estructura WooCommerce real: <li class="...product..."> con h2 y divs rmg-*
-    // v7 fallaba porque <li> tiene atributos, título en <h2> no <h3>, y precios en <bdi>
     const liRE = /<li[^>]*class="[^"]*\bproduct\b[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
     const parsePrecio = s => parseInt((s||'').replace(/\./g,'').replace(/,/g,'').replace(/[^\d]/g,''), 10) || 0;
-    // Lee <div class="rmg-k">KEY</div><div class="rmg-v">VALUE</div>
-    const getSpec = (key, blk) => {
-      const mm = blk.match(new RegExp('class="rmg-k">\\s*' + key + '\\s*<\\/div>\\s*<div[^>]*class="rmg-v">([^<]+)<\\/div>', 'i'));
-      return mm ? mm[1].trim() : '';
-    };
 
     const structuredItems = [];
     const autos = [];
@@ -332,51 +325,67 @@ async function scrapeRMG() {
     while ((m = liRE.exec(html)) !== null) {
       const block = m[1];
 
-      // Link: primer href /producto/
+      // Link
       const linkM = block.match(/href="(https:\/\/rmgautos\.cl\/producto\/[^"]+)"/);
       if (!linkM) continue;
-      // Título: <a class="woocommerce-LoopProduct-link-title...">NOMBRE</a>
-      const titleM = block.match(/woocommerce-LoopProduct-link-title[^>]*>([^<]+)<\/a>/i);
-      if (!titleM) continue;
 
-      const cardLink  = linkM[1].replace(/\/$/, '');
-      const fullTitle = titleM[1].trim();
+      // Nombre desde alt de img (estructura confirmada)
+      const nameM = block.match(/<img[^>]+alt="([^"]+)"/i);
+      if (!nameM) continue;
+      const fullTitle = nameM[1].trim();
+      if (!fullTitle) continue;
 
-      // Precios en <bdi>: primero=crédito, segundo=lista
-      const allBdi = [...block.matchAll(/<bdi>[\s\S]*?<\/span>([\d.,]+)<\/bdi>/gi)];
-      const precioCredito = parsePrecio(allBdi[0]?.[1] || '');
-      const precioLista   = parsePrecio(allBdi[1]?.[1] || '');
-      if (!precioCredito && !precioLista) continue;
+      const cardLink = linkM[1].replace(/\/$/, '');
 
-      const modeloStr = getSpec('MODELO:', block);
-      const annoStr   = getSpec('A.O:', block);   // cubre AÑO y ANO
-      const fuelStr   = getSpec('COMBUSTIBLE:', block).toUpperCase();
-      const kmFull    = getSpec('KILOMETRAJE:', block);
-      const tipoM     = block.match(/class="rmg-chip">([^<]+)<\/span>/i);
-      const tipo      = tipoM ? tipoM[1].trim() : '';
+      // Estado: disponible / vendido / recien llegado / oferta exclusiva
+      const estadoM = block.match(/class="rmg-product-status[^"]*">([^<]+)</i);
+      const estado = estadoM ? estadoM[1].trim().toLowerCase() : 'disponible';
 
-      const km   = parseInt(kmFull.replace(/[^\d]/g, ''), 10) || 0;
-      const anno = annoStr ? parseInt(annoStr, 10) : null;
+      // Precios desde <bdi> — vienen como texto directo: <bdi>$7.390.000</bdi>
+      const bdiMatches = [...block.matchAll(/<bdi>([^<]+)<\/bdi>/gi)];
+      const precioCredito = parsePrecio(bdiMatches[0]?.[1] || '');
+      const precioLista   = parsePrecio(bdiMatches[1]?.[1] || bdiMatches[0]?.[1] || '');
 
+      // Texto plano para extraer año, km, combustible, tipo
+      const txt = block.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+      // Año: 4 dígitos entre 2000-2030
+      const annoM = txt.match(/\b(20[012]\d)\b/);
+      const anno = annoM ? parseInt(annoM[1], 10) : null;
+
+      // Km: número seguido de "km"
+      const kmM = txt.match(/([\d.,]+)\s*km/i);
+      const km = kmM ? parseInt(kmM[1].replace(/[^\d]/g,''), 10) : 0;
+
+      // Combustible
+      const fuelM = txt.match(/\b(gasolina|diesel|diésel|electrico|eléctrico|híbrido|hibrido|gas)\b/i);
+      const fuelStr = fuelM ? fuelM[1].toUpperCase() : '';
+
+      // Tipo/categoría (SUV, Sedan, Hatchback, Pickup, Furgón, etc.)
+      const tipoM = block.match(/class="rmg-chip[^"]*">([^<]+)<\/span>/i);
+      const tipo = tipoM ? tipoM[1].trim() : '';
+
+      // Marca
       const marcaM = fullTitle.match(MARCAS_RE);
-      const marca  = marcaM ? marcaM[0].toUpperCase() : fullTitle.split(' ')[0].toUpperCase();
-      const highlights = [anno?'Ano '+anno:'', km?km.toLocaleString('es-CL')+' km':'', fuelStr].filter(Boolean).join(' . ');
+      const marca = marcaM ? marcaM[0].toUpperCase() : fullTitle.split(' ')[0].toUpperCase();
 
+      const highlights = [anno ? 'Año '+anno : '', km ? km.toLocaleString('es-CL')+' km' : '', fuelStr].filter(Boolean).join(' · ');
       const pSign = String.fromCharCode(36);
-      autos.push('- '+fullTitle+(anno?' '+anno:'')+' | '+(km?km.toLocaleString('es-CL')+' km':'km n/d')+' | Lista: '+pSign+precioLista.toLocaleString('es-CL')+' | Credito: '+pSign+precioCredito.toLocaleString('es-CL')+(fuelStr?' | '+fuelStr:'')+' | Link: '+cardLink);
+
+      autos.push('- '+fullTitle+(anno?' '+anno:'')+' | '+(km?km.toLocaleString('es-CL')+' km':'km n/d')+' | Lista: '+pSign+(precioLista||0).toLocaleString('es-CL')+' | Credito: '+pSign+(precioCredito||0).toLocaleString('es-CL')+(fuelStr?' | '+fuelStr:'')+' | Estado: '+estado+' | Link: '+cardLink);
 
       structuredItems.push({
         id:             'RMG-'+(++autoIdx),
         brand:          marca,
         model:          fullTitle,
         year:           anno,
-        stock:          1,
+        stock:          estado === 'vendido' ? 0 : 1,
+        estado:         estado,
         price:          precioLista || precioCredito,
         precio_lista:   precioLista,
         precio_credito: precioCredito,
         km:             km ? km.toLocaleString('es-CL')+' km' : '',
         fuel:           fuelStr,
-        version:        modeloStr,
         tipo,
         transmision:    '',
         link:           cardLink,
@@ -387,7 +396,7 @@ async function scrapeRMG() {
     if (structuredItems.length === 0) throw new Error('0 autos encontrados en rmgautos.cl');
 
     scrapeCache = { ts: now, data: [...new Set(autos)].join('\n'), items: structuredItems };
-    console.log('[RMG-Scraper v8] ' + structuredItems.length + ' autos OK');
+    console.log('[RMG-Scraper v9] ' + structuredItems.length + ' autos OK');
     return scrapeCache.data;
   } catch(e) {
     console.warn('[RMG-Scraper] Error:', e.message, '- usando cache');
