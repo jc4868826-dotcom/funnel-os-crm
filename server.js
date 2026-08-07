@@ -307,12 +307,22 @@ async function scrapeRMG() {
   const now = Date.now();
   if (scrapeCache.data && (now - scrapeCache.ts) < 30 * 60 * 1000) return scrapeCache.data;
   try {
-    const r = await fetch(RMG_SCRAPE_URL, {
-      signal: AbortSignal.timeout(20000),
-      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const html = await r.text();
+    const UA = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' };
+    const liCountRE = /<li[^>]*class="[^"]*\bproduct\b[^"]*"[^>]*>/gi;
+    let html = '';
+    for (let page = 1; page <= 10; page++) {
+      const url = page === 1 ? RMG_SCRAPE_URL : RMG_SCRAPE_URL + 'page/' + page + '/';
+      let pageHtml;
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(20000), headers: UA });
+        if (!r.ok) break;
+        pageHtml = await r.text();
+      } catch(_) { break; }
+      const count = (pageHtml.match(liCountRE) || []).length;
+      console.log('[RMG-Scraper] página ' + page + ': ' + count + ' productos');
+      if (count === 0) break;
+      html += pageHtml;
+    }
 
     const liRE = /<li[^>]*class="[^"]*\bproduct\b[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
     const parsePrecio = s => parseInt((s||'').replace(/\./g,'').replace(/,/g,'').replace(/[^\d]/g,''), 10) || 0;
@@ -396,7 +406,7 @@ async function scrapeRMG() {
     if (structuredItems.length === 0) throw new Error('0 autos encontrados en rmgautos.cl');
 
     scrapeCache = { ts: now, data: [...new Set(autos)].join('\n'), items: structuredItems };
-    console.log('[RMG-Scraper v9] ' + structuredItems.length + ' autos OK');
+    console.log('[RMG-Scraper v10] ' + structuredItems.length + ' autos OK (multi-página)');
     return scrapeCache.data;
   } catch(e) {
     console.warn('[RMG-Scraper] Error:', e.message, '- usando cache');
