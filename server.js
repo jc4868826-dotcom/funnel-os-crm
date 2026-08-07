@@ -341,8 +341,8 @@ async function scrapeRMG() {
       const estadoM = block.match(/class="rmg-product-status[^"]*">([^<]+)</i);
       const estado = estadoM ? estadoM[1].trim().toLowerCase() : 'disponible';
 
-      // Precios desde <bdi> — vienen como texto directo: <bdi>$7.390.000</bdi>
-      const bdiMatches = [...block.matchAll(/<bdi>([^<]+)<\/bdi>/gi)];
+      // Precios: <bdi><span ...>&#36;</span>13.990.000</bdi> — capturar tras </span>
+      const bdiMatches = [...block.matchAll(/<bdi>[\s\S]*?<\/span>([\d.,]+)<\/bdi>/gi)];
       const precioCredito = parsePrecio(bdiMatches[0]?.[1] || '');
       const precioLista   = parsePrecio(bdiMatches[1]?.[1] || bdiMatches[0]?.[1] || '');
 
