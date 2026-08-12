@@ -1827,7 +1827,6 @@ app.post('/webhook',async(req,res)=>{
           status: 'Nuevo',
           interest: detalleVehiculo || 'Vehículo a tasar',
           formData: datos,
-          createdAt: n,
           lastInteraction: n,
           lastClientTs: n,
           assignedTo: comprasObj.username,
@@ -1919,7 +1918,7 @@ app.post('/webhook',async(req,res)=>{
       ld[tenant].unshift({
         id: Date.now(), name: contactName, phone: '+'+from,
         source: detectedSource, status: 'Nuevo',
-        createdAt: n, lastInteraction: n, lastClientTs: n,
+        lastInteraction: n, lastClientTs: n,
         interest: detectedInterest,
         assignedTo: assignedFinal, botActive: true,
         alertLevel: 'none', intentSignal: 'NONE', unread: true,
@@ -2396,6 +2395,30 @@ app.post('/api/admin/restore-leads', auth('admin'), async (req, res) => {
     res.json({ ok: true, tenant, leads_antes: antes, leads_despues: leads.length });
   } catch (e) {
     console.error('[RESTORE-LEADS] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── MIGRACIÓN: rellenar createdAt faltante usando id (Date.now() al crear) ──
+app.post('/api/admin/fix-created-at', auth('admin'), async (req, res) => {
+  try {
+    const tenant = req.tenant;
+    const leads = await tRead(F.leads, tenant);
+    let fixed = 0;
+    leads.forEach(l => {
+      if (!l.createdAt && l.id) {
+        const ts = typeof l.id === 'number' ? l.id : parseInt(l.id);
+        if (!isNaN(ts) && ts > 1000000000000) { // validar que sea ms epoch razonable
+          l.createdAt = new Date(ts).toISOString();
+          fixed++;
+        }
+      }
+    });
+    await tWrite(F.leads, tenant, leads);
+    console.log(`[FIX-CREATED-AT] tenant=${tenant} corregidos=${fixed}`);
+    res.json({ ok: true, tenant, fixed, total: leads.length });
+  } catch (e) {
+    console.error('[FIX-CREATED-AT] Error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
