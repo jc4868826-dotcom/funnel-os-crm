@@ -1073,7 +1073,7 @@ async function login(){$('liE').textContent='';try{const d=await api('POST','/ap
 function logout(){if(S.pollTimer)clearInterval(S.pollTimer);S.token=null;S.user=null;localStorage.removeItem('ft');localStorage.removeItem('fu');$('av').style.display='none';$('lv').style.display='grid';}
 $('loutB').addEventListener('click',()=>{api('POST','/api/auth/logout').catch(()=>{});logout();});
 function applyMenuPermissions(){if(!S.user||!S.user.permissions)return;const MAP={'operacion':['navDashboard'],'leads':['navLeads'],'chileautos':['navCA'],'espera':['navEG'],'compras':['navCompras'],'pipeline':['navPipeline'],'analitica':['navA'],'equipo':['navT'],'inventario':['navInv'],'bi':['navBI'],'analisis':['navAnalisis'],'auditoria':['navAuditoria'],'reporte':['navReporte'],'config':['navC']};for(const[mod,ids]of Object.entries(MAP)){const level=(S.user.permissions[mod]||0);ids.forEach(id=>{const el=document.getElementById(id);if(el&&level===0)el.style.display='none';});}}
-async function enterApp(){$('lv').style.display='none';$('av').style.display='grid';requestNotifPermission();setTimeout(()=>initWebPush().catch(()=>{}),2000);try{const me=await api('GET','/api/me');if(me&&me.user){S.user=me.user;localStorage.setItem('fu',JSON.stringify(me.user));}}catch(e){}$('uBadge').textContent=(S.user?.name||'')+' · '+(S.user?.role||'');const isA=S.user?.role==='admin';['navA','navT','navC','lblS','selF','navCompras','navReporte'].forEach(id=>{const el=$(id);if(el)el.style.display=isA?'':'none';});applyMenuPermissions();try{S.config=await api('GET','/api/config');$('bizName').textContent=S.config.businessName||'FunnelOS';if(S.config.accentColor)document.documentElement.style.setProperty('--ac',S.config.accentColor);// Carga usuarios siempre (admin y vendedor) para que cUsr() resuelva nombres reales
+async function enterApp(){$('lv').style.display='none';$('av').style.display='grid';requestNotifPermission();setTimeout(()=>initWebPush().catch(()=>{}),2000);try{const me=await api('GET','/api/me');if(me&&me.user){S.user=me.user;localStorage.setItem('fu',JSON.stringify(me.user));}}catch(e){}$('uBadge').textContent=(S.user?.name||'')+' · '+(S.user?.role||'');const isA=S.user?.role==='admin';const isAorSup=S.user?.role==='admin'||S.user?.role==='supervisor';['navA','navT','navC','lblS','selF','navCompras','navReporte'].forEach(id=>{const el=$(id);if(el)el.style.display=isAorSup?'':'none';});applyMenuPermissions();try{S.config=await api('GET','/api/config');$('bizName').textContent=S.config.businessName||'FunnelOS';if(S.config.accentColor)document.documentElement.style.setProperty('--ac',S.config.accentColor);// Carga usuarios siempre (admin y vendedor) para que cUsr() resuelva nombres reales
   const users=await api('GET','/api/users').catch(()=>[]);S.users=users;
   const _cCfg=await api('GET','/api/config/canales').catch(()=>[]);if(_cCfg.length){S.canales=_cCfg;const _fc=$('filtCanal');if(_fc){const _prev=_fc.value;_fc.innerHTML='<option value="">Todos</option>'+_cCfg.map(c=>'<option value="'+c+'">'+c+'</option>').join('');_fc.value=_prev;}}
   if(isA){const sel=$('selF');sel.innerHTML='<option value="">Todos</option>';users.filter(u=>u.role==='vendedor').forEach(u=>{const o=document.createElement('option');o.value=u.username;o.textContent=u.name;sel.appendChild(o);});}}catch(e){}// Iniciar con mes en curso por defecto
@@ -1282,7 +1282,8 @@ async function requestNotifPermission(){
 // ═══════════════════════════════════════════════════
 
 function renderDashVendedor(){if(!S.vendKpi)return;const k=S.vendKpi;const scF=$('scF'),scR=$('scR'),scC=$('scC'),scRS=$('scRS');if(scF)scF.textContent=k.sla?.fresh??'—';if(scR)scR.textContent=k.sla?.risk??'—';if(scC)scC.textContent=k.sla?.critical??'—';if(scRS)scRS.textContent=k.sla?.reassigned??'—';renderFunnel();}
-function renderAll(){const isA=S.user?.role==='admin';if(isA)renderDash();else renderDashVendedor();renderLeads();renderChileautos();renderEsperaGeneral();renderKanban(); if(typeof renderComprasFull === "function") renderComprasFull();renderCalendar();if(isA){renderAnalytics();renderTeam();}if(S.mid&&$('mbg').classList.contains('show'))refreshModalSilent();if(S.slaOpen)renderSlaPanel(S.slaOpen);if(S.funOpen)renderFunPanel(S.funOpen);try{checkNotifications();}catch(e){}}
+function isAdminOrSup(){return S.user?.role==='admin'||S.user?.role==='supervisor';}
+function renderAll(){const isA=S.user?.role==='admin';const isAorSup2=isA||S.user?.role==='supervisor';if(isA)renderDash();else renderDashVendedor();renderLeads();renderChileautos();renderEsperaGeneral();renderKanban(); if(typeof renderComprasFull === "function") renderComprasFull();renderCalendar();if(isAorSup2){renderAnalytics();renderTeam();}if(S.mid&&$('mbg').classList.contains('show'))refreshModalSilent();if(S.slaOpen)renderSlaPanel(S.slaOpen);if(S.funOpen)renderFunPanel(S.funOpen);try{checkNotifications();}catch(e){}}
 
 function normLeads(){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(S.leads||[]).filter(l=>l.isCompraRmg!==true&&!FC.includes((l.source||'').trim()));}
 
@@ -1551,7 +1552,7 @@ function renderTeam(){
   if(!alerts.length) alerts.push({c:'#059669',bg:'#f0fdf4',ico:'✅',txt:'Equipo en verde. Contactabilidad '+gTContact+'% · Conversión '+gTConv+'% · SLA '+avgResp+' min.'});
 
   /* ── filtros ── */
-  var vopts=(S.users||[]).filter(function(u){return u.role==='vendedor';}).map(function(u){
+  var vopts=(S.users||[]).filter(function(u){return u.role==='vendedor'||u.role==='supervisor';}).map(function(u){
     return'<option value="'+e(u.username)+'"'+(S.seller===u.username?' selected':'')+'>'+e(u.name)+'</option>';
   }).join('');
 
@@ -1700,9 +1701,9 @@ window._removeCanal=function(i){if(!S.canalesEdit||S.canalesEdit.length<=1)retur
 document.addEventListener('click',async(e)=>{if(e.target&&e.target.id==='cfgAddCanal'){const input=$('cfgNuevoCanal');const v=(input.value||'').trim();if(!v)return toast('Escribe el nombre del canal',true);if((S.canalesEdit||[]).includes(v))return toast('Ya existe ese canal',true);if(!S.canalesEdit)S.canalesEdit=[];S.canalesEdit.push(v);input.value='';renderCfgCanales(S.canalesEdit);}});
 document.addEventListener('click',async(e)=>{if(e.target&&e.target.id==='cfgSaveCanales'){const btn=e.target;btn.disabled=true;btn.textContent='…';try{await api('PUT','/api/config/canales',{canales:S.canalesEdit});S.canales=[...S.canalesEdit];toast('Canales guardados ✓');}catch(err){toast(err.message,true);}finally{btn.disabled=false;btn.textContent='Guardar Canales';}}});
 function renderUserTable(users){const tbody=$('uTbd');tbody.innerHTML=users.map(u=>`<tr data-un="${esc(u.username)}">
-  <td><strong>${esc(u.username)}</strong><div style="font-size:10px;color:var(--tm);margin-top:2px">${u.role==='admin'?'👔 Gerencia':u.role==='vendedor'?'💼 Vendedor':'📋 Secretaria'}</div></td>
+  <td><strong>${esc(u.username)}</strong><div style="font-size:10px;color:var(--tm);margin-top:2px">${u.role==='admin'?'👔 Gerencia':u.role==='supervisor'?'👁 Supervisor':u.role==='vendedor'?'💼 Vendedor':'📋 Secretaria'}</div></td>
   <td><input class="un" value="${esc(u.name)}" placeholder="Nombre completo"></td>
-  <td><select class="ur"><option value="admin" ${u.role==='admin'?'selected':''}>Admin / Gerencia</option><option value="vendedor" ${u.role==='vendedor'?'selected':''}>Vendedor</option><option value="secretaria" ${u.role==='secretaria'?'selected':''}>Secretaria</option></select></td>
+  <td><select class="ur"><option value="admin" ${u.role==='admin'?'selected':''}>Admin / Gerencia</option><option value="vendedor" ${u.role==='vendedor'?'selected':''}>Vendedor</option><option value="supervisor" ${u.role==='supervisor'?'selected':''}>Supervisor</option><option value="secretaria" ${u.role==='secretaria'?'selected':''}>Secretaria</option></select></td>
   <td><input class="up" value="${esc(u.phone||'')}" placeholder="+56912345678"></td>
   <td>
     <div style="display:flex;gap:4px;align-items:center">
@@ -1786,7 +1787,7 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
     // ── SPRINT 4: Sección Retoma / Tasación ──────────────────────────────────
     (function injectTradeInSection() {
       const modalId = typeof id !== 'undefined' ? id : null; const lead = typeof l !== 'undefined' ? l : S.leads.find(x => x.id == modalId); if(!lead) return; const ti = lead.tradeIn || {};
-      const isAdmin = S.user && S.user.role === 'admin';
+      const isAdmin = S.user && (S.user.role === 'admin' || S.user.role === 'supervisor');
       const statusColor = ti.status === 'Evaluado' ? '#22c55e' : '#f59e0b';
       const offerFmt = ti.offer
         ? new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(ti.offer)
@@ -1930,7 +1931,7 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
       const lead = S.leads.find(x => x.id === S.mid);
       if (!lead) return;
       const ti = lead.tradeIn || {};
-      const isAdmin = S.user && S.user.role === 'admin';
+      const isAdmin = S.user && (S.user.role === 'admin' || S.user.role === 'supervisor');
       const statusColor = ti.status === 'Evaluado' ? '#059669' : '#d97706';
       const offerFmt = ti.offer ? new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(ti.offer) : '—';
 
@@ -2118,7 +2119,7 @@ $('btnResumen').addEventListener('click',async()=>{
   finally{btn.disabled=false;btn.textContent='🧠 Generar Resumen IA';}
 });
 
-$('mSv').addEventListener('click',async()=>{if(!S.mid)return;const btn=$('mSv');btn.disabled=true;btn.textContent='…';try{const l=findLead(S.mid);const st=$('mSt').value;const note=$('mNt').value.trim();const payload={}; if(st&&st!==l?.status) { if(!note){toast('⚠️ OBLIGATORIO: Escribe una leyenda en la bitácora', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} const aT=$('agendaText').value.trim(), aD=$('agendaDate').value; if(!aT || !aD){toast('⚠️ OBLIGATORIO: Agenda una tarea (fecha/hora)', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} payload.status=st; }if(S.user&&S.user.role==="admin"){var _a=$("mAssign");if(_a&&_a.value&&_a.value!==l?.assignedTo)payload.assignedTo=_a.value;}if(note)payload.note=note;if(!Object.keys(payload).length){toast('Sin cambios');btn.disabled=false;btn.textContent='Guardar cambios';return;}await api('PATCH','/api/leads/'+S.mid,payload);$('mNt').value='';toast('Lead actualizado ✓');await refresh();renderModal();}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='Guardar cambios';}});
+$('mSv').addEventListener('click',async()=>{if(!S.mid)return;const btn=$('mSv');btn.disabled=true;btn.textContent='…';try{const l=findLead(S.mid);const st=$('mSt').value;const note=$('mNt').value.trim();const payload={}; if(st&&st!==l?.status) { if(!note){toast('⚠️ OBLIGATORIO: Escribe una leyenda en la bitácora', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} const aT=$('agendaText').value.trim(), aD=$('agendaDate').value; if(!aT || !aD){toast('⚠️ OBLIGATORIO: Agenda una tarea (fecha/hora)', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} payload.status=st; }if(S.user&&(S.user.role==='admin'||S.user.role==='supervisor')){var _a=$('mAssign');if(_a&&_a.value&&_a.value!==l?.assignedTo)payload.assignedTo=_a.value;}if(note)payload.note=note;if(!Object.keys(payload).length){toast('Sin cambios');btn.disabled=false;btn.textContent='Guardar cambios';return;}await api('PATCH','/api/leads/'+S.mid,payload);$('mNt').value='';toast('Lead actualizado ✓');await refresh();renderModal();}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='Guardar cambios';}});
 function loadBI(t){const f=document.getElementById('biFr');const b1=document.getElementById('biT1');const b2=document.getElementById('biT2');if(!f)return;if(t==='mapa'){f.src='/mapa_zonas_v4.html';if(b1){b1.style.color='#6d28d9';b1.style.borderBottomColor='#6d28d9';}if(b2){b2.style.color='#888';b2.style.borderBottomColor='transparent';}}else{f.src='/agente_precios.html';if(b2){b2.style.color='#6d28d9';b2.style.borderBottomColor='#6d28d9';}if(b1){b1.style.color='#888';b1.style.borderBottomColor='transparent';}}}
 document.querySelectorAll('.sb nav button').forEach(btn=>{btn.addEventListener('click',async()=>{const view=btn.dataset.view;document.querySelectorAll('.sb nav button').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));btn.classList.add('active');$('view-'+view).classList.add('active');S.view=view;$('mainTb').style.display=view==='config'?'none':'';if(view==='bi'){loadBI('mapa');}else if(view==='analisis'){initAnalisisIA();}else if(view==='auditoria'){initAuditoria();}else if(view==='reporte'){initReporte();}else if(view==='config'){await loadConfig();await loadUsers();loadBackups();}else if(view==='inventario'){await renderInventario();}});});
 // ── REPORTE DE LEADS ─────────────────────────────────────────────────────
@@ -2596,7 +2597,7 @@ function openNuevoLeadModal(){
   const _nlC=document.getElementById('nlCanal');const _cL=S.canales&&S.canales.length?S.canales:['WhatsApp','Chileautos','Yapo','MercadoLibre','Meta Ads','Referido','Llamada','Duty','Otro'];_nlC.innerHTML=_cL.map(c=>'<option value="'+c+'">'+c+'</option>').join('');_nlC.value='WhatsApp';
   const sel = document.getElementById('nlAsignado');
   sel.innerHTML = '';
-  (S.users||[]).filter(u=>u.role==='vendedor').forEach(u=>{
+  (S.users||[]).filter(u=>u.role==='vendedor'||u.role==='supervisor').forEach(u=>{
     const o = document.createElement('option');
     o.value = u.username; o.textContent = u.name||u.username;
     sel.appendChild(o);
