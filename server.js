@@ -1827,6 +1827,7 @@ app.post('/webhook',async(req,res)=>{
           status: 'Nuevo',
           interest: detalleVehiculo || 'Vehículo a tasar',
           formData: datos,
+          createdAt: n,
           lastInteraction: n,
           lastClientTs: n,
           assignedTo: comprasObj.username,
@@ -1918,7 +1919,7 @@ app.post('/webhook',async(req,res)=>{
       ld[tenant].unshift({
         id: Date.now(), name: contactName, phone: '+'+from,
         source: detectedSource, status: 'Nuevo',
-        lastInteraction: n, lastClientTs: n,
+        createdAt: n, lastInteraction: n, lastClientTs: n,
         interest: detectedInterest,
         assignedTo: assignedFinal, botActive: true,
         alertLevel: 'none', intentSignal: 'NONE', unread: true,
