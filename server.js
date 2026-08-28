@@ -382,7 +382,7 @@ async function scrapeRMG() {
       const highlights = [anno ? 'Año '+anno : '', km ? km.toLocaleString('es-CL')+' km' : '', fuelStr].filter(Boolean).join(' · ');
       const pSign = String.fromCharCode(36);
 
-      autos.push('- '+fullTitle+(anno?' '+anno:'')+' | '+(km?km.toLocaleString('es-CL')+' km':'km n/d')+' | Lista: '+pSign+(precioLista||0).toLocaleString('es-CL')+' | Credito: '+pSign+(precioCredito||0).toLocaleString('es-CL')+(fuelStr?' | '+fuelStr:'')+' | Estado: '+estado+' | Link: '+cardLink);
+      autos.push('- '+fullTitle+(anno?' '+anno:'')+(tipo?' | Categoria: '+tipo:'')+' | '+(km?km.toLocaleString('es-CL')+' km':'km n/d')+' | Lista: '+pSign+(precioLista||0).toLocaleString('es-CL')+' | Credito: '+pSign+(precioCredito||0).toLocaleString('es-CL')+(fuelStr?' | '+fuelStr:'')+' | Estado: '+estado+' | Link: '+cardLink);
 
       structuredItems.push({
         id:             'RMG-'+(++autoIdx),
