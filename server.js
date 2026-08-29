@@ -360,7 +360,9 @@ async function scrapeRMG() {
       const txt = block.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
       // Año: 4 dígitos entre 2000-2030
-      const annoM = txt.match(/\b(20[012]\d)\b/);
+      // Prioriza el año desde el campo etiquetado 'AÑO:' (evita confundir con modelos numericos como '2008')
+      const annoLabelM = txt.match(/A[ÑN]O\s*:?\s*(20[0-2]\d)/i);
+      const annoM = annoLabelM || txt.match(/\b(20[012]\d)\b/);
       const anno = annoM ? parseInt(annoM[1], 10) : null;
 
       // Km: número seguido de "km"
