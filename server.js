@@ -217,17 +217,45 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
       invBlock
     ].filter(Boolean).join('\n\n');
 
-    const completion = await openai.chat.completions.create({
+    let msgsIA = [
+      { role: 'system', content: sysPromptFinal },
+      ...history.slice(-10).map(h => ({ role: h.role === 'user' ? 'user' : 'assistant', content: h.content })),
+      { role: 'user', content: msg }
+    ];
+
+    let completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       temperature: 0.6,
-      messages: [
-        { role: 'system', content: sysPromptFinal },
-        ...history.slice(-10).map(h => ({ role: h.role === 'user' ? 'user' : 'assistant', content: h.content })),
-        { role: 'user', content: msg }
-      ]
+      messages: msgsIA,
+      tools: [INVENTORY_TOOL],
+      tool_choice: 'auto'
     });
 
-    return { reply: completion.choices[0].message.content, intent_signal: 'NONE' };
+    let respMsgIA = completion.choices[0].message;
+    let vueltasTool = 0;
+    while (respMsgIA.tool_calls && respMsgIA.tool_calls.length > 0 && vueltasTool < 2) {
+      msgsIA.push(respMsgIA);
+      for (const toolCall of respMsgIA.tool_calls) {
+        let resultadoTool = { error: 'función no reconocida' };
+        if (toolCall.function?.name === 'buscar_inventario') {
+          let filtrosTool = {};
+          try { filtrosTool = JSON.parse(toolCall.function.arguments || '{}'); } catch(eParse) { console.warn('[marcela] Error parseando argumentos de tool:', eParse.message); }
+          try { resultadoTool = buscarInventario(filtrosTool); } catch(eBusq) { console.error('[marcela] Error en buscarInventario:', eBusq.message); resultadoTool = { error: 'error interno buscando inventario' }; }
+        }
+        msgsIA.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(resultadoTool) });
+      }
+      completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        temperature: 0.6,
+        messages: msgsIA,
+        tools: [INVENTORY_TOOL],
+        tool_choice: 'auto'
+      });
+      respMsgIA = completion.choices[0].message;
+      vueltasTool++;
+    }
+
+    return { reply: respMsgIA.content, intent_signal: 'NONE' };
   } catch(e) {
     console.error('[Marcela-Crash]:', e.message);
     return { reply: 'Dame un segundito, estoy validando la info en el sistema...', intent_signal: 'NONE' };
@@ -302,6 +330,70 @@ const RMG_VENDORS = [
 const RMG_SCRAPE_URL = 'https://rmgautos.cl/autos-usados/';
 const MARCAS_RE = /\b(Toyota|Peugeot|Kia|Volkswagen|Ford|Chevrolet|Hyundai|Nissan|Suzuki|Mazda|Honda|Mitsubishi|Jeep|Land Rover|BMW|Mercedes|Audi|Subaru|Volvo|Chery|MG|BAIC|Renault|Opel|Ram|Ssangyong|Karry|Alfa Romeo|Changan|Citroen|Fiat|Seat|Skoda|Haval|Geely|BYD|DFSK|JAC|Foton)\b/i;
 let scrapeCache = { ts: 0, data: '' };
+
+// ── Búsqueda estructurada de inventario (usada por function-calling de la IA) ──
+// Evita que la IA tenga que contar/enumerar manualmente el texto plano — el conteo
+// y el filtrado (marca, modelo, categoría, rango de precio) se hacen aquí en código,
+// de forma determinística, y el resultado exacto se le entrega a la IA para redactar.
+function buscarInventario(filtros = {}) {
+  const items = (scrapeCache.items || []).filter(it => {
+    if (!filtros.incluirVendidos && (it.estado === 'vendido' || it.estado === 'reservado')) return false;
+    if (filtros.marca && String(it.brand||'').toUpperCase() !== String(filtros.marca).toUpperCase()) return false;
+    if (filtros.modelo) {
+      const esc = String(filtros.modelo).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('\\b' + esc + '\\b', 'i');
+      if (!re.test(it.model || '')) return false;
+    }
+    if (filtros.categoria && String(it.tipo||'').toUpperCase() !== String(filtros.categoria).toUpperCase()) return false;
+    if (typeof filtros.precioMax === 'number' && (it.price||0) > filtros.precioMax) return false;
+    if (typeof filtros.precioMin === 'number' && (it.price||0) < filtros.precioMin) return false;
+    return true;
+  });
+
+  if (filtros.modelo) {
+    return {
+      modo: 'detalle',
+      total: items.length,
+      autos: items.map(it => ({
+        modelo: it.model, anio: it.year, km: it.km, precio: it.price,
+        estado: it.estado, link: it.link, categoria: it.tipo
+      }))
+    };
+  }
+
+  const grupos = {};
+  for (const it of items) {
+    const key = (it.model || '').trim();
+    if (!key) continue;
+    if (!grupos[key]) grupos[key] = { modelo: key, cantidad: 0, precioDesde: null };
+    grupos[key].cantidad++;
+    if (grupos[key].precioDesde === null || (it.price||0) < grupos[key].precioDesde) grupos[key].precioDesde = it.price;
+  }
+  return {
+    modo: 'resumen',
+    totalModelos: Object.keys(grupos).length,
+    totalUnidades: items.length,
+    modelos: Object.values(grupos)
+  };
+}
+
+const INVENTORY_TOOL = {
+  type: 'function',
+  function: {
+    name: 'buscar_inventario',
+    description: 'Busca en el inventario real y actualizado de RMG Autos. Úsala SIEMPRE que el cliente pregunte por autos disponibles usando cualquier criterio: marca, modelo, categoría (SUV, sedán, hatchback, etc.), rango de precio, o combinaciones de estos (ej: "autos de menos de 15 millones", "qué SUV tienen", "busco Peugeot", "tienes 208"). Si NO se especifica "modelo", devuelve un resumen agrupado por modelo con la cantidad de unidades de cada uno, para que el cliente elija. Si SÍ se especifica "modelo" (porque el cliente ya nombró uno puntual), devuelve el detalle completo (año, km, precio, estado, link) de cada unidad de ese modelo. Nunca cuentes ni enumeres el inventario a mano leyendo el texto — siempre usa esta función para cualquier búsqueda de más de un auto.',
+    parameters: {
+      type: 'object',
+      properties: {
+        marca: { type: 'string', description: "Marca del vehículo, ej: 'Peugeot', 'Chevrolet'. Opcional." },
+        modelo: { type: 'string', description: "Modelo específico ya elegido por el cliente, ej: '208', '2008', 'Partner', '3008'. Solo se envía cuando el cliente ya nombró un modelo puntual, no una marca genérica." },
+        categoria: { type: 'string', description: "Categoría/tipo del vehículo, ej: 'SUV', 'Sedán', 'Hatchback', 'Pickup'. Opcional." },
+        precioMax: { type: 'number', description: 'Precio máximo en pesos chilenos (sin puntos ni signo), ej: 15000000 para "menos de 15 millones". Opcional.' },
+        precioMin: { type: 'number', description: 'Precio mínimo en pesos chilenos. Opcional.' }
+      }
+    }
+  }
+};
 
 async function scrapeRMG() {
   const now = Date.now();
