@@ -1294,7 +1294,7 @@ function renderDashVendedor(){if(!S.vendKpi)return;const k=S.vendKpi;const scF=$
 function isAdminOrSup(){return S.user?.role==='admin'||S.user?.role==='supervisor';}
 function renderAll(){const isA=S.user?.role==='admin';const isAorSup2=isA||S.user?.role==='supervisor';if(isA)renderDash();else renderDashVendedor();renderLeads();renderRmgParts();renderChileautos();renderEsperaGeneral();renderKanban(); if(typeof renderComprasFull === "function") renderComprasFull();renderCalendar();if(isAorSup2){renderAnalytics();renderTeam();}if(S.mid&&$('mbg').classList.contains('show'))refreshModalSilent();if(S.slaOpen)renderSlaPanel(S.slaOpen);if(S.funOpen)renderFunPanel(S.funOpen);try{checkNotifications();}catch(e){}}
 
-function normLeads(){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(S.leads||[]).filter(l=>l.isCompraRmg!==true&&!FC.includes((l.source||'').trim()));}
+function normLeads(){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(S.leads||[]).filter(l=>l.isCompraRmg!==true&&l.isRmgParts!==true&&!FC.includes((l.source||'').trim()));}
 
 function renderSlaCards(){
   const nv=normLeads().filter(l=>l.status==='Nuevo');
