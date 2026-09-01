@@ -115,6 +115,16 @@ async function sendWA(to, text, retries = 2) {
   return false;
 }
 
+// Solo para clasificar el lead en la pestaña "RMG Parts" del dashboard — NO cambia en
+// nada lo que Cata responde ni qué herramienta usa. Si el cliente menciona cualquiera de
+// estas palabras, el lead queda marcado, aunque Cata todavía no haya llamado a ninguna
+// función (ej: dijo "lubricantes" en general y Cata solo preguntó qué tipo necesita).
+const RMG_PARTS_TOPIC_KEYWORDS = ['lubricante', 'lubricantes', 'aceite', 'grasa', 'lubricacion', 'lubricación', 'bateria', 'batería', 'neumatico', 'neumático', 'neumaticos', 'neumáticos', 'llanta', 'llantas', 'refrigerante', 'anticongelante', 'liquido de freno', 'líquido de freno', 'filtro de aceite', 'rmg parts'];
+function mencionaRmgParts(texto) {
+  const t = String(texto || '').toLowerCase();
+  return RMG_PARTS_TOPIC_KEYWORDS.some(k => t.includes(k));
+}
+
 async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
   try {
     let botCfg = await tRead(F.bot, tenant, {});
@@ -280,7 +290,8 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
       vueltasTool++;
     }
 
-    return { reply: respMsgIA.content, intent_signal: 'NONE', esRmgParts: usedRmgPartsTool };
+    const esRmgParts = usedRmgPartsTool || (tenant === 'demo_automotora' && mencionaRmgParts(msg));
+    return { reply: respMsgIA.content, intent_signal: 'NONE', esRmgParts };
   } catch(e) {
     console.error('[Marcela-Crash]:', e.message);
     return { reply: 'Dame un segundito, estoy validando la info en el sistema...', intent_signal: 'NONE' };
