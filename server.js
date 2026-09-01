@@ -208,17 +208,13 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
 
     const contextBlock = sysNotes ? '<CONTEXTO_DEL_PORTAL>\n' + sysNotes + '\n</CONTEXTO_DEL_PORTAL>' : '';
 
-    // El bloque <INVENTARIO_DISPONIBLE> es específico de autos (marca/modelo/km/precio de
-    // rmgautos.cl) — no aplica a rmg_parts_lubricantes, que consulta productos reales vía
-    // buscar_producto_rmg_parts/buscar_producto_tecnico. Se omite para no confundir al modelo
-    // con un bloque de "sin inventario disponible" que no tiene relación con esas funciones.
     const sysPromptFinal = [
       '<INSTRUCCIONES_DEL_SISTEMA>',
       instrucciones,
       behaviorBlock,
       '</INSTRUCCIONES_DEL_SISTEMA>',
       contextBlock || null,
-      RMG_PARTS_TOOLS_TENANTS.has(tenant) ? null : invBlock
+      invBlock
     ].filter(Boolean).join('\n\n');
 
     let msgsIA = [
@@ -227,10 +223,11 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
       { role: 'user', content: msg }
     ];
 
-    // RMG Autos (autos) sigue usando exactamente INVENTORY_TOOL, sin cambios.
-    // Solo el tenant rmg_parts_lubricantes usa las herramientas nuevas de RMG Parts.
-    const toolsForTenant = RMG_PARTS_TOOLS_TENANTS.has(tenant)
-      ? [RMG_PARTS_PRODUCT_TOOL, RMG_PARTS_TECH_TOOL, RMG_PARTS_PEDIDO_TOOL]
+    // demo_automotora (Cata) atiende autos Y RMG Parts en el mismo bot: además de
+    // buscar_inventario (autos), tiene las tres herramientas de RMG Parts disponibles.
+    // Los demás tenants (demo_clinica, etc.) siguen usando exactamente INVENTORY_TOOL, sin cambios.
+    const toolsForTenant = tenant === 'demo_automotora'
+      ? [INVENTORY_TOOL, RMG_PARTS_PRODUCT_TOOL, RMG_PARTS_TECH_TOOL, RMG_PARTS_PEDIDO_TOOL]
       : [INVENTORY_TOOL];
 
     let completion = await openai.chat.completions.create({
@@ -281,7 +278,7 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
   }
 }
 const F={users:path.join(DATA,'users.json'),leads:path.join(DATA,'leads.json'),config:path.join(DATA,'config.json'),bot:path.join(__dirname,'bot.json'),inventory:path.join(DATA,'inventory.json'),rr:path.join(DATA,'rr.json'),spend:path.join(DATA,'spend.json')};
-const TENANTS=['demo_automotora','demo_clinica','rmg_parts_lubricantes'];
+const TENANTS=['demo_automotora','demo_clinica'];
 const sessions=new Map();
 const chatSessions=new Map();
 // ── DEBOUNCE: acumula mensajes del mismo número por 5s antes de responder ──
@@ -397,9 +394,9 @@ function buscarInventario(filtros = {}) {
 }
 
 // ── RMG Parts (Cata Lubricantes) — consulta al ERP de RMG Parts, servidor a servidor ──
-// Sistema separado de RMG Autos. Estas funciones SOLO se activan para el tenant
-// 'rmg_parts_lubricantes' (ver toolsForTenant en marcela()) — no tocan ni comparten
-// caché con el inventario de autos (scrapeCache) de RMG Autos.
+// Se usan dentro del mismo bot de demo_automotora (ver toolsForTenant en marcela()),
+// junto a buscar_inventario — no tocan ni comparten caché con el inventario de autos
+// (scrapeCache) de RMG Autos.
 const RMG_PARTS_API_URL = (process.env.RMG_PARTS_API_URL || 'https://rmg-parts-erp.onrender.com').replace(/\/$/, '');
 const RMG_PARTS_API_KEY = process.env.RMG_PARTS_API_KEY || '';
 
@@ -560,9 +557,6 @@ const RMG_PARTS_PEDIDO_TOOL = {
     }
   }
 };
-
-// Tenants cuyo bot usa las herramientas de RMG Parts en vez de buscar_inventario (autos).
-const RMG_PARTS_TOOLS_TENANTS = new Set(['rmg_parts_lubricantes']);
 
 const INVENTORY_TOOL = {
   type: 'function',
@@ -1027,31 +1021,26 @@ async function seed(){
     // BLOQUEADO: no recrear vendors demo automaticamente
   }
   if(!users.demo_clinica)users.demo_clinica=[{username:'gerente',password:'demo',name:'Dr. Hernán Vidal',role:'admin',phone:'56912000010',status:'Activo'},{username:'vendedor1',password:'demo',name:'Karina Bravo',role:'vendedor',phone:'56912000011',status:'Activo'},{username:'recepcion',password:'demo',name:'Marcela Tapia',role:'secretaria',phone:'56912000012',status:'Activo'}];
-  if(!users.rmg_parts_lubricantes)users.rmg_parts_lubricantes=[{username:'gerente',password:'demo',name:'Equipo RMG Parts',role:'admin',phone:'56912000020',status:'Activo'},{username:'vendedor1',password:'demo',name:'Vendedor RMG Parts',role:'vendedor',phone:'56912000021',status:'Activo'}];
   await write(F.users,users);
   const cfg=await read(F.config);
-  if(!cfg.demo_automotora)cfg.demo_automotora={businessName:'RMG Autos',accentColor:'#3b82f6',stages:['Nuevo','En Proceso','Contactado','Calificado','Negociación','Agendado','Reservado','Cerrado','Abandonado']};
+  if(!cfg.demo_automotora)cfg.demo_automotora={businessName:'RMG Autos',accentColor:'#3b82f6',stages:['Nuevo','En Proceso','Contactado','Calificado','Negociación','Agendado','Cotizado','Reservado','Despachado','Cerrado','Abandonado']};
   else if(cfg.demo_automotora.stages&&!cfg.demo_automotora.stages.includes('Reservado')){
     const ci=cfg.demo_automotora.stages.indexOf('Cerrado');
     if(ci!==-1)cfg.demo_automotora.stages.splice(ci,0,'Reservado');
     else cfg.demo_automotora.stages.push('Reservado');
   }
   if(!cfg.demo_clinica)cfg.demo_clinica={businessName:'Clínica Vital',accentColor:'#0d9488',stages:['Nuevo','En Proceso','Contactado','Agendado','Calificado','Atendido','Seguimiento','Cerrado','Abandonado']};
-  if(!cfg.rmg_parts_lubricantes)cfg.rmg_parts_lubricantes={businessName:'RMG Parts',industry:'lubricantes_baterias_neumaticos',currency:'CLP',accentColor:'#dc2626',stages:['Nuevo','En Proceso','Cotizado','Pedido Confirmado','Despachado','Cerrado','Abandonado']};
   await write(F.config,cfg);
   const bot=await read(F.bot);
   if(!bot.demo_clinica)bot.demo_clinica={greeting:'Hola 👋 Soy la asistente de Clínica Vital. ¿En qué te puedo ayudar?'};
-  if(!bot.rmg_parts_lubricantes)bot.rmg_parts_lubricantes={greeting:'¡Hola! 🙌 Soy Cata de RMG Parts. ¿Qué producto necesitas cotizar hoy — lubricantes, baterías o neumáticos?',enabled:true};
   await write(F.bot,bot);
   const inv=await read(F.inventory);
   if(!inv.demo_automotora)inv.demo_automotora=[];
   if(!inv.demo_clinica)inv.demo_clinica=[{id:'VIT-DERM',brand:'',model:'Hora Dermatología',stock:12,price:45000},{id:'VIT-GIN',brand:'',model:'Hora Ginecología',stock:9,price:50000},{id:'VIT-MG',brand:'',model:'Medicina General',stock:25,price:32000}];
-  if(!inv.rmg_parts_lubricantes)inv.rmg_parts_lubricantes=[];
   await write(F.inventory,inv);
   const spend=await read(F.spend);
   if(!spend.demo_automotora)spend.demo_automotora={'Meta Ads':1200000,'Google Ads':900000,'Chileautos':600000,'WhatsApp':0,'Instagram':350000,'Landing Page':0,'Referido':0};
   if(!spend.demo_clinica)spend.demo_clinica={'Meta Ads':620000,'Google Ads':880000,'Instagram':310000,'Landing Page':0};
-  if(!spend.rmg_parts_lubricantes)spend.rmg_parts_lubricantes={'Meta Ads':0,'Google Ads':0,'Instagram':0,'WhatsApp':0,'Landing Page':0,'Referido':0};
   await write(F.spend,spend);
   // 🛡️ AUTO-BORRADO DE LEADS DESACTIVADO POR SEGURIDAD
 }
@@ -1743,34 +1732,10 @@ app.post('/api/chileautos/webhook', async (req, res) => {
 
 app.get('/webhook',(req,res)=>{const vt=process.env.WA_VERIFY_TOKEN||'zara_token_123';if(req.query['hub.mode']==='subscribe'&&req.query['hub.verify_token']===vt)return res.status(200).send(req.query['hub.challenge']);res.sendStatus(403);});
 
-// ── Enrutamiento por negocio (RMG Autos vs RMG Parts) — mismo número de WhatsApp ──
-// Por defecto SIEMPRE 'demo_automotora' (RMG Autos) — el resultado de hoy, sin cambios.
-// Solo pasa a 'rmg_parts_lubricantes' si hay una señal clara. Nunca al revés.
-// IMPORTANTE: RMG_PARTS_AD_KEYWORDS es un heurístico genérico de arranque — en cuanto se
-// tenga el texto EXACTO del titular del anuncio o del saludo pre-armado del botón de
-// WhatsApp de la campaña de RMG Parts, hay que reemplazar/afinar esta lista con ese texto
-// literal para bajar el riesgo de falsos positivos/negativos.
-const RMG_PARTS_AD_KEYWORDS = ['rmg parts','lubricante','lubricantes','bateria','batería','neumatico','neumático','repuestos rmg'];
-
-function detectarTenantWA(adTracing, bodyText) {
-  try {
-    const campos = [adTracing?.headline, adTracing?.source_url].filter(Boolean).join(' ').toLowerCase();
-    if (campos && RMG_PARTS_AD_KEYWORDS.some(k => campos.includes(k))) return 'rmg_parts_lubricantes';
-    const texto = String(bodyText || '').toLowerCase();
-    if (texto && RMG_PARTS_AD_KEYWORDS.some(k => texto.includes(k))) return 'rmg_parts_lubricantes';
-  } catch (e) { console.warn('[detectarTenantWA] error:', e.message); }
-  return 'demo_automotora';
-}
-
-// Pegajosidad: si el número ya tiene una conversación abierta en algún tenant, se queda
-// ahí — no se re-evalúa la detección en cada mensaje. Solo se detecta en conversación nueva.
-function resolverTenantWA(from, adTracing, bodyText, ldAll) {
-  const fromClean = String(from || '').replace(/\D/g, '');
-  const enTenant = (t) => Array.isArray(ldAll?.[t]) && ldAll[t].some(l => l.phone && l.phone.replace(/\D/g, '').includes(fromClean));
-  if (enTenant('rmg_parts_lubricantes')) return 'rmg_parts_lubricantes';
-  if (enTenant('demo_automotora')) return 'demo_automotora';
-  return detectarTenantWA(adTracing, bodyText);
-}
+// ── RMG Parts (lubricantes/baterías/neumáticos) vive integrado en el mismo funnel
+// de RMG Autos: ya no hay tenant aparte ni detección por WhatsApp — todo el tráfico
+// de este número es 'demo_automotora', y es Cata (una sola bot, un solo prompt) la
+// que decide dentro de la conversación si la consulta es de autos o de RMG Parts.
 
 // --- PROXY DE MEDIA META ---
 app.get('/api/media/:mediaId', async (req, res) => {
@@ -1859,10 +1824,8 @@ app.post('/webhook',async(req,res)=>{
       media_type:referral.media_type||null,
     }:null;
 
-    // Se decide UNA vez por request, antes de cualquier ramal (multimedia o texto),
-    // para que ambos usen siempre el mismo tenant en el mismo mensaje.
     const ld = await read(F.leads);
-    const tenant = resolverTenantWA(from, adTracing, body, ld);
+    const tenant = 'demo_automotora';
 
     // --- MULTIMEDIA HANDLER V4 ---
     if (msg.type === 'image' || msg.type === 'audio') {

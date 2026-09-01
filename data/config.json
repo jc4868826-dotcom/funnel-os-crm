@@ -9,7 +9,9 @@
       "En Proceso",
       "Agendado",
       "Seguimiento",
+      "Cotizado",
       "Reservado",
+      "Despachado",
       "Cerrado",
       "Abandonado"
     ]
@@ -24,21 +26,6 @@
       "En Proceso",
       "Agendado",
       "Seguimiento",
-      "Cerrado",
-      "Abandonado"
-    ]
-  },
-  "rmg_parts_lubricantes": {
-    "businessName": "RMG Parts",
-    "industry": "lubricantes_baterias_neumaticos",
-    "currency": "CLP",
-    "accentColor": "#dc2626",
-    "stages": [
-      "Nuevo",
-      "En Proceso",
-      "Cotizado",
-      "Pedido Confirmado",
-      "Despachado",
       "Cerrado",
       "Abandonado"
     ]
