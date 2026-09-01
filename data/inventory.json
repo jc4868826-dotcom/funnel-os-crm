@@ -80,5 +80,29 @@
       "fuel": "Diésel",
       "highlights": "Garantía mecánica extendida, 3 corridas de asientos, SUV realmente premium, exquisito andar."
     }
-  ]
+  ],
+  "demo_clinica": [
+    {
+      "id": "VIT-DERM",
+      "brand": "",
+      "model": "Hora Dermatología",
+      "stock": 12,
+      "price": 45000
+    },
+    {
+      "id": "VIT-GIN",
+      "brand": "",
+      "model": "Hora Ginecología",
+      "stock": 9,
+      "price": 50000
+    },
+    {
+      "id": "VIT-MG",
+      "brand": "",
+      "model": "Medicina General",
+      "stock": 25,
+      "price": 32000
+    }
+  ],
+  "rmg_parts_lubricantes": []
 }

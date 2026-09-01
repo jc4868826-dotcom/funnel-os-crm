@@ -208,13 +208,17 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
 
     const contextBlock = sysNotes ? '<CONTEXTO_DEL_PORTAL>\n' + sysNotes + '\n</CONTEXTO_DEL_PORTAL>' : '';
 
+    // El bloque <INVENTARIO_DISPONIBLE> es específico de autos (marca/modelo/km/precio de
+    // rmgautos.cl) — no aplica a rmg_parts_lubricantes, que consulta productos reales vía
+    // buscar_producto_rmg_parts/buscar_producto_tecnico. Se omite para no confundir al modelo
+    // con un bloque de "sin inventario disponible" que no tiene relación con esas funciones.
     const sysPromptFinal = [
       '<INSTRUCCIONES_DEL_SISTEMA>',
       instrucciones,
       behaviorBlock,
       '</INSTRUCCIONES_DEL_SISTEMA>',
       contextBlock || null,
-      invBlock
+      RMG_PARTS_TOOLS_TENANTS.has(tenant) ? null : invBlock
     ].filter(Boolean).join('\n\n');
 
     let msgsIA = [
@@ -223,11 +227,17 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
       { role: 'user', content: msg }
     ];
 
+    // RMG Autos (autos) sigue usando exactamente INVENTORY_TOOL, sin cambios.
+    // Solo el tenant rmg_parts_lubricantes usa las herramientas nuevas de RMG Parts.
+    const toolsForTenant = RMG_PARTS_TOOLS_TENANTS.has(tenant)
+      ? [RMG_PARTS_PRODUCT_TOOL, RMG_PARTS_TECH_TOOL, RMG_PARTS_PEDIDO_TOOL]
+      : [INVENTORY_TOOL];
+
     let completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       temperature: 0.6,
       messages: msgsIA,
-      tools: [INVENTORY_TOOL],
+      tools: toolsForTenant,
       tool_choice: 'auto'
     });
 
@@ -237,18 +247,27 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
       msgsIA.push(respMsgIA);
       for (const toolCall of respMsgIA.tool_calls) {
         let resultadoTool = { error: 'función no reconocida' };
-        if (toolCall.function?.name === 'buscar_inventario') {
-          let filtrosTool = {};
-          try { filtrosTool = JSON.parse(toolCall.function.arguments || '{}'); } catch(eParse) { console.warn('[marcela] Error parseando argumentos de tool:', eParse.message); }
-          try { resultadoTool = buscarInventario(filtrosTool); } catch(eBusq) { console.error('[marcela] Error en buscarInventario:', eBusq.message); resultadoTool = { error: 'error interno buscando inventario' }; }
-        }
+        const fname = toolCall.function?.name;
+        let filtrosTool = {};
+        try { filtrosTool = JSON.parse(toolCall.function.arguments || '{}'); } catch(eParse) { console.warn('[marcela] Error parseando argumentos de tool:', eParse.message); }
+        try {
+          if (fname === 'buscar_inventario') {
+            resultadoTool = buscarInventario(filtrosTool);
+          } else if (fname === 'buscar_producto_rmg_parts') {
+            resultadoTool = await buscarProductoRmgParts(filtrosTool);
+          } else if (fname === 'buscar_producto_tecnico') {
+            resultadoTool = await buscarProductoTecnico(filtrosTool);
+          } else if (fname === 'consultar_estado_pedido') {
+            resultadoTool = await consultarEstadoPedido(filtrosTool);
+          }
+        } catch(eBusq) { console.error('[marcela] Error en tool', fname, ':', eBusq.message); resultadoTool = { error: 'error interno ejecutando la función' }; }
         msgsIA.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(resultadoTool) });
       }
       completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         temperature: 0.6,
         messages: msgsIA,
-        tools: [INVENTORY_TOOL],
+        tools: toolsForTenant,
         tool_choice: 'auto'
       });
       respMsgIA = completion.choices[0].message;
@@ -262,7 +281,7 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
   }
 }
 const F={users:path.join(DATA,'users.json'),leads:path.join(DATA,'leads.json'),config:path.join(DATA,'config.json'),bot:path.join(__dirname,'bot.json'),inventory:path.join(DATA,'inventory.json'),rr:path.join(DATA,'rr.json'),spend:path.join(DATA,'spend.json')};
-const TENANTS=['demo_automotora','demo_clinica'];
+const TENANTS=['demo_automotora','demo_clinica','rmg_parts_lubricantes'];
 const sessions=new Map();
 const chatSessions=new Map();
 // ── DEBOUNCE: acumula mensajes del mismo número por 5s antes de responder ──
@@ -376,6 +395,174 @@ function buscarInventario(filtros = {}) {
     modelos: Object.values(grupos)
   };
 }
+
+// ── RMG Parts (Cata Lubricantes) — consulta al ERP de RMG Parts, servidor a servidor ──
+// Sistema separado de RMG Autos. Estas funciones SOLO se activan para el tenant
+// 'rmg_parts_lubricantes' (ver toolsForTenant en marcela()) — no tocan ni comparten
+// caché con el inventario de autos (scrapeCache) de RMG Autos.
+const RMG_PARTS_API_URL = (process.env.RMG_PARTS_API_URL || 'https://rmg-parts-erp.onrender.com').replace(/\/$/, '');
+const RMG_PARTS_API_KEY = process.env.RMG_PARTS_API_KEY || '';
+
+let _rmgPartsCatalogoCache = { ts: 0, data: [] };
+async function _getRmgPartsCatalogoPrecios() {
+  const now = Date.now();
+  if (_rmgPartsCatalogoCache.data.length && (now - _rmgPartsCatalogoCache.ts) < 30 * 60 * 1000) return _rmgPartsCatalogoCache.data;
+  try {
+    const r = await fetch(RMG_PARTS_API_URL + '/api/public/catalogo-precios', {
+      headers: { 'x-api-key': RMG_PARTS_API_KEY },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!r.ok) { console.warn('[RMG-Parts] catalogo-precios respondió', r.status); return _rmgPartsCatalogoCache.data; }
+    const data = await r.json();
+    if (Array.isArray(data)) _rmgPartsCatalogoCache = { ts: now, data };
+    return _rmgPartsCatalogoCache.data;
+  } catch (e) { console.warn('[RMG-Parts] Error catalogo-precios:', e.message); return _rmgPartsCatalogoCache.data; }
+}
+
+let _rmgPartsIngenieriaCache = { ts: 0, data: [] };
+async function _getRmgPartsCatalogoIngenieria() {
+  const now = Date.now();
+  if (_rmgPartsIngenieriaCache.data.length && (now - _rmgPartsIngenieriaCache.ts) < 60 * 60 * 1000) return _rmgPartsIngenieriaCache.data;
+  try {
+    const r = await fetch(RMG_PARTS_API_URL + '/api/public/catalogo-ingenieria', { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) { console.warn('[RMG-Parts] catalogo-ingenieria respondió', r.status); return _rmgPartsIngenieriaCache.data; }
+    const data = await r.json();
+    if (Array.isArray(data)) _rmgPartsIngenieriaCache = { ts: now, data };
+    return _rmgPartsIngenieriaCache.data;
+  } catch (e) { console.warn('[RMG-Parts] Error catalogo-ingenieria:', e.message); return _rmgPartsIngenieriaCache.data; }
+}
+
+async function buscarProductoRmgParts(filtros = {}) {
+  try {
+    const all = await _getRmgPartsCatalogoPrecios();
+    if (!all.length) return { error: 'catálogo de RMG Parts no disponible por el momento' };
+    const norm = s => String(s || '').toUpperCase();
+    const items = all.filter(p => {
+      if (filtros.categoria && !norm(p.categoria).includes(norm(filtros.categoria))) return false;
+      if (filtros.marca && norm(p.marca) !== norm(filtros.marca)) return false;
+      if (filtros.segmento && !norm(p.segmento_negocio).includes(norm(filtros.segmento))) return false;
+      if (filtros.texto_libre && !norm(p.descripcion).includes(norm(filtros.texto_libre)) && !norm(p.codigo_sku).includes(norm(filtros.texto_libre))) return false;
+      if (typeof filtros.precioMax === 'number' && (p.precio_venta_neto || 0) > filtros.precioMax) return false;
+      if (typeof filtros.precioMin === 'number' && (p.precio_venta_neto || 0) < filtros.precioMin) return false;
+      return true;
+    });
+    return {
+      total: items.length,
+      productos: items.slice(0, 15).map(p => ({
+        sku: p.codigo_sku, descripcion: p.descripcion, marca: p.marca,
+        categoria: p.categoria, presentacion: p.presentacion,
+        precio_venta_neto: p.precio_venta_neto
+      }))
+    };
+  } catch (e) { console.error('[RMG-Parts] buscarProductoRmgParts:', e.message); return { error: 'error interno buscando producto' }; }
+}
+
+async function buscarProductoTecnico(filtros = {}) {
+  try {
+    const especTxt = String(filtros.especificacion || '').toUpperCase().trim();
+    if (!especTxt) return { error: 'falta especificacion' };
+    const ing = await _getRmgPartsCatalogoIngenieria();
+    if (!ing.length) return { error: 'catálogo técnico no disponible por el momento' };
+    const palabras = especTxt.split(/\s+/).filter(w => w.length > 2);
+    const matches = ing.filter(r => {
+      const comp = String(r['Composición (Ingeniería)'] || '').toUpperCase();
+      const res = String(r['Resistencia Técnica / Aplicación'] || '').toUpperCase();
+      const fam = String(r['Familia'] || '').toUpperCase();
+      if (filtros.categoria && !fam.includes(String(filtros.categoria).toUpperCase())) return false;
+      return comp.includes(especTxt) || res.includes(especTxt) || palabras.some(w => comp.includes(w) || res.includes(w));
+    });
+    const precios = await _getRmgPartsCatalogoPrecios();
+    const resultados = matches.slice(0, 10).map(m => {
+      const linea = String(m['Línea'] || '').toUpperCase();
+      const p = linea ? precios.find(pr => String(pr.descripcion || '').toUpperCase().includes(linea)) : null;
+      return {
+        linea: m['Línea'] || null,
+        familia: m['Familia'] || null,
+        subfamilia: m['Subfamilia'] || null,
+        composicion: m['Composición (Ingeniería)'] || 'No especificada por proveedor',
+        resistencia_tecnica: m['Resistencia Técnica / Aplicación'] || 'No especificada por proveedor',
+        sku: p ? p.codigo_sku : null,
+        marca: p ? p.marca : null,
+        precio_venta_neto: p ? p.precio_venta_neto : null,
+        presentacion: p ? p.presentacion : null
+      };
+    });
+    return { total: resultados.length, resultados };
+  } catch (e) { console.error('[RMG-Parts] buscarProductoTecnico:', e.message); return { error: 'error interno buscando especificación técnica' }; }
+}
+
+async function consultarEstadoPedido(filtros = {}) {
+  try {
+    const { rut, numero_pedido, nombre_completo } = filtros;
+    if (!rut || (!numero_pedido && !nombre_completo)) {
+      return { error: 'faltan datos: se requiere rut y (numero_pedido o nombre_completo)' };
+    }
+    const qs = new URLSearchParams({ rut: String(rut) });
+    if (numero_pedido) qs.set('numero', String(numero_pedido));
+    if (nombre_completo) qs.set('nombre', String(nombre_completo));
+    const r = await fetch(RMG_PARTS_API_URL + '/api/public/pedido-estado?' + qs.toString(), {
+      headers: { 'x-api-key': RMG_PARTS_API_KEY },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!r.ok) return { error: 'no se pudo consultar el pedido en este momento' };
+    return await r.json();
+  } catch (e) { console.error('[RMG-Parts] consultarEstadoPedido:', e.message); return { error: 'no se pudo consultar el pedido en este momento' }; }
+}
+
+const RMG_PARTS_PRODUCT_TOOL = {
+  type: 'function',
+  function: {
+    name: 'buscar_producto_rmg_parts',
+    description: 'Busca productos reales de RMG Parts (lubricantes, grasas, baterías, neumáticos, refrigerantes, líquido de frenos) con precio mayorista neto real. Úsala siempre que el cliente pregunte por un producto, categoría, marca o rango de precio. Nunca cites precios de memoria.',
+    parameters: {
+      type: 'object',
+      properties: {
+        categoria: { type: 'string', description: "Categoría del producto, ej: 'Lubricante', 'Bateria', 'Neumatico', 'Grasa', 'Refrigerante'. Opcional." },
+        marca: { type: 'string', description: "Marca, ej: 'Vistony', 'Platin', 'Auster', 'Kumho'. Opcional." },
+        segmento: { type: 'string', description: "Segmento del cliente: 'Talleres', 'Flotas', 'Construccion', 'Industria', 'Concesionarios'. Opcional." },
+        texto_libre: { type: 'string', description: 'Texto libre de búsqueda, ej: "15W40", "205/55R16", "60Ah". Opcional.' },
+        precioMax: { type: 'number', description: 'Precio neto máximo en CLP. Opcional.' },
+        precioMin: { type: 'number', description: 'Precio neto mínimo en CLP. Opcional.' }
+      }
+    }
+  }
+};
+
+const RMG_PARTS_TECH_TOOL = {
+  type: 'function',
+  function: {
+    name: 'buscar_producto_tecnico',
+    description: 'Busca productos de RMG Parts por especificación técnica (resistencia a temperatura, composición, NLGI, ISO VG, SAE, certificación) usando el catálogo de ingeniería real de RMG Parts. Úsala cuando el cliente haga una pregunta técnica puntual (ej: "¿tienen algo que resista 200°C?"), no solo de categoría o precio. Si un producto candidato no tiene el dato confirmado, la función lo indica explícitamente como "No especificada por proveedor" — en ese caso nunca inventes ni asumas el número, dilo tal cual y ofrece derivar a un ejecutivo.',
+    parameters: {
+      type: 'object',
+      properties: {
+        especificacion: { type: 'string', description: 'Palabra o frase clave técnica a buscar, ej: "200°C", "punto de goteo", "NLGI 2", "ISO 46", "extrema presión", "DOT 4". Requerido.' },
+        categoria: { type: 'string', description: "Familia de producto para acotar la búsqueda, ej: 'GRASAS', 'LUBRICANTES'. Opcional." }
+      },
+      required: ['especificacion']
+    }
+  }
+};
+
+const RMG_PARTS_PEDIDO_TOOL = {
+  type: 'function',
+  function: {
+    name: 'consultar_estado_pedido',
+    description: 'Consulta el estado de despacho de un pedido de RMG Parts (número, estado, fecha de entrega programada/real, guía de despacho). Requiere el RUT del cliente MÁS (número de pedido O nombre completo) — nunca alcanza con uno solo. Úsala cuando el cliente pregunte si le despacharon su pedido o si viene en camino, incluso si escribe desde un número de WhatsApp distinto al que tiene registrado. Nunca confirmes ni inventes un estado sin haber llamado a esta función.',
+    parameters: {
+      type: 'object',
+      properties: {
+        rut: { type: 'string', description: 'RUT del cliente, con o sin puntos/guión. Requerido.' },
+        numero_pedido: { type: 'string', description: 'Número de pedido, ej: "PED-2026-014". Entregar si el cliente lo tiene a mano; si no, usar nombre_completo.' },
+        nombre_completo: { type: 'string', description: 'Nombre completo o razón social del cliente. Alternativa a numero_pedido.' }
+      },
+      required: ['rut']
+    }
+  }
+};
+
+// Tenants cuyo bot usa las herramientas de RMG Parts en vez de buscar_inventario (autos).
+const RMG_PARTS_TOOLS_TENANTS = new Set(['rmg_parts_lubricantes']);
 
 const INVENTORY_TOOL = {
   type: 'function',
@@ -840,6 +1027,7 @@ async function seed(){
     // BLOQUEADO: no recrear vendors demo automaticamente
   }
   if(!users.demo_clinica)users.demo_clinica=[{username:'gerente',password:'demo',name:'Dr. Hernán Vidal',role:'admin',phone:'56912000010',status:'Activo'},{username:'vendedor1',password:'demo',name:'Karina Bravo',role:'vendedor',phone:'56912000011',status:'Activo'},{username:'recepcion',password:'demo',name:'Marcela Tapia',role:'secretaria',phone:'56912000012',status:'Activo'}];
+  if(!users.rmg_parts_lubricantes)users.rmg_parts_lubricantes=[{username:'gerente',password:'demo',name:'Equipo RMG Parts',role:'admin',phone:'56912000020',status:'Activo'},{username:'vendedor1',password:'demo',name:'Vendedor RMG Parts',role:'vendedor',phone:'56912000021',status:'Activo'}];
   await write(F.users,users);
   const cfg=await read(F.config);
   if(!cfg.demo_automotora)cfg.demo_automotora={businessName:'RMG Autos',accentColor:'#3b82f6',stages:['Nuevo','En Proceso','Contactado','Calificado','Negociación','Agendado','Reservado','Cerrado','Abandonado']};
@@ -849,17 +1037,21 @@ async function seed(){
     else cfg.demo_automotora.stages.push('Reservado');
   }
   if(!cfg.demo_clinica)cfg.demo_clinica={businessName:'Clínica Vital',accentColor:'#0d9488',stages:['Nuevo','En Proceso','Contactado','Agendado','Calificado','Atendido','Seguimiento','Cerrado','Abandonado']};
+  if(!cfg.rmg_parts_lubricantes)cfg.rmg_parts_lubricantes={businessName:'RMG Parts',industry:'lubricantes_baterias_neumaticos',currency:'CLP',accentColor:'#dc2626',stages:['Nuevo','En Proceso','Cotizado','Pedido Confirmado','Despachado','Cerrado','Abandonado']};
   await write(F.config,cfg);
   const bot=await read(F.bot);
   if(!bot.demo_clinica)bot.demo_clinica={greeting:'Hola 👋 Soy la asistente de Clínica Vital. ¿En qué te puedo ayudar?'};
+  if(!bot.rmg_parts_lubricantes)bot.rmg_parts_lubricantes={greeting:'¡Hola! 🙌 Soy Cata de RMG Parts. ¿Qué producto necesitas cotizar hoy — lubricantes, baterías o neumáticos?',enabled:true};
   await write(F.bot,bot);
   const inv=await read(F.inventory);
   if(!inv.demo_automotora)inv.demo_automotora=[];
   if(!inv.demo_clinica)inv.demo_clinica=[{id:'VIT-DERM',brand:'',model:'Hora Dermatología',stock:12,price:45000},{id:'VIT-GIN',brand:'',model:'Hora Ginecología',stock:9,price:50000},{id:'VIT-MG',brand:'',model:'Medicina General',stock:25,price:32000}];
+  if(!inv.rmg_parts_lubricantes)inv.rmg_parts_lubricantes=[];
   await write(F.inventory,inv);
   const spend=await read(F.spend);
   if(!spend.demo_automotora)spend.demo_automotora={'Meta Ads':1200000,'Google Ads':900000,'Chileautos':600000,'WhatsApp':0,'Instagram':350000,'Landing Page':0,'Referido':0};
   if(!spend.demo_clinica)spend.demo_clinica={'Meta Ads':620000,'Google Ads':880000,'Instagram':310000,'Landing Page':0};
+  if(!spend.rmg_parts_lubricantes)spend.rmg_parts_lubricantes={'Meta Ads':0,'Google Ads':0,'Instagram':0,'WhatsApp':0,'Landing Page':0,'Referido':0};
   await write(F.spend,spend);
   // 🛡️ AUTO-BORRADO DE LEADS DESACTIVADO POR SEGURIDAD
 }
@@ -1551,6 +1743,35 @@ app.post('/api/chileautos/webhook', async (req, res) => {
 
 app.get('/webhook',(req,res)=>{const vt=process.env.WA_VERIFY_TOKEN||'zara_token_123';if(req.query['hub.mode']==='subscribe'&&req.query['hub.verify_token']===vt)return res.status(200).send(req.query['hub.challenge']);res.sendStatus(403);});
 
+// ── Enrutamiento por negocio (RMG Autos vs RMG Parts) — mismo número de WhatsApp ──
+// Por defecto SIEMPRE 'demo_automotora' (RMG Autos) — el resultado de hoy, sin cambios.
+// Solo pasa a 'rmg_parts_lubricantes' si hay una señal clara. Nunca al revés.
+// IMPORTANTE: RMG_PARTS_AD_KEYWORDS es un heurístico genérico de arranque — en cuanto se
+// tenga el texto EXACTO del titular del anuncio o del saludo pre-armado del botón de
+// WhatsApp de la campaña de RMG Parts, hay que reemplazar/afinar esta lista con ese texto
+// literal para bajar el riesgo de falsos positivos/negativos.
+const RMG_PARTS_AD_KEYWORDS = ['rmg parts','lubricante','lubricantes','bateria','batería','neumatico','neumático','repuestos rmg'];
+
+function detectarTenantWA(adTracing, bodyText) {
+  try {
+    const campos = [adTracing?.headline, adTracing?.source_url].filter(Boolean).join(' ').toLowerCase();
+    if (campos && RMG_PARTS_AD_KEYWORDS.some(k => campos.includes(k))) return 'rmg_parts_lubricantes';
+    const texto = String(bodyText || '').toLowerCase();
+    if (texto && RMG_PARTS_AD_KEYWORDS.some(k => texto.includes(k))) return 'rmg_parts_lubricantes';
+  } catch (e) { console.warn('[detectarTenantWA] error:', e.message); }
+  return 'demo_automotora';
+}
+
+// Pegajosidad: si el número ya tiene una conversación abierta en algún tenant, se queda
+// ahí — no se re-evalúa la detección en cada mensaje. Solo se detecta en conversación nueva.
+function resolverTenantWA(from, adTracing, bodyText, ldAll) {
+  const fromClean = String(from || '').replace(/\D/g, '');
+  const enTenant = (t) => Array.isArray(ldAll?.[t]) && ldAll[t].some(l => l.phone && l.phone.replace(/\D/g, '').includes(fromClean));
+  if (enTenant('rmg_parts_lubricantes')) return 'rmg_parts_lubricantes';
+  if (enTenant('demo_automotora')) return 'demo_automotora';
+  return detectarTenantWA(adTracing, bodyText);
+}
+
 // --- PROXY DE MEDIA META ---
 app.get('/api/media/:mediaId', async (req, res) => {
   try {
@@ -1638,11 +1859,14 @@ app.post('/webhook',async(req,res)=>{
       media_type:referral.media_type||null,
     }:null;
 
+    // Se decide UNA vez por request, antes de cualquier ramal (multimedia o texto),
+    // para que ambos usen siempre el mismo tenant en el mismo mensaje.
+    const ld = await read(F.leads);
+    const tenant = resolverTenantWA(from, adTracing, body, ld);
+
     // --- MULTIMEDIA HANDLER V4 ---
     if (msg.type === 'image' || msg.type === 'audio') {
       const contactName = val.contacts?.[0]?.profile?.name || 'WhatsApp Lead';
-      const tenant = 'demo_automotora';
-      const ld = await read(F.leads);
       if (!ld[tenant]) ld[tenant] = [];
       let idx = ld[tenant].findIndex(l => l.phone && l.phone.replace(/\D/g, '').includes(from.replace(/\D/g, '')));
       
@@ -1907,8 +2131,8 @@ app.post('/webhook',async(req,res)=>{
       }
       return;
     }
-    const contactName=val.contacts?.[0]?.profile?.name||'WhatsApp Lead';const tenant='demo_automotora';
-    const ld=await read(F.leads);if(!ld[tenant])ld[tenant]=[];
+    const contactName=val.contacts?.[0]?.profile?.name||'WhatsApp Lead';
+    if(!ld[tenant])ld[tenant]=[];
     let idx=ld[tenant].findIndex(l=>l.phone&&l.phone.replace(/\D/g,'').includes(from.replace(/\D/g,'')));
     if(idx===-1){
       const assignedObj=await getDefaultAssignee(tenant);const n=new Date().toISOString();

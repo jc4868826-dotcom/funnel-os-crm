@@ -27,5 +27,20 @@
       "Cerrado",
       "Abandonado"
     ]
+  },
+  "rmg_parts_lubricantes": {
+    "businessName": "RMG Parts",
+    "industry": "lubricantes_baterias_neumaticos",
+    "currency": "CLP",
+    "accentColor": "#dc2626",
+    "stages": [
+      "Nuevo",
+      "En Proceso",
+      "Cotizado",
+      "Pedido Confirmado",
+      "Despachado",
+      "Cerrado",
+      "Abandonado"
+    ]
   }
 }
