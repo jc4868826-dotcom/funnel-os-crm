@@ -64,7 +64,13 @@ async function notifyTenantPush(tenant,leads){
 app.use(express.json({limit:'2mb'}));
 app.use((req,res,next)=>{res.header('Access-Control-Allow-Origin','*');res.header('Access-Control-Allow-Headers','Content-Type,X-Auth-Token,Authorization');res.header('Access-Control-Allow-Methods','GET,POST,PUT,PATCH,DELETE,OPTIONS');if(req.method==='OPTIONS')return res.sendStatus(200);next();});
 
-function applySignal(lead, p) { if (p && p.intent_signal && p.intent_signal !== 'NONE') { lead.intentSignal = p.intent_signal; } }
+function applySignal(lead, p) {
+  if (p && p.intent_signal && p.intent_signal !== 'NONE') { lead.intentSignal = p.intent_signal; }
+  // Sub-mundo RMG Parts: una vez que Cata usó alguna herramienta de RMG Parts en la
+  // conversación, el lead queda marcado para la vista "RMG Parts" del dashboard.
+  // Es "pegajoso": no se vuelve a poner en false aunque después hable de autos.
+  if (p && p.esRmgParts === true) { lead.isRmgParts = true; }
+}
 function esKeywordCalif(text) { if(!text) return false; const t = text.toLowerCase(); return t.includes('credito') || t.includes('crédito') || t.includes('financiamiento') || t.includes('retoma') || t.includes('pie'); }
 // ── alertStaff: WA + Push en paralelo ──
 async function alertStaff(tenant, userObj, title, body) {
@@ -240,11 +246,14 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
 
     let respMsgIA = completion.choices[0].message;
     let vueltasTool = 0;
+    const RMG_PARTS_TOOL_NAMES = new Set(['buscar_producto_rmg_parts', 'buscar_producto_tecnico', 'consultar_estado_pedido']);
+    let usedRmgPartsTool = false;
     while (respMsgIA.tool_calls && respMsgIA.tool_calls.length > 0 && vueltasTool < 2) {
       msgsIA.push(respMsgIA);
       for (const toolCall of respMsgIA.tool_calls) {
         let resultadoTool = { error: 'función no reconocida' };
         const fname = toolCall.function?.name;
+        if (RMG_PARTS_TOOL_NAMES.has(fname)) usedRmgPartsTool = true;
         let filtrosTool = {};
         try { filtrosTool = JSON.parse(toolCall.function.arguments || '{}'); } catch(eParse) { console.warn('[marcela] Error parseando argumentos de tool:', eParse.message); }
         try {
@@ -271,7 +280,7 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
       vueltasTool++;
     }
 
-    return { reply: respMsgIA.content, intent_signal: 'NONE' };
+    return { reply: respMsgIA.content, intent_signal: 'NONE', esRmgParts: usedRmgPartsTool };
   } catch(e) {
     console.error('[Marcela-Crash]:', e.message);
     return { reply: 'Dame un segundito, estoy validando la info en el sistema...', intent_signal: 'NONE' };
@@ -1223,7 +1232,7 @@ app.patch('/api/leads/:id',auth(),async(req,res)=>{
   const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);
   if(idx===-1)return res.status(404).json({error:'No encontrado'});
   if(req.user.role==='vendedor'&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});
-  const ALLOWED=['status','interest','name','phone','botActive','nextAction','pastActions','source','lastClientTs','lastInteraction','createdAt'];if(req.user.role==='admin'||req.user.role==='supervisor')ALLOWED.push('assignedTo','isCompraRmg');
+  const ALLOWED=['status','interest','name','phone','botActive','nextAction','pastActions','source','lastClientTs','lastInteraction','createdAt'];if(req.user.role==='admin'||req.user.role==='supervisor')ALLOWED.push('assignedTo','isCompraRmg','isRmgParts');
   // Borrado individual via patch status '_delete_'
   if(req.body.status==='_delete_'){
     const before=leads.length;
@@ -1869,6 +1878,7 @@ app.post('/webhook',async(req,res)=>{
           const assignedUserIMG = allUsersIMG.find(u => u.username === ld[tenant][idx].assignedTo) || RMG_VENDORS.find(v => v.username === ld[tenant][idx].assignedTo);
           const assignedNameIMG = ld[tenant][idx].botPersona || assignedUserIMG?.name || 'Cata';
           const pImg = await marcela(tenant, ld[tenant][idx].chatHistory.slice(0, -1), photoBody, ld[tenant][idx].notes, assignedNameIMG, ld[tenant][idx].source);
+          applySignal(ld[tenant][idx], pImg);
           if (pImg.reply && pImg.reply.trim()) {
             ld[tenant][idx].chatHistory.push({ role: 'bot', content: pImg.reply, ts: Date.now() });
             await tWrite(F.leads, tenant, ld[tenant]);

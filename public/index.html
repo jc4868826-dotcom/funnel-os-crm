@@ -649,7 +649,7 @@ async function ejecutarAnalisisIA(){
 </div>
 </div>
 <div id="av" class="app" style="display:none">
-<aside class="sb"><h1 id="bizName">FunnelOS</h1><div class="who" id="uBadge">—</div><nav><button class="active" data-view="dashboard">📊 Operación</button><button data-view="leads">📋 Leads</button><button data-view="chileautos" id="navCA" style="background:#e8f5e9;color:#2e7d32;font-weight:700">🏷 Chileautos</button><button data-view="espera-general" id="navEG" style="background:#ede9fe;color:#6d28d9;font-weight:700;display:none">⏳ En Espera</button><button data-view="compras" id="navCompras" style="background:#fff7ed;color:#d97706;font-weight:700">🛍 Compras RMG</button>
+<aside class="sb"><h1 id="bizName">FunnelOS</h1><div class="who" id="uBadge">—</div><nav><button class="active" data-view="dashboard">📊 Operación</button><button data-view="leads">📋 Leads</button><button data-view="chileautos" id="navCA" style="background:#e8f5e9;color:#2e7d32;font-weight:700">🏷 Chileautos</button><button data-view="espera-general" id="navEG" style="background:#ede9fe;color:#6d28d9;font-weight:700;display:none">⏳ En Espera</button><button data-view="compras" id="navCompras" style="background:#fff7ed;color:#d97706;font-weight:700">🛍 Compras RMG</button><button data-view="rmgparts" id="navRmgParts" style="background:#fef3c7;color:#b45309;font-weight:700">🛢 RMG Parts</button>
 <button data-view="pipeline">🗂 Pipeline</button><button data-view="analytics" id="navA">📈 Analítica</button><button data-view="team" id="navT">👥 Equipo</button><button data-view="inventario" id="navInv">🚗 Inventario</button><button data-view="bi" id="navBI" style="background:linear-gradient(135deg,#1a1a2e,#16213e);color:#a78bfa;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🧠 BI</button><button data-view="analisis" id="navAnalisis" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🔍 Análisis IA</button><button data-view="auditoria" id="navAuditoria" style="background:linear-gradient(135deg,#0f766e,#0891b2);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🔍 Auditoría</button><button data-view="reporte" id="navReporte" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">📊 Reporte</button><button data-view="config" id="navC">⚙️ Config</button></nav><button onclick="syncInventario()" style="margin-top:6px;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:8px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" id="btnSyncInv">🔄 Sync RMG</button>
 <button id="btnInstallApp" onclick="installApp()" style="display:none;margin-top:8px;background:linear-gradient(135deg,#D4A843,#F2C955);color:#0f172a;border:none;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;align-items:center;gap:6px;letter-spacing:.04em">📲 Instalar App</button>
 <button class="lout" id="loutB">Cerrar sesión</button></aside>
@@ -835,6 +835,15 @@ async function ejecutarAnalisisIA(){
 <div id="compras-analitica" style="display:none;">
     <div id="compras-analitica-box"></div>
 </div>
+</section>
+<section id="view-rmgparts" class="view">
+<div class="st" style="color:#b45309;margin-bottom:4px">🛢 RMG Parts — Lubricantes, Baterías y Neumáticos</div>
+<div style="font-size:13px;color:var(--tm);margin-bottom:14px">Los mismos leads del funnel de RMG Autos, filtrados a las conversaciones donde Cata detectó una consulta de RMG Parts. Mismo pipeline, mismo login — esta es solo una vista rápida.</div>
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+  <input id="rmgpSearch" oninput="renderRmgParts()" placeholder="🔍 Buscar nombre, teléfono, producto..." style="background:var(--p2);border:1px solid var(--bd);color:var(--tx);padding:6px 10px;border-radius:7px;font-family:inherit;font-size:12px;width:100%;max-width:280px">
+  <span id="rmgpCount" style="font-size:11px;color:var(--tm);margin-left:auto"></span>
+</div>
+<div class="tw" id="rmgpTbl"></div>
 </section>
 <section id="view-pipeline" class="view"><div class="st">Pipeline Kanban</div><div class="kb" id="kbn"></div><div class="cw"><div class="bt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">Agenda de la Semana<div class="cal-nav" style="display:flex;align-items:center;gap:6px"><button id="calPrev" style="background:var(--p2);border:1px solid var(--bd);color:var(--ts);padding:5px 11px;border-radius:7px;font-size:12px;cursor:pointer;font-family:inherit">&laquo; Anterior</button><button id="calHoy" style="background:var(--ac);color:#fff;border:none;padding:5px 11px;border-radius:7px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">Hoy</button><button id="calNext" style="background:var(--p2);border:1px solid var(--bd);color:var(--ts);padding:5px 11px;border-radius:7px;font-size:12px;cursor:pointer;font-family:inherit">Siguiente &raquo;</button></div></div><div style="overflow-x:auto;width:100%"><div class="cg" id="calG" style="width:100%"></div></div></div></section>
 <section id="view-analytics" class="view"><div class="st">Analítica de Canales</div><div class="ct" id="chBx"></div></section>
@@ -1283,7 +1292,7 @@ async function requestNotifPermission(){
 
 function renderDashVendedor(){if(!S.vendKpi)return;const k=S.vendKpi;const scF=$('scF'),scR=$('scR'),scC=$('scC'),scRS=$('scRS');if(scF)scF.textContent=k.sla?.fresh??'—';if(scR)scR.textContent=k.sla?.risk??'—';if(scC)scC.textContent=k.sla?.critical??'—';if(scRS)scRS.textContent=k.sla?.reassigned??'—';renderFunnel();}
 function isAdminOrSup(){return S.user?.role==='admin'||S.user?.role==='supervisor';}
-function renderAll(){const isA=S.user?.role==='admin';const isAorSup2=isA||S.user?.role==='supervisor';if(isA)renderDash();else renderDashVendedor();renderLeads();renderChileautos();renderEsperaGeneral();renderKanban(); if(typeof renderComprasFull === "function") renderComprasFull();renderCalendar();if(isAorSup2){renderAnalytics();renderTeam();}if(S.mid&&$('mbg').classList.contains('show'))refreshModalSilent();if(S.slaOpen)renderSlaPanel(S.slaOpen);if(S.funOpen)renderFunPanel(S.funOpen);try{checkNotifications();}catch(e){}}
+function renderAll(){const isA=S.user?.role==='admin';const isAorSup2=isA||S.user?.role==='supervisor';if(isA)renderDash();else renderDashVendedor();renderLeads();renderRmgParts();renderChileautos();renderEsperaGeneral();renderKanban(); if(typeof renderComprasFull === "function") renderComprasFull();renderCalendar();if(isAorSup2){renderAnalytics();renderTeam();}if(S.mid&&$('mbg').classList.contains('show'))refreshModalSilent();if(S.slaOpen)renderSlaPanel(S.slaOpen);if(S.funOpen)renderFunPanel(S.funOpen);try{checkNotifications();}catch(e){}}
 
 function normLeads(){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(S.leads||[]).filter(l=>l.isCompraRmg!==true&&!FC.includes((l.source||'').trim()));}
 
@@ -1350,6 +1359,45 @@ function renderLeads(){
 
   $('lTbl').innerHTML=hd+rows;
   $('lTbl').querySelectorAll('.tr2[data-id]').forEach(el=>el.addEventListener('click',()=>openModal(+el.dataset.id)));
+}
+
+function renderRmgParts(){
+  const tbl=document.getElementById('rmgpTbl');
+  if(!tbl)return;
+  const gc='grid-template-columns:22px 14px 1.4fr .9fr 1.1fr .85fr .85fr 1.2fr .75fr';
+  const hd=`<div class="tr2 hd" style="${gc}"><div></div><div></div><div>Nombre</div><div>Tel.</div><div>Producto</div><div>Canal</div><div>Asignado</div><div>Estado</div><div>Última</div></div>`;
+  const filtSearch=document.getElementById('rmgpSearch')?.value.toLowerCase().trim()||'';
+  let leads=(S.leads||[]).filter(l=>l.isRmgParts===true);
+  if(filtSearch) leads=leads.filter(l=>(l.name||'').toLowerCase().includes(filtSearch)||(l.phone||'').includes(filtSearch)||(l.interest||'').toLowerCase().includes(filtSearch));
+
+  leads.sort((a,b)=>{
+    if(a.unread&&!b.unread)return -1;
+    if(!a.unread&&b.unread)return 1;
+    return new Date(b.lastClientTs||b.lastInteraction||0)-new Date(a.lastClientTs||a.lastInteraction||0);
+  });
+
+  const countEl=document.getElementById('rmgpCount');
+  if(countEl)countEl.textContent=`${leads.length} lead${leads.length!==1?'s':''}`;
+
+  const rows=leads.length?leads.map(l=>{
+    const unreadDot=l.unread?'<div class="ud" style="width:12px;height:12px;background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,0.8);animation:pl 1.2s infinite;margin:auto"></div>':'<div></div>';
+    const nameStyle=l.unread?'color:var(--tx);font-weight:800;font-size:13px':'color:var(--ts);font-weight:600';
+    const unreadTag=l.unread?'<span style="background:#fef2f2;color:#ef4444;border:1px solid #fca5a5;font-size:9px;padding:2px 6px;border-radius:10px;margin-left:6px;font-weight:800;letter-spacing:0.05em">NUEVO</span>':'';
+    const rowBg=l.unread?'background:rgba(239,68,68,0.04)':'';
+    return `<div class="tr2" style="${gc};${rowBg};cursor:pointer" data-id="${l.id}">
+      <div></div>${unreadDot}
+      <div style="display:flex;align-items:center;overflow:hidden"><strong style="${nameStyle};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.name)}</strong>${unreadTag}</div>
+      <div style="font-size:11.5px;color:var(--tm)">${esc(l.phone||'—')}</div>
+      <div style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.interest||'—')}</div>
+      <div>${cSrc(l.source)}</div>
+      <div>${cUsr(l.assignedTo)}</div>
+      <div>${stpl(l.status)}</div>
+      <div style="font-size:11px;color:var(--tm);font-weight:${l.unread?'700':'400'}">${fDT(l.lastClientTs||l.lastInteraction)}</div>
+    </div>`;
+  }).join(''):'<div class="ke" style="padding:16px">Sin leads de RMG Parts todavía.</div>';
+
+  tbl.innerHTML=hd+rows;
+  tbl.querySelectorAll('.tr2[data-id]').forEach(el=>el.addEventListener('click',()=>openModal(+el.dataset.id)));
 }
 
 function renderKanban(){const stages=['Nuevo','esperando_respuesta_chileautos','esperando_respuesta_general','Contactado','En Proceso','Reservado','Cerrado','Perdido'];const grp={};stages.forEach(s=>grp[s]=[]);normLeads().forEach(l=>{if(!grp[l.status])grp[l.status]=[];grp[l.status].push(l);});$('kbn').innerHTML=stages.map(st=>{const items=grp[st]||[];const isQ=st==='Calificado'; const stMap={'Nuevo':'Nuevos','esperando_respuesta_chileautos':'En sala de CA','esperando_respuesta_general':'En sala Gral','Contactado':'Contactados','En Proceso':'En proceso','Perdido':'Perdidos'}; const dispSt=stMap[st]||st;const isR=st==='Reservado';return`<div class="kbc ${isQ?'ql':''}${isR?' rs-col':''}"><div class="kbh" style="${isR?'color:var(--wn)':''}">${isQ?'⭐ Calificado':isR?'🔒 Reservado':esc(dispSt)}<span class="cnt">${items.length}</span>${isR&&items.some(l=>l.alertLevel==='critical')?'<span style="color:var(--bd2);font-size:11px;margin-left:6px">⚠️ vencidos</span>':''}</div><div class="kbs">${items.length?items.map(l=>`<div class="kc ${l.alertLevel||''}" data-id="${l.id}">${l.isMulticotizante?'<span style="background:#fee2e2;color:#991b1b;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;float:right">🔥 Multicotizante</span>':''}${l.unread?'<div class="ud"></div>':''}<div style="flex:1;min-width:0"><div class="kn">${esc(l.name)}</div><div class="kt">${l.status==='Reservado'?'🔒 '+fMin(l.reservadoAt||l.lastInteraction):fMin(mAgo(l.lastClientTs||l.lastInteraction))}</div>${l.nextAction&&l.nextAction.date?'<div style="font-size:11px;color:#f59e0b;font-weight:bold;margin-top:4px">⏰ '+new Date(l.nextAction.date).toLocaleString('es-CL',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+'</div>':''}</div></div>`).join(''):'<div class="ke">Vacío</div>'}</div></div>`;}).join('');$('kbn').querySelectorAll('.kc[data-id]').forEach(el=>el.addEventListener('click',()=>openModal(+el.dataset.id)));}
