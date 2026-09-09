@@ -590,6 +590,35 @@ function parseFormularioComprasRMG(body) {
   };
 }
 
+// Extrae los datos del formulario directamente desde el objeto crudo del WhatsApp Flow (nfm_reply),
+// buscando por fragmentos en el NOMBRE de cada clave (no por regex sobre texto reconstruido). Esto es
+// mas robusto que parseFormularioComprasRMG porque no depende de que el Flow use exactamente las
+// etiquetas "Full Name:", "Marca y Modelo:", etc. -- funciona con cualquier nombre de campo que Meta
+// haya generado al armar el formulario, mientras el nombre contenga una palabra reconocible.
+function extraerDeFormularioNativo(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  const entries = Object.entries(obj).map(([k, v]) => [String(k).toLowerCase().replace(/[_\-\s]/g, ''), v]);
+  const buscar = (...fragmentos) => {
+    for (const [k, v] of entries) {
+      if (fragmentos.some(f => k.includes(f)) && v !== undefined && v !== null && String(v).trim() !== '') {
+        return String(v).trim();
+      }
+    }
+    return '';
+  };
+  return {
+    nombre: buscar('fullname', 'nombrecompleto', 'nombre', 'name'),
+    marcaModelo: buscar('marcaymodelo', 'marcamodelo', 'vehiculo', 'vehicle', 'marca', 'modelo', 'car'),
+    año: buscar('ano', 'anio', 'year'),
+    km: buscar('kilometraje', 'kilometros', 'mileage', 'km'),
+    precio: buscar('precioestimado', 'precio', 'price', 'valoresperado', 'valor'),
+    patente: buscar('patente', 'plate', 'placa'),
+    email: buscar('email', 'correo', 'mail'),
+    telefono: buscar('whatsappnumber', 'telefono', 'phone', 'celular'),
+    _raw: obj
+  };
+}
+
 async function getSellers(tenant) {
   const allUsers = await tRead(F.users, tenant);
   return allUsers.filter(u => u.role === 'vendedor' && (!u.status || u.status === 'Activo'));
@@ -1621,11 +1650,25 @@ app.post('/webhook',async(req,res)=>{
       || msg.interactive?.button_reply?.title               // botón interactivo
       || msg.interactive?.list_reply?.title                 // selección de lista
       || (msg.interactive?.nfm_reply?.response_json         // formulario (lead gen)
-            ? (() => { try { const d=JSON.parse(msg.interactive.nfm_reply.response_json); return Object.values(d).join(' '); } catch(e){return null;} })()
+            ? (() => { try { const d=JSON.parse(msg.interactive.nfm_reply.response_json); return Object.entries(d).map(([k,v])=>k+': '+v).join('\n'); } catch(e){return null;} })()
             : null)
       || (msg.type==='order' ? '[ORDEN RECIBIDA]' : null)   // orden de catálogo
       || (msg.type==='sticker' ? '[STICKER]' : null)        // sticker — no null para no perder el lead
       || null;
+
+    // Guarda el objeto original del formulario nativo (WhatsApp Flow) sin pasar por regex de texto —
+    // los nombres de campo dependen de cómo se armó el Flow en Meta y pueden no calzar con las etiquetas
+    // "Full Name:", "Marca y Modelo:", etc. que espera parseFormularioComprasRMG. Con el objeto crudo
+    // nunca se pierde el dato, aunque el parser de texto no reconozca las etiquetas.
+    let nfmFormData = null;
+    if (msg.interactive?.nfm_reply?.response_json) {
+      try {
+        nfmFormData = JSON.parse(msg.interactive.nfm_reply.response_json);
+        console.log('[WH-NFM-FORM] Formulario nativo recibido de', from, '— campos:', JSON.stringify(nfmFormData));
+      } catch(eNfm) {
+        console.warn('[WH-NFM-FORM] No se pudo parsear response_json:', eNfm.message);
+      }
+    }
     // Si el tipo es template el portal ya envió plantilla — creamos lead de todas formas
     if(req.body.entry?.[0]?.changes?.[0]?.value?.statuses) return res.sendStatus(200);
     if(!body && msg.type==='template') body='[Mensaje de plantilla automática]';
@@ -1920,8 +1963,23 @@ app.post('/webhook',async(req,res)=>{
       const assignedObj=await getDefaultAssignee(tenant);const n=new Date().toISOString();
 
       // ── Formulario Compras RMG (Meta) — prioridad sobre portales ──
-      if (esFormularioComprasRMG(body)) {
-        const datos = parseFormularioComprasRMG(body);
+      if (esFormularioComprasRMG(body) || nfmFormData) {
+        // Preferir el objeto crudo del WhatsApp Flow (si llegó uno) sobre el parser de texto por
+        // etiquetas — el Flow no siempre usa las etiquetas "Full Name:", "Marca y Modelo:", etc.,
+        // así que el parser de texto solo entra como respaldo cuando no hay nfm_reply.
+        const datosNativo = nfmFormData ? extraerDeFormularioNativo(nfmFormData) : null;
+        const datosTexto = parseFormularioComprasRMG(body);
+        // Combina ambos: toma el dato nativo cuando existe, si no cae al parseado por texto.
+        const datos = {
+          nombre: (datosNativo && datosNativo.nombre) || datosTexto.nombre,
+          marcaModelo: (datosNativo && datosNativo.marcaModelo) || datosTexto.marcaModelo,
+          año: (datosNativo && datosNativo.año) || datosTexto.año,
+          km: (datosNativo && datosNativo.km) || datosTexto.km,
+          precio: (datosNativo && datosNativo.precio) || datosTexto.precio,
+          patente: (datosNativo && datosNativo.patente) || datosTexto.patente,
+          email: (datosNativo && datosNativo.email) || datosTexto.email,
+          telefono: (datosNativo && datosNativo.telefono) || datosTexto.telefono,
+        };
         const nombreReal = datos.nombre || contactName;
         const detalleVehiculo = [
           datos.marcaModelo,
@@ -1930,6 +1988,12 @@ app.post('/webhook',async(req,res)=>{
           datos.patente ? 'Patente ' + datos.patente : ''
         ].filter(Boolean).join(' · ');
         const comprasObj = await getComprasAssignee(tenant);
+        // Si no se pudo mapear ningún campo reconocible pero sí llegó el formulario nativo,
+        // vuelca el JSON crudo en la nota para no perder el dato mientras se afina el mapeo de campos.
+        const huboCampoReconocido = Object.values(datos).some(v => v);
+        const notaFormulario = huboCampoReconocido
+          ? `📋 Lead Compras RMG (formulario Meta):\n• Nombre: ${datos.nombre}\n• Vehículo: ${datos.marcaModelo}\n• Año: ${datos.año}\n• KM: ${datos.km}\n• Patente: ${datos.patente}\n• Precio esperado: ${datos.precio}\n• Email: ${datos.email}`
+          : `📋 Lead Compras RMG (formulario Meta) — no reconocí los campos automáticamente, datos crudos recibidos:\n${nfmFormData ? JSON.stringify(nfmFormData, null, 2) : body}`;
         ld[tenant].unshift({
           id: Date.now(),
           name: nombreReal,
@@ -1939,6 +2003,7 @@ app.post('/webhook',async(req,res)=>{
           status: 'Nuevo',
           interest: detalleVehiculo || 'Vehículo a tasar',
           formData: datos,
+          formDataRaw: nfmFormData || null,
           lastInteraction: n,
           lastClientTs: n,
           assignedTo: comprasObj.username,
@@ -1947,7 +2012,7 @@ app.post('/webhook',async(req,res)=>{
           intentSignal: 'NONE',
           unread: true,
           notes: [{
-            content: `📋 Lead Compras RMG (formulario Meta):\n• Nombre: ${datos.nombre}\n• Vehículo: ${datos.marcaModelo}\n• Año: ${datos.año}\n• KM: ${datos.km}\n• Patente: ${datos.patente}\n• Precio esperado: ${datos.precio}\n• Email: ${datos.email}`,
+            content: notaFormulario,
             author: 'Sistema',
             ts: Date.now()
           }],
@@ -1955,7 +2020,7 @@ app.post('/webhook',async(req,res)=>{
           adTracing: adTracing
         });
         alertStaff(tenant, comprasObj, '🚗 Nuevo Lead Compras RMG',
-          `🚗 NUEVO LEAD COMPRAS RMG asignado a ti: ${nombreReal} — ${detalleVehiculo}. Revísalo en pestaña Compras RMG.`);
+          `🚗 NUEVO LEAD COMPRAS RMG asignado a ti: ${nombreReal} — ${detalleVehiculo || 'revisa la ficha, datos crudos en notas'}. Revísalo en pestaña Compras RMG.`);
         await tWrite(F.leads, tenant, ld[tenant]);
         return;
       }
