@@ -657,6 +657,8 @@ async function ejecutarAnalisisIA(){
 <div class="tb" id="mainTb"><span class="lbl">Rango</span><div class="qk"><button data-q="all">Todo</button><button data-q="today">Hoy</button><button data-q="yesterday">Ayer</button><button data-q="7d">7d</button><button data-q="30d">30d</button><button data-q="month">📅 Mes</button></div><span class="lbl">Desde</span><input type="date" id="dS"><span class="lbl">Hasta</span><input type="date" id="dE"><button class="clr" id="dC">Limpiar</button><span class="lbl" id="lblS">Vendedor</span><select id="selF"><option value="">Todos</option></select><span class="ri" id="rI">Sin filtro</span></div>
 <section id="view-dashboard" class="view active">
 <div class="st">Dashboard Operativo</div>
+<div class="bt" style="margin-top:0">📊 Leads Nuevos en el Período</div>
+<div id="nuevosResumenBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px;margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:28px"></div>
 <div class="bt">① SLA Primera Respuesta — leads Nuevos</div>
 <div class="s3">
 <div class="sb2 fr" onclick="toggleSlaPanel('fresh')"><div class="si">🟢</div><div class="sl">En Tiempo</div><div class="sc" id="scF">—</div><div class="sh">Nuevos · &lt; 20 min (Verde)</div></div>
@@ -812,6 +814,7 @@ async function ejecutarAnalisisIA(){
     <button class="mtab" style="color:var(--tm); padding:8px 4px; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; font-weight:600; font-size:13px;" onclick="switchComprasTab('analitica', this)">📈 Analítica</button>
     <button onclick="openNuevoProspectoCompras()" style="margin-left:auto;margin-bottom:6px;background:#d97706;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer">+ Nuevo Prospecto</button>
 </div>
+<div id="comprasFiltroBar"></div>
 <div id="compras-leads" style="display:block;">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
       <input id="comprasBuscar" oninput="renderComprasFull()" placeholder="🔍 Buscar nombre, teléfono, vehículo..." style="background:var(--p2);border:1px solid var(--bd);color:var(--tx);padding:6px 10px;border-radius:7px;font-family:inherit;font-size:12px;width:100%;max-width:280px">
@@ -839,6 +842,7 @@ async function ejecutarAnalisisIA(){
 <section id="view-rmgparts" class="view">
 <div class="st" style="color:#b45309;margin-bottom:4px">🛢 RMG Parts — Lubricantes, Baterías y Neumáticos</div>
 <div style="font-size:13px;color:var(--tm);margin-bottom:14px">Los mismos leads del funnel de RMG Autos, filtrados a las conversaciones donde Cata detectó una consulta de RMG Parts. Mismo pipeline, mismo login — esta es solo una vista rápida.</div>
+<div id="rmgpFiltroBar"></div>
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
   <input id="rmgpSearch" oninput="renderRmgParts()" placeholder="🔍 Buscar nombre, teléfono, producto..." style="background:var(--p2);border:1px solid var(--bd);color:var(--tx);padding:6px 10px;border-radius:7px;font-family:inherit;font-size:12px;width:100%;max-width:280px">
   <span id="rmgpCount" style="font-size:11px;color:var(--tm);margin-left:auto"></span>
@@ -1053,7 +1057,7 @@ async function ejecutarAnalisisIA(){
 <div class="toast" id="tst"></div>
 <script>
 var calWeekOffset=0;
-const S={token:localStorage.getItem('ft')||null,user:JSON.parse(localStorage.getItem('fu')||'null'),tenant:localStorage.getItem('ftn')||'demo_automotora',config:null,leads:[],team:[],channels:[],users:[],range:{start:null,end:null,quick:'all'},seller:'',acc:new Set(JSON.parse(localStorage.getItem('fa')||'[]')),pollTimer:null,mid:null,slaOpen:null,funOpen:null,view:'dashboard'};
+const S={token:localStorage.getItem('ft')||null,user:JSON.parse(localStorage.getItem('fu')||'null'),tenant:localStorage.getItem('ftn')||'demo_automotora',config:null,leads:[],team:[],channels:[],users:[],range:{start:null,end:null,quick:'all'},seller:'',acc:new Set(JSON.parse(localStorage.getItem('fa')||'[]')),pollTimer:null,mid:null,slaOpen:null,funOpen:null,view:'dashboard',filtrosCompras:{start:null,end:null,seller:''},filtrosRmgParts:{start:null,end:null,seller:''}};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fCLP=n=>'$'+(Number(n)||0).toLocaleString('es-CL');
@@ -1290,11 +1294,53 @@ async function requestNotifPermission(){
 }
 // ═══════════════════════════════════════════════════
 
-function renderDashVendedor(){if(!S.vendKpi)return;const k=S.vendKpi;const scF=$('scF'),scR=$('scR'),scC=$('scC'),scRS=$('scRS');if(scF)scF.textContent=k.sla?.fresh??'—';if(scR)scR.textContent=k.sla?.risk??'—';if(scC)scC.textContent=k.sla?.critical??'—';if(scRS)scRS.textContent=k.sla?.reassigned??'—';renderFunnel();}
+function renderDashVendedor(){if(!S.vendKpi)return;const k=S.vendKpi;const scF=$('scF'),scR=$('scR'),scC=$('scC'),scRS=$('scRS');if(scF)scF.textContent=k.sla?.fresh??'—';if(scR)scR.textContent=k.sla?.risk??'—';if(scC)scC.textContent=k.sla?.critical??'—';if(scRS)scRS.textContent=k.sla?.reassigned??'—';renderNuevosResumen();renderFunnel();}
 function isAdminOrSup(){return S.user?.role==='admin'||S.user?.role==='supervisor';}
 function renderAll(){const isA=S.user?.role==='admin';const isAorSup2=isA||S.user?.role==='supervisor';if(isA)renderDash();else renderDashVendedor();renderLeads();renderRmgParts();renderChileautos();renderEsperaGeneral();renderKanban(); if(typeof renderComprasFull === "function") renderComprasFull();renderCalendar();if(isAorSup2){renderAnalytics();renderTeam();}if(S.mid&&$('mbg').classList.contains('show'))refreshModalSilent();if(S.slaOpen)renderSlaPanel(S.slaOpen);if(S.funOpen)renderFunPanel(S.funOpen);try{checkNotifications();}catch(e){}}
 
 function normLeads(){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(S.leads||[]).filter(l=>l.isCompraRmg!==true&&l.isRmgParts!==true&&!FC.includes((l.source||'').trim()));}
+
+/* ── filtro de fecha/vendedor independiente por pestaña (Compras RMG, RMG Parts, etc.) ── */
+function _filtroBarHTML(idPrefix, state){
+  var vopts=(S.users||[]).filter(function(u){return u.role==='vendedor'||u.role==='supervisor';}).map(function(u){
+    return '<option value="'+esc(u.username)+'"'+(state.seller===u.username?' selected':'')+'>'+esc(u.name)+'</option>';
+  }).join('');
+  return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--p2);border:1px solid var(--bd);border-radius:10px;padding:8px 12px;margin-bottom:10px">'
+    +'<span style="font-size:9.5px;font-weight:800;color:var(--tm);text-transform:uppercase;letter-spacing:.07em">Período</span>'
+    +'<span style="font-size:11px;color:var(--tm)">Desde</span>'
+    +'<input id="'+idPrefix+'Desde" type="date" value="'+(state.start||'')+'" style="background:var(--p);border:1px solid var(--bd);color:var(--tx);font-size:11.5px;border-radius:7px;padding:4px 8px;font-family:inherit">'
+    +'<span style="font-size:11px;color:var(--tm)">Hasta</span>'
+    +'<input id="'+idPrefix+'Hasta" type="date" value="'+(state.end||'')+'" style="background:var(--p);border:1px solid var(--bd);color:var(--tx);font-size:11.5px;border-radius:7px;padding:4px 8px;font-family:inherit">'
+    +'<span style="font-size:11px;color:var(--tm)">Vendedor</span>'
+    +'<select id="'+idPrefix+'Vendedor" style="background:var(--p);border:1px solid var(--bd);color:var(--tx);font-size:11.5px;border-radius:7px;padding:4px 8px;font-family:inherit"><option value="">Todos</option>'+vopts+'</select>'
+    +'<button id="'+idPrefix+'Clear" style="margin-left:auto;background:transparent;border:1px solid var(--bd);color:var(--tm);font-size:11.5px;border-radius:7px;padding:4px 10px;cursor:pointer;font-family:inherit">Limpiar</button>'
+    +'</div>';
+}
+function _wireFiltroBar(idPrefix, state, cb){
+  var ds=document.getElementById(idPrefix+'Desde');
+  if(ds) ds.onchange=function(){state.start=this.value||null;cb();};
+  var de=document.getElementById(idPrefix+'Hasta');
+  if(de) de.onchange=function(){state.end=this.value||null;cb();};
+  var sel=document.getElementById(idPrefix+'Vendedor');
+  if(sel) sel.onchange=function(){state.seller=this.value||'';cb();};
+  var clr=document.getElementById(idPrefix+'Clear');
+  if(clr) clr.onclick=function(){state.start=null;state.end=null;state.seller='';cb();};
+}
+function _filtrarPorFechaVendedor(leads, state){
+  var arr=leads||[];
+  if(state.start){
+    var s=new Date(state.start+'T00:00:00').getTime();
+    arr=arr.filter(function(l){var t=new Date(l.createdAt||l.id).getTime();return !isNaN(t)&&t>=s;});
+  }
+  if(state.end){
+    var e=new Date(state.end+'T23:59:59').getTime();
+    arr=arr.filter(function(l){var t=new Date(l.createdAt||l.id).getTime();return !isNaN(t)&&t<=e;});
+  }
+  if(state.seller){
+    arr=arr.filter(function(l){return l.assignedTo===state.seller;});
+  }
+  return arr;
+}
 
 function renderSlaCards(){
   const nv=normLeads().filter(l=>l.status==='Nuevo');
@@ -1313,12 +1359,31 @@ function renderFunnel(){const leads=normLeads(),tot=leads.length||1;const cnts={
 function toggleFunPanel(type){if(S.slaOpen){S.slaOpen=null;$('slaX').classList.remove('open');document.querySelectorAll('.sb2').forEach(c=>c.classList.remove('as'));}if(S.funOpen===type){S.funOpen=null;$('funX').classList.remove('open');renderFunnel();return;}S.funOpen=type;$('funX').classList.add('open');renderFunnel();renderFunPanel(type);setTimeout(()=>$('funX').scrollIntoView({behavior:'smooth',block:'nearest'}),100);}
 function renderFunPanel(type){const cfg=FM[type];if(!cfg)return;const all=normLeads().filter(l=>cfg.sts.includes(l.status));const items=[...all.filter(l=>l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0)),...all.filter(l=>!l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0))];$('funXT').textContent=cfg.label+' ('+items.length+') — sin responder primero';$('funXB').innerHTML=renderXRows(items,l=>fDT(l.lastClientTs||l.lastInteraction));bindXRows($('funXB'));}
 function renderPerfTable(){}
-function renderDash(){renderSlaCards();renderFunnel();renderPerfTable();renderTasaciones();}
+function renderNuevosResumen(){
+  const box=$('nuevosResumenBox');
+  if(!box)return;
+  const leads=normLeads();
+  const bySrc={};
+  leads.forEach(l=>{const s=l.source||'Sin origen';bySrc[s]=(bySrc[s]||0)+1;});
+  const chips=Object.keys(bySrc).sort((a,b)=>bySrc[b]-bySrc[a]).map(s=>{
+    return '<div style="background:var(--p2);border:1px solid var(--bd);border-radius:8px;padding:8px 14px;text-align:center;min-width:96px">'
+      +'<div style="font-size:20px;font-weight:800;color:var(--ac)">'+bySrc[s]+'</div>'
+      +'<div style="font-size:10.5px;color:var(--tm);margin-top:2px;font-weight:600">'+esc(s)+'</div>'
+      +'</div>';
+  }).join('');
+  box.innerHTML=
+    '<div style="text-align:center;padding-right:24px;border-right:1px solid var(--bd)">'
+    +'<div style="font-size:44px;font-weight:900;color:var(--tx);letter-spacing:-.03em;line-height:1">'+leads.length+'</div>'
+    +'<div style="font-size:11px;color:var(--tm);margin-top:4px;font-weight:600">LEADS NUEVOS EN EL PERÍODO</div>'
+    +'</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:10px;flex:1">'+(chips||'<div style="font-size:12px;color:var(--tm)">Sin leads en este rango.</div>')+'</div>';
+}
+function renderDash(){renderNuevosResumen();renderSlaCards();renderFunnel();renderPerfTable();renderTasaciones();}
 function renderXRows(items,timeFn){if(!items.length)return'<div class="xe2">Sin leads.</div>';const gc='grid-template-columns:10px 1fr 1fr 1fr 1fr auto';const hd=`<div class="xlr" style="${gc};cursor:default;background:var(--p2)"><div></div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Nombre</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Canal</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Vendedor</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Estado</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Última</div></div>`;return hd+items.map(l=>`<div class="xlr" data-id="${l.id}" style="${gc}">${adot(l.alertLevel)}<div><div class="lrn">${esc(l.name)}</div><div class="lrs">${l.unread?'● Sin resp · ':''}${esc(l.phone||'')}</div></div><div>${cSrc(l.source)}</div><div>${cUsr(l.assignedTo)}</div><div>${stpl(l.status)}</div><div class="lrt" style="color:var(--tm)">${timeFn(l)}</div></div>`).join('');}
 function bindXRows(c){c.querySelectorAll('.xlr[data-id]').forEach(el=>el.addEventListener('click',()=>openModal(+el.dataset.id)));}
 function renderLeads(){
-  const gc='grid-template-columns:22px 14px 1.4fr .9fr 1.1fr .85fr .85fr 1.2fr .75fr';
-  const hd=`<div class="tr2 hd" style="${gc}"><div></div><div></div><div>Nombre</div><div>Tel.</div><div>Interés</div><div>Canal</div><div>Asignado</div><div>Estado</div><div>Última</div></div>`;
+  const gc='grid-template-columns:22px 14px 1.3fr .85fr 1fr .8fr .8fr 1.1fr .7fr .78fr';
+  const hd=`<div class="tr2 hd" style="${gc}"><div></div><div></div><div>Nombre</div><div>Tel.</div><div>Interés</div><div>Canal</div><div>Asignado</div><div>Estado</div><div>Última</div><div>Creación</div></div>`;
   const filtCanal = document.getElementById('filtCanal')?.value || '';
   const filtEstado = document.getElementById('filtEstado')?.value || '';
   const filtSearch = document.getElementById('filtSearch')?.value.toLowerCase().trim() || '';
@@ -1354,6 +1419,7 @@ function renderLeads(){
       <div>${cUsr(l.assignedTo)}</div>
       <div>${stpl(l.status)}</div>
       <div style="font-size:11px;color:var(--tm);font-weight:${l.unread?'700':'400'}">${fDT(l.lastClientTs||l.lastInteraction)}</div>
+      <div style="font-size:11px;color:var(--tm)">${fDT(l.createdAt||l.id)}</div>
     </div>`;
   }).join('') : '<div class="ke" style="padding:16px">Sin leads para este filtro.</div>';
 
@@ -1364,10 +1430,13 @@ function renderLeads(){
 function renderRmgParts(){
   const tbl=document.getElementById('rmgpTbl');
   if(!tbl)return;
+  const fb=document.getElementById('rmgpFiltroBar');
+  if(fb){fb.innerHTML=_filtroBarHTML('rmgp',S.filtrosRmgParts);_wireFiltroBar('rmgp',S.filtrosRmgParts,renderRmgParts);}
   const gc='grid-template-columns:22px 14px 1.4fr .9fr 1.1fr .85fr .85fr 1.2fr .75fr';
   const hd=`<div class="tr2 hd" style="${gc}"><div></div><div></div><div>Nombre</div><div>Tel.</div><div>Producto</div><div>Canal</div><div>Asignado</div><div>Estado</div><div>Última</div></div>`;
   const filtSearch=document.getElementById('rmgpSearch')?.value.toLowerCase().trim()||'';
   let leads=(S.leads||[]).filter(l=>l.isRmgParts===true);
+  leads=_filtrarPorFechaVendedor(leads,S.filtrosRmgParts);
   if(filtSearch) leads=leads.filter(l=>(l.name||'').toLowerCase().includes(filtSearch)||(l.phone||'').includes(filtSearch)||(l.interest||'').toLowerCase().includes(filtSearch));
 
   leads.sort((a,b)=>{
@@ -3359,14 +3428,16 @@ function _comprasStageGlobal(status) {
 }
 
 async function renderComprasFull() {
+    const fbC = document.getElementById('comprasFiltroBar');
+    if(fbC){fbC.innerHTML=_filtroBarHTML('compras',S.filtrosCompras);_wireFiltroBar('compras',S.filtrosCompras,renderComprasFull);}
     const FUENTES_COMPRA_RMG = ['Compra Directa', 'Compramos tu Auto', 'Compramos tu auto'];
-    // Llamada directa sin filtros de fecha/vendedor para siempre ver todos los leads de compra
+    // Llamada directa: la restricción global de fecha/vendedor de Operación NO aplica aquí; se usa el filtro propio S.filtrosCompras
     let allLeads = S.leads || [];
     try {
       const fresh = await api('GET', '/api/leads');
       if (Array.isArray(fresh)) allLeads = fresh;
     } catch(e) { /* usar S.leads como fallback */ }
-    const leads = allLeads.filter(l => l.isCompraRmg === true || FUENTES_COMPRA_RMG.includes((l.source||'').trim()));
+    const leads = _filtrarPorFechaVendedor(allLeads.filter(l => l.isCompraRmg === true || FUENTES_COMPRA_RMG.includes((l.source||'').trim())), S.filtrosCompras);
 
     const cl = document.getElementById('compras-leads-tbl');
     if(cl) {
@@ -3421,7 +3492,7 @@ async function renderComprasFull() {
     }
     const ca = document.getElementById('compras-analitica-box');
     if(ca) {
-         const comprasLeads = (S.leads||[]).filter(l => l.isCompraRmg || l.source === 'Compramos tu Auto' || l.source === 'Compra Directa' || l.source === 'Compramos tu auto');
+         const comprasLeads = _filtrarPorFechaVendedor((S.leads||[]).filter(l => l.isCompraRmg || l.source === 'Compramos tu Auto' || l.source === 'Compra Directa' || l.source === 'Compramos tu auto'), S.filtrosCompras);
          const total = comprasLeads.length;
          const evaluando = comprasLeads.filter(l => !['nuevo','cerrado','abandonado','perdido','reservado'].includes((l.status||'').toLowerCase().trim())).length;
          const ofertados = comprasLeads.filter(l => (l.status||'').toLowerCase().trim() === 'reservado').length;

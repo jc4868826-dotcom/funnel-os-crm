@@ -2006,6 +2006,7 @@ app.post('/webhook',async(req,res)=>{
           formDataRaw: nfmFormData || null,
           lastInteraction: n,
           lastClientTs: n,
+          createdAt: n,
           assignedTo: comprasObj.username,
           botActive: true,
           alertLevel: 'none',
@@ -2105,7 +2106,7 @@ app.post('/webhook',async(req,res)=>{
       ld[tenant].unshift({
         id: Date.now(), name: contactName, phone: '+'+from,
         source: detectedSource, status: 'Nuevo',
-        lastInteraction: n, lastClientTs: n,
+        lastInteraction: n, lastClientTs: n, createdAt: n,
         interest: detectedInterest,
         isRmgParts: esRmgParts,
         assignedTo: assignedFinal, botActive: true,
