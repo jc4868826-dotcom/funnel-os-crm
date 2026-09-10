@@ -1706,6 +1706,15 @@ app.post('/webhook',async(req,res)=>{
       const ld = await read(F.leads);
       if (!ld[tenant]) ld[tenant] = [];
       let idx = ld[tenant].findIndex(l => l.phone && l.phone.replace(/\D/g, '').includes(from.replace(/\D/g, '')));
+      // Reingreso tras cierre (ver misma lógica en el handler de texto): un lead 'Cerrado' que vuelve
+      // a escribir (aunque sea con una foto/audio) se trata como lead nuevo.
+      if (idx !== -1 && ld[tenant][idx].status === 'Cerrado') {
+        ld[tenant][idx].notes = (ld[tenant][idx].notes || []).concat({
+          content: '♻️ El cliente volvió a escribir después del cierre. Se creó un lead nuevo para este reingreso — revísalo en la pestaña Leads.',
+          author: 'Sistema', ts: Date.now()
+        });
+        idx = -1;
+      }
       
       if (idx === -1) {
         const assignedObj = await rrNext(tenant) || {username: 'vendedor1'};
@@ -1971,6 +1980,18 @@ app.post('/webhook',async(req,res)=>{
     const contactName=val.contacts?.[0]?.profile?.name||'WhatsApp Lead';const tenant='demo_automotora';
     const ld=await read(F.leads);if(!ld[tenant])ld[tenant]=[];
     let idx=ld[tenant].findIndex(l=>l.phone&&l.phone.replace(/\D/g,'').includes(from.replace(/\D/g,'')));
+    // Reingreso tras cierre: un lead que llegó a 'Cerrado' y vuelve a escribir se trata como un lead
+    // NUEVO (no se reutiliza el registro cerrado). Se conserva el historial del lead cerrado y se
+    // deja trazabilidad de ambos lados vía reingresoDeLeadId.
+    let leadCerradoPrevioId = null;
+    if (idx !== -1 && ld[tenant][idx].status === 'Cerrado') {
+      leadCerradoPrevioId = ld[tenant][idx].id;
+      ld[tenant][idx].notes = (ld[tenant][idx].notes || []).concat({
+        content: '♻️ El cliente volvió a escribir después del cierre. Se creó un lead nuevo para este reingreso — revísalo en la pestaña Leads.',
+        author: 'Sistema', ts: Date.now()
+      });
+      idx = -1;
+    }
     if(idx===-1){
       const assignedObj=await getDefaultAssignee(tenant);const n=new Date().toISOString();
 
@@ -2019,6 +2040,7 @@ app.post('/webhook',async(req,res)=>{
           lastInteraction: n,
           lastClientTs: n,
           createdAt: n,
+          ...(leadCerradoPrevioId ? { reingresoDeLeadId: leadCerradoPrevioId } : {}),
           assignedTo: comprasObj.username,
           botActive: true,
           alertLevel: 'none',
@@ -2106,9 +2128,12 @@ app.post('/webhook',async(req,res)=>{
         portalNote = `Lead ingresó desde Chileautos vía WA directo. Interés: ${detectedInterest}`;
       }
 
-      const initNotes = portalNote
+      let initNotes = portalNote
         ? [{ content: portalNote, author: 'Sistema', ts: Date.now() }]
         : [];
+      if (leadCerradoPrevioId) {
+        initNotes = initNotes.concat({ content: '♻️ Reingreso: este lead vuelve a contactar después de un cierre anterior (lead previo #' + leadCerradoPrevioId + ').', author: 'Sistema', ts: Date.now() });
+      }
 
       // Leads de Compra Directa van siempre al usuario 'comprador'; los de RMG Parts, siempre a 'gerente' (Juan Carlos)
       const esCompra = detectedSource === 'Compra Directa';
@@ -2119,6 +2144,7 @@ app.post('/webhook',async(req,res)=>{
         id: Date.now(), name: contactName, phone: '+'+from,
         source: detectedSource, status: 'Nuevo',
         lastInteraction: n, lastClientTs: n, createdAt: n,
+        ...(leadCerradoPrevioId ? { reingresoDeLeadId: leadCerradoPrevioId } : {}),
         interest: detectedInterest,
         isRmgParts: esRmgParts,
         assignedTo: assignedFinal, botActive: true,
