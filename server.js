@@ -849,7 +849,32 @@ async function applySlaRules(tenant){
   return leads;
 }
 
-function parseDateRange(start,end){let s=null,e=null;if(start){const d=new Date(start);if(!isNaN(d)){d.setHours(0,0,0,0);s=d.getTime();}}if(end){const d=new Date(end);if(!isNaN(d)){d.setHours(23,59,59,999);e=d.getTime();}}return{s,e};}
+// El dashboard filtra por fecha usando strings "YYYY-MM-DD" que representan el día calendario
+// de Santiago de Chile (zona horaria del negocio), pero new Date("YYYY-MM-DD") en JS interpreta
+// ese string como medianoche UTC. En un servidor cuyo proceso corre en UTC (Render por defecto),
+// esto dejaba los límites del rango 3-4 horas adelantados respecto al día real en Chile, causando
+// que leads creados tarde en la noche (hora Chile) del día anterior quedaran contados como si
+// hubieran sido creados al día siguiente. tzOffsetMinutes calcula el offset real de Santiago para
+// ese instante (soporta cualquier regla de horario de verano vigente, sin hardcodear el número).
+const TZ_NEGOCIO='America/Santiago';
+function tzOffsetMinutes(instant,timeZone){
+  try{
+    const dtf=new Intl.DateTimeFormat('en-US',{timeZone,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const p=dtf.formatToParts(instant).reduce((a,x)=>{a[x.type]=x.value;return a;},{});
+    const asUTC=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);
+    return(asUTC-instant.getTime())/60000;
+  }catch(e){return -180;/*fallback: UTC-3, horario habitual de Chile*/}
+}
+function santiagoBoundaryMs(dateStr,endOfDay){
+  if(!dateStr)return null;
+  const guess=new Date(dateStr+'T00:00:00Z');
+  if(isNaN(guess))return null;
+  const offMin=tzOffsetMinutes(guess,TZ_NEGOCIO);
+  let ms=guess.getTime()-offMin*60000;
+  if(endOfDay)ms+=(24*60*60*1000-1);
+  return ms;
+}
+function parseDateRange(start,end){const s=start?santiagoBoundaryMs(start,false):null;const e=end?santiagoBoundaryMs(end,true):null;return{s,e};}
 function inRange(lead,s,e){if(s===null&&e===null)return true;const ts=new Date(lead.createdAt||lead.lastInteraction||0).getTime();return(s===null||ts>=s)&&(e===null||ts<=e);}
 
 async function seed(){
