@@ -667,7 +667,11 @@ async function ejecutarAnalisisIA(){
 <div class="sb2 rs" onclick="toggleSlaPanel('reassigned')"><div class="si">🔁</div><div class="sl">Reasignados</div><div class="sc" id="scRS">—</div><div class="sh">&gt; 30 min (Reasignado)</div></div>
 </div>
 <div class="xe" id="slaX"><div class="xt" id="slaXT">—</div><div class="xs" id="slaXB"></div></div>
-<div class="bt">② Embudo de Ventas</div>
+<div class="bt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">② Embudo de Ventas<div style="display:flex;gap:6px" id="funModeToggle">
+  <button type="button" onclick="setFunMode('reales')" id="funModeReales" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--ac);color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Leads Reales</button>
+  <button type="button" onclick="setFunMode('gestion')" id="funModeGestion" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg);color:var(--ts);font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Gestión</button>
+</div></div>
+<div style="font-size:10.5px;color:var(--tm);margin:-4px 0 8px" id="funModeHint">Leads Reales: creados dentro del rango seleccionado.</div>
 <div class="fg" id="fG"></div>
 <div class="xe" id="funX" style="margin-top:10px"><div class="xt" id="funXT">—</div><div class="xs" id="funXB"></div></div>
 <div class="bt">③ Tasaciones</div>
@@ -1058,7 +1062,7 @@ async function ejecutarAnalisisIA(){
 <div class="toast" id="tst"></div>
 <script>
 var calWeekOffset=0;
-const S={token:localStorage.getItem('ft')||null,user:JSON.parse(localStorage.getItem('fu')||'null'),tenant:localStorage.getItem('ftn')||'demo_automotora',config:null,leads:[],team:[],channels:[],users:[],range:{start:null,end:null,quick:'all'},seller:'',acc:new Set(JSON.parse(localStorage.getItem('fa')||'[]')),pollTimer:null,mid:null,slaOpen:null,funOpen:null,view:'dashboard',filtrosCompras:{start:null,end:null,seller:''},filtrosRmgParts:{start:null,end:null,seller:''}};
+const S={token:localStorage.getItem('ft')||null,user:JSON.parse(localStorage.getItem('fu')||'null'),tenant:localStorage.getItem('ftn')||'demo_automotora',config:null,leads:[],team:[],channels:[],users:[],range:{start:null,end:null,quick:'all'},seller:'',funMode:'reales',leadsGestion:[],acc:new Set(JSON.parse(localStorage.getItem('fa')||'[]')),pollTimer:null,mid:null,slaOpen:null,funOpen:null,view:'dashboard',filtrosCompras:{start:null,end:null,seller:''},filtrosRmgParts:{start:null,end:null,seller:''}};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fCLP=n=>'$'+(Number(n)||0).toLocaleString('es-CL');
@@ -1117,7 +1121,7 @@ if(btnFF) {
   });
 }
 
-async function refresh(){if(!S.token)return;const q=qstr(),isA=S.user?.role==='admin';try{const[leads,team,channels,vendKpi]=await Promise.all([api('GET','/api/leads'+q),isA?api('GET','/api/dashboard/team'+q):Promise.resolve([]),isA?api('GET','/api/analytics/channels'+q):Promise.resolve([]),!isA?api('GET','/api/dashboard/vendedor'+q):Promise.resolve(null)]);S.leads=leads;S.team=team||[];S.channels=channels||[];S.vendKpi=vendKpi||null;renderAll();}catch(e){console.error('refresh:',e.message);}}
+async function refresh(){if(!S.token)return;const q=qstr(),isA=S.user?.role==='admin';try{const gq=q?(q+'&mode=gestion'):'?mode=gestion';const[leads,team,channels,vendKpi,leadsGestion]=await Promise.all([api('GET','/api/leads'+q),isA?api('GET','/api/dashboard/team'+q):Promise.resolve([]),isA?api('GET','/api/analytics/channels'+q):Promise.resolve([]),!isA?api('GET','/api/dashboard/vendedor'+q):Promise.resolve(null),S.funMode==='gestion'?api('GET','/api/leads'+gq):Promise.resolve(null)]);S.leads=leads;S.team=team||[];S.channels=channels||[];S.vendKpi=vendKpi||null;if(leadsGestion)S.leadsGestion=leadsGestion;renderAll();}catch(e){console.error('refresh:',e.message);}}
 
 function renderChileautos(){
   const leads=(S.leads||[]).filter(l=>l.status==='esperando_respuesta_chileautos');
@@ -1300,6 +1304,25 @@ function isAdminOrSup(){return S.user?.role==='admin'||S.user?.role==='superviso
 function renderAll(){const isA=S.user?.role==='admin';const isAorSup2=isA||S.user?.role==='supervisor';if(isA)renderDash();else renderDashVendedor();renderLeads();renderRmgParts();renderChileautos();renderEsperaGeneral();renderKanban(); if(typeof renderComprasFull === "function") renderComprasFull();renderCalendar();if(isAorSup2){renderAnalytics();renderTeam();}if(S.mid&&$('mbg').classList.contains('show'))refreshModalSilent();if(S.slaOpen)renderSlaPanel(S.slaOpen);if(S.funOpen)renderFunPanel(S.funOpen);try{checkNotifications();}catch(e){}}
 
 function normLeads(){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(S.leads||[]).filter(l=>l.isCompraRmg!==true&&l.isRmgParts!==true&&!FC.includes((l.source||'').trim()));}
+function _excluirComprasYParts(arr){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(arr||[]).filter(l=>l.isCompraRmg!==true&&l.isRmgParts!==true&&!FC.includes((l.source||'').trim()));}
+function funLeads(){return S.funMode==='gestion'?_excluirComprasYParts(S.leadsGestion):normLeads();}
+function setFunMode(mode){
+  if(S.funMode===mode)return;
+  S.funMode=mode;
+  const bR=$('funModeReales'),bG=$('funModeGestion'),hint=$('funModeHint');
+  if(bR)bR.style.background=mode==='reales'?'var(--ac)':'var(--bg)';
+  if(bR)bR.style.color=mode==='reales'?'#fff':'var(--ts)';
+  if(bG)bG.style.background=mode==='gestion'?'var(--ac)':'var(--bg)';
+  if(bG)bG.style.color=mode==='gestion'?'#fff':'var(--ts)';
+  if(hint)hint.textContent=mode==='reales'?'Leads Reales: creados dentro del rango seleccionado.':'Gestión: todos los leads con actividad (mensajes, cambios) dentro del rango, sin importar cuándo se crearon.';
+  S.funOpen=null;const funX=$('funX');if(funX)funX.classList.remove('open');
+  if(mode==='gestion'){
+    const q=qstr();const gq=q?(q+'&mode=gestion'):'?mode=gestion';
+    api('GET','/api/leads'+gq).then(r=>{S.leadsGestion=r||[];renderFunnel();}).catch(e=>toast(e.message,true));
+    return;
+  }
+  renderFunnel();
+}
 
 /* ── filtro de fecha/vendedor independiente por pestaña (Compras RMG, RMG Parts, etc.) ── */
 function _filtroBarHTML(idPrefix, state){
@@ -1356,9 +1379,9 @@ function toggleSlaPanel(type){const cards=document.querySelectorAll('.sb2');if(S
 function renderSlaPanel(type){const lm={fresh:'fresh',risk:'risk',crit:'critical'};const lb={fresh:'🟢 En Tiempo — < 20 min (Verde)',risk:'🟡 En Riesgo — 20-30 min',crit:'🔴 Alerta — > 60 min (Crítico)',reassigned:'🔁 Reasignados — > 30 min sin atención'};let items;if(type==='reassigned'){items=normLeads().filter(l=>l.status==='Nuevo'&&l.reassigned===true).sort((a,b)=>{const ra=a.reassignedAt||a.lastInteraction;const rb=b.reassignedAt||b.lastInteraction;return new Date(ra)-new Date(rb);});}else{items=normLeads().filter(l=>l.status==='Nuevo'&&l.alertLevel===lm[type]).sort((a,b)=>mAgo(a.lastClientTs||a.lastInteraction)-mAgo(b.lastClientTs||b.lastInteraction));}$('slaXT').textContent=lb[type]+' ('+items.length+')';$('slaXB').innerHTML=renderXRows(items,l=>type==='reassigned'?(l.reassignedAt?fDT(l.reassignedAt):'—'):fMin(mAgo(l.lastClientTs||l.lastInteraction)));bindXRows($('slaXB'));}
 
 const FM={espera_ca:{sts:['esperando_respuesta_chileautos'],label:'🏷 Espera CA',color:'#92400e'},espera_gral:{sts:['esperando_respuesta_general'],label:'⏳ Espera Gral',color:'#6d28d9'},nuevos:{sts:['Nuevo'],label:'🆕 Nuevos',color:'var(--tx)'},contactados:{sts:['Contactado'],label:'💬 Contactados',color:'var(--ac)'},proceso:{sts:['En Proceso'],label:'🔄 En Proceso',color:'#f59e0b'},reservado:{sts:['Reservado'],label:'🔒 Reservados',color:'#ea580c'},cerrado:{sts:['Cerrado'],label:'✅ Cerrados',color:'var(--ok)'},perdido:{sts:['Abandonado','Perdido'],label:'❌ Perdidos',color:'var(--bd2)'}};
-function renderFunnel(){const leads=normLeads(),tot=leads.length||1;const cnts={};for(const[k,c]of Object.entries(FM))cnts[k]=leads.filter(l=>c.sts.includes(l.status));const ic={espera_ca:'🏷',espera_gral:'⏳',nuevos:'🆕',contactados:'💬',proceso:'🔄',reservado:'🔒',cerrado:'✅',perdido:'❌'};const lb={espera_ca:'Espera CA',espera_gral:'Espera Gral',nuevos:'Nuevos',contactados:'Contactados',proceso:'En Proceso',reservado:'Reservados',cerrado:'Cerrados',perdido:'Perdidos'};const pv={espera_ca:tot,espera_gral:tot,nuevos:tot,contactados:cnts.nuevos.length,proceso:cnts.contactados.length,reservado:cnts.proceso.length,cerrado:cnts.reservado.length,perdido:tot};const pct=(n,d)=>d?((n/d)*100).toFixed(0)+'%':'—';const ac=S.funOpen;$('fG').innerHTML=Object.keys(FM).map(k=>{const arr=cnts[k],n=arr.length,col=FM[k].color;const fr=arr.filter(l=>l.alertLevel==='fresh').length,ri=arr.filter(l=>l.alertLevel==='risk').length,cr=arr.filter(l=>l.alertLevel==='critical').length;const ms=(fr>0||ri>0||cr>0)?`<div class="fs"><span style="color:var(--ok)">🟢 ${fr}</span><span style="color:var(--wn)">🟡 ${ri}</span><span style="color:var(--bd2)">🔴 ${cr}</span></div>`:'<div style="height:22px;margin-top:8px"></div>';return`<div class="fc ${ac===k?'af':''}" onclick="toggleFunPanel('${k}')" style="border-color:${ac===k?'var(--ac)':col+'22'}"><div class="fi">${ic[k]}</div><div class="fv" style="color:${col}">${n}</div><div class="fl">${lb[k]}</div><div class="fp">${pct(n,pv[k])} de anterior</div>${ms}<div class="fh">👆 Ver detalle</div></div>`;}).join('');}
+function renderFunnel(){const leads=funLeads(),tot=leads.length||1;const cnts={};for(const[k,c]of Object.entries(FM))cnts[k]=leads.filter(l=>c.sts.includes(l.status));const ic={espera_ca:'🏷',espera_gral:'⏳',nuevos:'🆕',contactados:'💬',proceso:'🔄',reservado:'🔒',cerrado:'✅',perdido:'❌'};const lb={espera_ca:'Espera CA',espera_gral:'Espera Gral',nuevos:'Nuevos',contactados:'Contactados',proceso:'En Proceso',reservado:'Reservados',cerrado:'Cerrados',perdido:'Perdidos'};const pv={espera_ca:tot,espera_gral:tot,nuevos:tot,contactados:cnts.nuevos.length,proceso:cnts.contactados.length,reservado:cnts.proceso.length,cerrado:cnts.reservado.length,perdido:tot};const pct=(n,d)=>d?((n/d)*100).toFixed(0)+'%':'—';const ac=S.funOpen;$('fG').innerHTML=Object.keys(FM).map(k=>{const arr=cnts[k],n=arr.length,col=FM[k].color;const fr=arr.filter(l=>l.alertLevel==='fresh').length,ri=arr.filter(l=>l.alertLevel==='risk').length,cr=arr.filter(l=>l.alertLevel==='critical').length;const ms=(fr>0||ri>0||cr>0)?`<div class="fs"><span style="color:var(--ok)">🟢 ${fr}</span><span style="color:var(--wn)">🟡 ${ri}</span><span style="color:var(--bd2)">🔴 ${cr}</span></div>`:'<div style="height:22px;margin-top:8px"></div>';return`<div class="fc ${ac===k?'af':''}" onclick="toggleFunPanel('${k}')" style="border-color:${ac===k?'var(--ac)':col+'22'}"><div class="fi">${ic[k]}</div><div class="fv" style="color:${col}">${n}</div><div class="fl">${lb[k]}</div><div class="fp">${pct(n,pv[k])} de anterior</div>${ms}<div class="fh">👆 Ver detalle</div></div>`;}).join('');}
 function toggleFunPanel(type){if(S.slaOpen){S.slaOpen=null;$('slaX').classList.remove('open');document.querySelectorAll('.sb2').forEach(c=>c.classList.remove('as'));}if(S.funOpen===type){S.funOpen=null;$('funX').classList.remove('open');renderFunnel();return;}S.funOpen=type;$('funX').classList.add('open');renderFunnel();renderFunPanel(type);setTimeout(()=>$('funX').scrollIntoView({behavior:'smooth',block:'nearest'}),100);}
-function renderFunPanel(type){const cfg=FM[type];if(!cfg)return;const all=normLeads().filter(l=>cfg.sts.includes(l.status));const items=[...all.filter(l=>l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0)),...all.filter(l=>!l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0))];$('funXT').textContent=cfg.label+' ('+items.length+') — sin responder primero';$('funXB').innerHTML=renderXRows(items,l=>fDT(l.lastClientTs||l.lastInteraction));bindXRows($('funXB'));}
+function renderFunPanel(type){const cfg=FM[type];if(!cfg)return;const all=funLeads().filter(l=>cfg.sts.includes(l.status));const items=[...all.filter(l=>l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0)),...all.filter(l=>!l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0))];$('funXT').textContent=cfg.label+' ('+items.length+') — sin responder primero';$('funXB').innerHTML=renderXRows(items,l=>fDT(l.lastClientTs||l.lastInteraction));bindXRows($('funXB'));}
 function renderPerfTable(){}
 function renderNuevosResumen(){
   const box=$('nuevosResumenBox');

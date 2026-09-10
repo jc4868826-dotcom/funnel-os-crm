@@ -876,6 +876,9 @@ function santiagoBoundaryMs(dateStr,endOfDay){
 }
 function parseDateRange(start,end){const s=start?santiagoBoundaryMs(start,false):null;const e=end?santiagoBoundaryMs(end,true):null;return{s,e};}
 function inRange(lead,s,e){if(s===null&&e===null)return true;const ts=new Date(lead.createdAt||lead.id||0).getTime();return(s===null||ts>=s)&&(e===null||ts<=e);}
+// "Gestion": leads con actividad (lastInteraction) en el rango, sin importar cuando se crearon —
+// para diferenciar del conteo de "Leads Reales" (creados en el rango, funcion inRange de arriba).
+function inRangeGestion(lead,s,e){if(s===null&&e===null)return true;const ts=new Date(lead.lastInteraction||lead.createdAt||lead.id||0).getTime();return(s===null||ts>=s)&&(e===null||ts<=e);}
 
 async function seed(){
 
@@ -1108,7 +1111,13 @@ async function filterLeadsForUser(leads, user, tenant) {
 app.get('/api/leads',auth(),async(req,res)=>{
   try{
     const all=await applySlaRules(req.tenant);const{s,e}=parseDateRange(req.query.start,req.query.end);
-    let leads=await filterLeadsForUser(all,req.user,req.tenant);if(s!==null||e!==null)leads=leads.filter(l=>inRange(l,s,e));
+    let leads=await filterLeadsForUser(all,req.user,req.tenant);
+    if(s!==null||e!==null){
+      // mode=gestion: leads con actividad en el rango (para el Embudo de Ventas, vista "Gestion").
+      // Por defecto (sin mode, o cualquier otro valor): leads creados en el rango ("Leads Reales").
+      const rangeFn=req.query.mode==='gestion'?inRangeGestion:inRange;
+      leads=leads.filter(l=>rangeFn(l,s,e));
+    }
     if(req.query.seller&&req.user.role==='admin')leads=leads.filter(l=>l.assignedTo===req.query.seller);
     leads.forEach(l=>{if(!Array.isArray(l.chatHistory))l.chatHistory=[];if(!Array.isArray(l.notes))l.notes=[];if(!l.intentSignal)l.intentSignal='NONE';if(!l.lastClientTs)l.lastClientTs=l.lastInteraction||new Date().toISOString();});
     leads.sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0));res.json(leads);
