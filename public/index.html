@@ -2082,6 +2082,12 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
             <span style="color:#dc2626;font-size:12px;font-weight:bold;">💰 Precio de Toma: ${offerFmt}</span>
           </div>
           ` : ''}
+          ${ti.suggestedPrice ? `
+          <div style="margin-top:8px;padding:8px 10px;background:#05966922;border:1px solid #059669;border-radius:6px;">
+            <span style="color:#059669;font-size:12px;font-weight:bold;">🤖 Precio Sugerido (Chileautos): ${new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(ti.suggestedPrice)}</span>
+            <div style="font-size:10px;color:var(--tm);margin-top:2px;">Mediana de ${ti.marketComparables ? ti.marketComparables.length : 6} comparables: ${ti.marketMedian ? new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(ti.marketMedian) : '—'} menos 25%</div>
+          </div>
+          ` : ''}
           ${isAdmin ? `
           <div style="margin-top:10px; border-top:1px solid var(--bd); padding-top:10px; display:flex; gap:6px; align-items:center;">
             <select id="offerInput" style="flex:1; padding:6px; background:var(--p3); border:1px solid var(--bd); border-radius:4px; font-size:11.5px; color:var(--tx);">

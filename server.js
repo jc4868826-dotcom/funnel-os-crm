@@ -2041,8 +2041,9 @@ app.post('/webhook',async(req,res)=>{
           km: datos.km || '',
           status: 'Pendiente'
         };
+        const nuevoLeadIdComprasRMG = Date.now();
         ld[tenant].unshift({
-          id: Date.now(),
+          id: nuevoLeadIdComprasRMG,
           name: nombreReal,
           phone: '+' + from,
           source: 'Compramos tu Auto',
@@ -2072,6 +2073,8 @@ app.post('/webhook',async(req,res)=>{
         alertStaff(tenant, comprasObj, '🚗 Nuevo Lead Compras RMG',
           `🚗 NUEVO LEAD COMPRAS RMG asignado a ti: ${nombreReal} — ${detalleVehiculo || 'revisa la ficha, datos crudos en notas'}. Revísalo en pestaña Compras RMG.`);
         await tWrite(F.leads, tenant, ld[tenant]);
+        // Precio sugerido: solo para este lead NUEVO, en segundo plano, nunca bloquea ni corre en batch.
+        calcularPrecioSugeridoAsync(tenant, nuevoLeadIdComprasRMG, tradeInAuto);
         return;
       }
 
@@ -2464,6 +2467,96 @@ app.get('/api/push/vapid-public-key',(req,res)=>{
   res.json({publicKey:key});
 });
 
+
+// ═══════════════════════════════════════════════════
+// PRECIO SUGERIDO RETOMA — scraper Chileautos (solo para leads NUEVOS de Compras RMG,
+// nunca en batch/masivo sobre leads existentes)
+// ═══════════════════════════════════════════════════
+function slugChileautos(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quitar tildes
+    .trim().split(/\s+/)[0] // chileautos usa el nombre base del modelo (ej. "yaris", no "yaris cross")
+    .replace(/[^a-z0-9]+/g, '')
+    .trim();
+}
+
+async function buscarPrecioSugeridoChileautos(marca, modelo, anioObjetivo) {
+  try {
+    const sMarca = slugChileautos(marca), sModelo = slugChileautos(modelo);
+    const anio = parseInt(anioObjetivo, 10);
+    if (!sMarca || !sModelo || isNaN(anio)) return null;
+    const url = `https://www.chileautos.cl/vehiculos/${sMarca}/${sModelo}/`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!r.ok) { console.warn('[PrecioSugerido] HTTP', r.status, url); return null; }
+    const html = await r.text();
+    // HTML → texto plano tolerante a marcado (mismo criterio que ve un usuario en la página),
+    // así no dependemos de clases/estructura interna que chileautos puede cambiar en cualquier momento.
+    const texto = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, '\n');
+    const lineas = texto.split('\n').map(l => l.trim()).filter(Boolean);
+    const comparables = [];
+    for (let i = 0; i < lineas.length - 1; i++) {
+      const mAnio = lineas[i].match(/^(19|20)\d{2}\b/);
+      if (!mAnio) continue;
+      const anioListado = parseInt(mAnio[0], 10);
+      if (Math.abs(anioListado - anio) > 2) continue; // ventana ±2 años
+      for (let j = i + 1; j < Math.min(i + 8, lineas.length); j++) {
+        const mPrecio = lineas[j].match(/^\$\s?([\d.]+)\s*CLP$/);
+        if (mPrecio) {
+          const val = parseInt(mPrecio[1].replace(/\./g, ''), 10);
+          if (val >= 1000000 && val <= 100000000) comparables.push(val);
+          break;
+        }
+      }
+    }
+    if (comparables.length < 3) {
+      console.warn('[PrecioSugerido] Comparables insuficientes:', comparables.length, sMarca, sModelo, anio);
+      return null;
+    }
+    comparables.sort((a, b) => a - b);
+    const top6 = comparables.slice(0, 6);
+    const mid = Math.floor(top6.length / 2);
+    const mediana = top6.length % 2 === 0 ? Math.round((top6[mid - 1] + top6[mid]) / 2) : top6[mid];
+    const suggestedPrice = Math.round(mediana * 0.75);
+    return { comparables: top6, mediana, suggestedPrice, ts: new Date().toISOString() };
+  } catch (e) {
+    console.warn('[PrecioSugerido] Error:', e.message);
+    return null;
+  }
+}
+
+// Dispara el cálculo en segundo plano para UN lead recién creado — nunca bloquea la respuesta al
+// cliente ni se usa en batch. Si falla o no hay datos suficientes, solo deja constancia en notas.
+function calcularPrecioSugeridoAsync(tenant, leadId, tradeIn) {
+  if (!tradeIn || !tradeIn.make || !tradeIn.year) return;
+  buscarPrecioSugeridoChileautos(tradeIn.make, tradeIn.model, tradeIn.year)
+    .then(async (info) => {
+      const leads = await tRead(F.leads, tenant);
+      const idx = leads.findIndex(l => l.id === leadId);
+      if (idx === -1) return;
+      leads[idx].tradeIn = leads[idx].tradeIn || {};
+      if (info) {
+        leads[idx].tradeIn.suggestedPrice = info.suggestedPrice;
+        leads[idx].tradeIn.marketMedian = info.mediana;
+        leads[idx].tradeIn.marketComparables = info.comparables;
+        leads[idx].tradeIn.marketCheckedAt = info.ts;
+        leads[idx].notes = (leads[idx].notes || []).concat({
+          content: `💰 Precio sugerido calculado desde Chileautos: $${info.suggestedPrice.toLocaleString('es-CL')} (mediana de ${info.comparables.length} comparables: $${info.mediana.toLocaleString('es-CL')}, menos 25%).`,
+          author: 'Sistema', ts: Date.now()
+        });
+      } else {
+        leads[idx].notes = (leads[idx].notes || []).concat({
+          content: '💰 No se pudo calcular un precio sugerido automático (sin suficientes comparables en Chileautos o el sitio no respondió). Se puede completar manualmente.',
+          author: 'Sistema', ts: Date.now()
+        });
+      }
+      await tWrite(F.leads, tenant, leads);
+    })
+    .catch(e => console.warn('[PrecioSugerido-Async]', leadId, e.message));
+}
 
 // ═══════════════════════════════════════════════════
 // AGENTE PRECIOS MERCADO — scraper Chileautos + Yapo
