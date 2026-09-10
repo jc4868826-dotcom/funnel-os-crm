@@ -112,10 +112,22 @@ async function sendWA(to, text, retries = 2) {
 async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
   try {
     let botCfg = await tRead(F.bot, tenant, {});
+    // compras_rmg y rmg_parts son personas COMPARTIDAS a nivel de archivo (no van dentro de cada tenant),
+    // por eso se leen del archivo completo y no del objeto ya acotado por tenant que devuelve tRead().
+    const botRaw = await read(F.bot);
     let baseSysPrompt = botCfg?.systemPrompt;
-    if ((leadSource === 'Compra Directa' || leadSource === 'Compramos tu Auto' || leadSource === 'Compramos tu auto') && botCfg?.compras_rmg?.systemPrompt) {
-      baseSysPrompt = botCfg.compras_rmg.systemPrompt;
+    // Cata es, por defecto, SIEMPRE de RMG Autos. Solo cambia de identidad cuando el origen del
+    // lead está explícitamente marcado como RMG Parts, o el cliente usa en su mensaje alguna de las
+    // palabras ya acordadas para ese negocio (ver RMG_PARTS_KEYWORDS_RE). En cualquier otro caso, jamás
+    // debe mencionar lubricantes/RMG Parts de forma ambigua.
+    const esOrigenRmgParts = leadSource === 'RMG Parts';
+    const esMensajeRmgParts = typeof msg === 'string' && RMG_PARTS_KEYWORDS_RE.test(msg);
+    if ((leadSource === 'Compra Directa' || leadSource === 'Compramos tu Auto' || leadSource === 'Compramos tu auto') && botRaw?.compras_rmg?.systemPrompt) {
+      baseSysPrompt = botRaw.compras_rmg.systemPrompt;
       console.log('[BOT] Modo COMPRADORA activado (origen:', leadSource, ')');
+    } else if ((esOrigenRmgParts || esMensajeRmgParts) && botRaw?.rmg_parts?.systemPrompt) {
+      baseSysPrompt = botRaw.rmg_parts.systemPrompt;
+      console.log('[BOT] Modo RMG PARTS activado (origen:', leadSource, esMensajeRmgParts ? '/ keyword en mensaje' : '', ')');
     }
     if (!baseSysPrompt) {
       console.error('[Bot-Config-Error] systemPrompt no encontrado en bot.json para tenant:', tenant);
