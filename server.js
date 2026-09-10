@@ -2027,6 +2027,20 @@ app.post('/webhook',async(req,res)=>{
         const notaFormulario = huboCampoReconocido
           ? `📋 Lead Compras RMG (formulario Meta):\n• Nombre: ${datos.nombre}\n• Vehículo: ${datos.marcaModelo}\n• Año: ${datos.año}\n• KM: ${datos.km}\n• Patente: ${datos.patente}\n• Precio esperado: ${datos.precio}\n• Email: ${datos.email}`
           : `📋 Lead Compras RMG (formulario Meta) — no reconocí los campos automáticamente, datos crudos recibidos:\n${nfmFormData ? JSON.stringify(nfmFormData, null, 2) : body}`;
+        // Auto-llenado de "Detalles de Retoma": el formulario de Meta ya trae marca/modelo/año/km/patente
+        // (datos), así que en vez de dejar la ficha vacía para carga manual, se pre-llena tradeIn con lo
+        // que se pudo reconocer. marcaModelo llega como texto libre (ej. "Toyota Yaris"), así que se
+        // separa heurísticamente en marca (primera palabra) y modelo (el resto) — el vendedor puede
+        // corregirlo a mano si el split no calzó.
+        const _mmParts = (datos.marcaModelo || '').trim().split(/\s+/).filter(Boolean);
+        const tradeInAuto = {
+          make: _mmParts[0] || '',
+          model: _mmParts.slice(1).join(' ') || '',
+          year: datos.año || '',
+          plate: datos.patente || '',
+          km: datos.km || '',
+          status: 'Pendiente'
+        };
         ld[tenant].unshift({
           id: Date.now(),
           name: nombreReal,
@@ -2037,6 +2051,7 @@ app.post('/webhook',async(req,res)=>{
           interest: detalleVehiculo || 'Vehículo a tasar',
           formData: datos,
           formDataRaw: nfmFormData || null,
+          tradeIn: tradeInAuto,
           lastInteraction: n,
           lastClientTs: n,
           createdAt: n,
@@ -2635,6 +2650,35 @@ app.post('/api/admin/restore-leads', auth('admin'), async (req, res) => {
     res.json({ ok: true, tenant, leads_antes: antes, leads_despues: leads.length });
   } catch (e) {
     console.error('[RESTORE-LEADS] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── MIGRACIÓN: rellenar Detalles de Retoma (tradeIn) desde formData ya capturado, solo campos vacíos ──
+app.post('/api/admin/fix-tradein-from-formdata', auth('admin'), async (req, res) => {
+  try {
+    const tenant = req.tenant;
+    const leads = await tRead(F.leads, tenant);
+    let fixed = 0;
+    leads.forEach(l => {
+      if (!l.formData) return;
+      const d = l.formData;
+      if (!d.marcaModelo && !d.año && !d.km && !d.patente) return;
+      const ti = l.tradeIn || {};
+      const mmParts = (d.marcaModelo || '').trim().split(/\s+/).filter(Boolean);
+      let tocado = false;
+      if (!ti.make && mmParts[0]) { ti.make = mmParts[0]; tocado = true; }
+      if (!ti.model && mmParts.slice(1).join(' ')) { ti.model = mmParts.slice(1).join(' '); tocado = true; }
+      if (!ti.year && d.año) { ti.year = d.año; tocado = true; }
+      if (!ti.plate && d.patente) { ti.plate = d.patente; tocado = true; }
+      if (!ti.km && d.km) { ti.km = d.km; tocado = true; }
+      if (tocado) { l.tradeIn = ti; fixed++; }
+    });
+    await tWrite(F.leads, tenant, leads);
+    console.log(`[FIX-TRADEIN] tenant=${tenant} corregidos=${fixed}`);
+    res.json({ ok: true, tenant, fixed, total: leads.length });
+  } catch (e) {
+    console.error('[FIX-TRADEIN] Error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
