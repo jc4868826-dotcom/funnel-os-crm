@@ -566,40 +566,50 @@ function esFormularioComprasRMG(body) {
   if (!body || typeof body !== 'string') return false;
   const b = body.toLowerCase();
 
-  // Detecci\u00f3n 1: formulario completo Meta (patr\u00f3n exacto)
+  // Detección 1: formulario completo Meta. Las etiquetas pueden venir cortas ("Marca y Modelo:")
+  // o como la pregunta completa que reconstruye el Flow ("¿Cuál es la marca y modelo de tu
+  // vehículo?:") — por eso se permite texto intermedio entre la palabra clave y los dos puntos.
   const signals = [
-    /complet[e\u00e9] el formulario/i.test(b),
+    /complet[eé] el formulario/i.test(b),
     /full name\s*:/i.test(b),
-    /marca y modelo\s*:/i.test(b),
-    /patente\s*:/i.test(b),
-    /precio estimado.*recibir\s*:/i.test(b)
+    /marca y modelo[^:\n]{0,60}:/i.test(b),
+    /patente[^:\n]{0,60}:/i.test(b),
+    /(precio estimado[^:\n]{0,60}:|cu[aá]nto esperas recibir[^:\n]{0,60}:)/i.test(b)
   ].filter(Boolean).length;
   if (signals >= 3) return true;
 
-  // Detecci\u00f3n 2: mensajes libres de venta de veh\u00edculo
+  // Detección 2: mensajes libres de venta de vehículo
   const keywordsFuertes = [
     /compramos tu auto/i,
-    /compramos tu veh[i\u00ed]culo/i,
-    /vendo mi (auto|veh[i\u00ed]culo|camioneta|suv)/i,
-    /quiero vender mi (auto|veh[i\u00ed]culo|camioneta|suv)/i,
+    /compramos tu vehículo/i,
+    /vendo mi (auto|vehículo|camioneta|suv)/i,
+    /quiero vender mi (auto|vehículo|camioneta|suv)/i,
     /tengo un auto para vender/i,
-    /me gustar[i\u00ed]a vender mi (auto|veh[i\u00ed]culo)/i
+    /me gustaría vender mi (auto|vehículo)/i
   ];
   return keywordsFuertes.some(rx => rx.test(b));
 }
 
 function parseFormularioComprasRMG(body) {
   const grab = (rx) => { const m = body.match(rx); return m ? m[1].trim() : ''; };
-  return {
-    nombre: grab(/full name\s*:\s*([^\n]+?)(?=\s+(?:A\u00f1o|A[\u00f1n]o|WhatsApp|Marca|Email|Patente|Precio)|$)/i),
-    marcaModelo: grab(/marca y modelo\s*:\s*([^\n]+?)(?=\s+(?:A\u00f1o|A[\u00f1n]o|WhatsApp|Full|Email|Patente|Precio)|$)/i),
-    a\u00f1o: grab(/a[\u00f1n]o y kilometraje\s*:\s*(\d{4})/i),
-    km: grab(/a[\u00f1n]o y kilometraje\s*:\s*\d{4}\s+(\d+)/i),
-    precio: grab(/precio estimado[^:]*:\s*([\d\.\,]+)/i),
-    patente: grab(/patente\s*:\s*([^\n,]+?)(?=[,\n]|$)/i),
-    email: grab(/email\s*:\s*([^\s,]+@[^\s,]+)/i),
-    telefono: grab(/whatsapp number\s*:\s*(\+?\d[\d\s]+)/i)
-  };
+  const nombre = grab(/full name\s*:\s*([^\n¿]+?)(?=\s*(?:¿|Año|Año|WhatsApp|Phone|Marca|Email|Patente|Precio)|$)/i);
+  const marcaModelo = grab(/marca y modelo[^:\n]{0,60}:\s*([^\n¿]+?)(?=\s*(?:¿|Año|Año|WhatsApp|Phone|Full|Email|Patente|Precio)|$)/i);
+  // El bloque "año y kilometraje" (o "kilometraje y año") puede traer los dos valores en cualquier
+  // orden ("2019 45000" o "45000 km 2019") según cómo el cliente/Flow los haya escrito.
+  const kmAnoBlock = grab(/(?:año y kilometraje|kilometraje y año)[^:\n]{0,60}:\s*([^\n¿]+?)(?=\s*¿|\n|$)/i);
+  let año = '', km = '';
+  if (kmAnoBlock) {
+    const mAño = kmAnoBlock.match(/(19|20)\d{2}/);
+    año = mAño ? mAño[0] : '';
+    const resto = mAño ? kmAnoBlock.replace(mAño[0], '') : kmAnoBlock;
+    const mKm = resto.match(/([\d.,]{3,})/);
+    km = mKm ? mKm[1].replace(/[.,]/g, '') : '';
+  }
+  const precio = grab(/(?:precio estimado[^:\n]{0,60}:|cuánto esperas recibir[^:\n]{0,60}:)\s*([^\n¿]+?)(?=\s*¿|\n|$)/i);
+  const patente = grab(/patente[^:\n]{0,60}:\s*([^\n,¿]+?)(?=[,¿\n]|$)/i);
+  const email = grab(/email\s*:\s*([^\s,]+@[^\s,]+)/i);
+  const telefono = grab(/(?:whatsapp number|phone number)[^:\n]{0,20}:\s*(\+?\d[\d\s]+)/i);
+  return { nombre, marcaModelo, año, km, precio, patente, email, telefono };
 }
 
 // Extrae los datos del formulario directamente desde el objeto crudo del WhatsApp Flow (nfm_reply),
