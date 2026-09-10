@@ -850,7 +850,7 @@ async function applySlaRules(tenant){
 }
 
 function parseDateRange(start,end){let s=null,e=null;if(start){const d=new Date(start);if(!isNaN(d)){d.setHours(0,0,0,0);s=d.getTime();}}if(end){const d=new Date(end);if(!isNaN(d)){d.setHours(23,59,59,999);e=d.getTime();}}return{s,e};}
-function inRange(lead,s,e){if(s===null&&e===null)return true;const ts=new Date(lead.lastInteraction||0).getTime();return(s===null||ts>=s)&&(e===null||ts<=e);}
+function inRange(lead,s,e){if(s===null&&e===null)return true;const ts=new Date(lead.createdAt||lead.lastInteraction||0).getTime();return(s===null||ts>=s)&&(e===null||ts<=e);}
 
 async function seed(){
 
