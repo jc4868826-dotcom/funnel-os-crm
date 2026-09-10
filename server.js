@@ -875,7 +875,7 @@ function santiagoBoundaryMs(dateStr,endOfDay){
   return ms;
 }
 function parseDateRange(start,end){const s=start?santiagoBoundaryMs(start,false):null;const e=end?santiagoBoundaryMs(end,true):null;return{s,e};}
-function inRange(lead,s,e){if(s===null&&e===null)return true;const ts=new Date(lead.createdAt||lead.lastInteraction||0).getTime();return(s===null||ts>=s)&&(e===null||ts<=e);}
+function inRange(lead,s,e){if(s===null&&e===null)return true;const ts=new Date(lead.createdAt||lead.id||0).getTime();return(s===null||ts>=s)&&(e===null||ts<=e);}
 
 async function seed(){
 
