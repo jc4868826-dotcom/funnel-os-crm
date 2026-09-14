@@ -416,7 +416,13 @@ async function scrapeRMG() {
   const now = Date.now();
   if (scrapeCache.data && (now - scrapeCache.ts) < 30 * 60 * 1000) return scrapeCache.data;
   try {
-    const UA = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' };
+    const UA = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'es-CL,es;q=0.9,en;q=0.8',
+      'Referer': 'https://rmgautos.cl/',
+      'Cache-Control': 'no-cache'
+    };
     const liCountRE = /<li[^>]*class="[^"]*\bproduct\b[^"]*"[^>]*>/gi;
     let html = '';
     for (let page = 1; page <= 10; page++) {
@@ -424,12 +430,20 @@ async function scrapeRMG() {
       let pageHtml;
       try {
         const r = await fetch(url, { signal: AbortSignal.timeout(20000), headers: UA });
-        if (!r.ok) break;
+        console.log('[RMG-Scraper] fetch ' + url + ' -> HTTP ' + r.status);
+        if (!r.ok) {
+          const errBody = await r.text().catch(() => '');
+          console.warn('[RMG-Scraper] HTTP ' + r.status + ' en ' + url + ' — body(300): ' + errBody.slice(0, 300).replace(/\s+/g, ' '));
+          break;
+        }
         pageHtml = await r.text();
-      } catch(_) { break; }
+      } catch(eFetch) { console.warn('[RMG-Scraper] fetch excepción en ' + url + ':', eFetch.message); break; }
       const count = (pageHtml.match(liCountRE) || []).length;
       console.log('[RMG-Scraper] página ' + page + ': ' + count + ' productos');
-      if (count === 0) break;
+      if (count === 0) {
+        console.warn('[RMG-Scraper] 0 productos, largo html=' + pageHtml.length + ' — snippet(400): ' + pageHtml.slice(0, 400).replace(/\s+/g, ' '));
+        break;
+      }
       html += pageHtml;
     }
 
