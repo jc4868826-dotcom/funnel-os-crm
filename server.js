@@ -69,7 +69,12 @@ function esKeywordCalif(text) { if(!text) return false; const t = text.toLowerCa
 // ── alertStaff: WA + Push en paralelo ──
 async function alertStaff(tenant, userObj, title, body) {
   if (!userObj) return;
-  if (userObj.phone) sendWA(userObj.phone, body).catch(() => {});
+  // Por pedido del cliente: las alertas por WhatsApp a vendedores/staff quedan activas SOLO para
+  // leads nuevos (cualquier alerta cuyo titulo incluya "Nuevo Lead"). El resto de eventos (reservas
+  // vencidas, reasignaciones, "Lead Asignado" por palabras clave, lead que respondio, reingresos,
+  // etc.) siguen mandando la notificacion push dentro del CRM, pero ya no disparan WhatsApp.
+  const esAlertaNuevoLead = typeof title === 'string' && title.includes('Nuevo Lead');
+  if (esAlertaNuevoLead && userObj.phone) sendWA(userObj.phone, body).catch(() => {});
   if (userObj.username && tenant) sendWebPush(tenant, userObj.username, { title, body, ts: Date.now() }).catch(() => {});
 }
 
@@ -2937,14 +2942,20 @@ app.post('/api/tasacion/offer', auth('admin','supervisor'),async (req, res) => {
 app.post('/api/tasacion/enviar-precio', auth('admin','supervisor'),async (req, res) => {
   try {
     const tenant = req.tenant;
-    const { leadId, rango } = req.body;
+    const { leadId, rango, mensajeRechazo } = req.body;
     if (!leadId || !rango) return res.status(400).json({ error: 'leadId y rango requeridos' });
     const leads = await tRead(F.leads, tenant, []);
     const lead = leads.find(l => String(l.id) == String(leadId));
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
     const phone = (lead.phone || '').replace(/\D/g, '');
     if (!phone) return res.status(400).json({ error: 'Lead sin teléfono' });
-    const msg = `Estimado/a ${lead.name}, nuestro equipo de compras ha revisado los antecedentes de su vehículo y estima un valor de *${rango}*, sujeto a revisión física. ¿Le parece adecuado continuar con el proceso?`;
+    // Precio $0 = el vehiculo no califica: se envia un mensaje de rechazo en vez del template de precio
+    // (antes esto mandaba literalmente "estima un valor de *0*" al cliente, un bug reportado por el usuario)
+    const esRechazo = String(rango) === '0';
+    const MSG_RECHAZO_DEFAULT = `Estimado/a ${lead.name}, lamentablemente su vehículo está fuera de las políticas de compra de nuestra empresa. Agradecemos su interés y quedamos a su disposición para cualquier otra consulta.`;
+    const msg = esRechazo
+      ? (mensajeRechazo && String(mensajeRechazo).trim() ? mensajeRechazo : MSG_RECHAZO_DEFAULT)
+      : `Estimado/a ${lead.name}, nuestro equipo de compras ha revisado los antecedentes de su vehículo y estima un valor de *${rango}*, sujeto a revisión física. ¿Le parece adecuado continuar con el proceso?`;
     await sendWA(phone, msg);
     // Registrar en chatHistory para que aparezca en el chat
     lead.chatHistory = lead.chatHistory || [];
@@ -2952,9 +2963,9 @@ app.post('/api/tasacion/enviar-precio', auth('admin','supervisor'),async (req, r
     lead.lastInteraction = new Date().toISOString();
     // Registrar en bitácora
     lead.notes = lead.notes || [];
-    lead.notes.push({ content: `Precio enviado al cliente: ${rango}`, author: req.user?.name || req.user?.username || 'Admin', ts: Date.now() });
+    lead.notes.push({ content: esRechazo ? 'Rechazo (fuera de políticas de compra) enviado al cliente' : `Precio enviado al cliente: ${rango}`, author: req.user?.name || req.user?.username || 'Admin', ts: Date.now() });
     await tWrite(F.leads, tenant, leads);
-    console.log('[PRECIO-CLIENTE] Enviado a', lead.name, ':', rango);
+    console.log('[PRECIO-CLIENTE]', esRechazo ? 'RECHAZO enviado a' : 'Enviado a', lead.name, ':', esRechazo ? '(fuera de politicas)' : rango);
     res.json({ ok: true });
   } catch (e) {
     console.error('[PRECIO-CLIENTE]', e.message);

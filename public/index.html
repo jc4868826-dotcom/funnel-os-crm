@@ -820,6 +820,7 @@ async function ejecutarAnalisisIA(){
     <button class="mtab" style="color:var(--tm); padding:8px 4px; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; font-weight:600; font-size:13px;" onclick="switchComprasTab('analitica', this)">📈 Analítica</button>
     <button onclick="openNuevoProspectoCompras()" style="margin-left:auto;margin-bottom:6px;background:#d97706;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer">+ Nuevo Prospecto</button>
 </div>
+<div id="comprasResumenBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px;margin-bottom:12px;display:flex;flex-wrap:wrap;align-items:center;gap:28px"></div>
 <div id="comprasFiltroBar"></div>
 <div id="compras-leads" style="display:block;">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
@@ -848,6 +849,7 @@ async function ejecutarAnalisisIA(){
 <section id="view-rmgparts" class="view">
 <div class="st" style="color:#b45309;margin-bottom:4px">🛢 RMG Parts — Lubricantes, Baterías y Neumáticos</div>
 <div style="font-size:13px;color:var(--tm);margin-bottom:14px">Los mismos leads del funnel de RMG Autos, filtrados a las conversaciones donde Cata detectó una consulta de RMG Parts. Mismo pipeline, mismo login — esta es solo una vista rápida.</div>
+<div id="rmgpResumenBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px;margin-bottom:12px;display:flex;flex-wrap:wrap;align-items:center;gap:28px"></div>
 <div id="rmgpFiltroBar"></div>
 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
   <input id="rmgpSearch" oninput="renderRmgParts()" placeholder="🔍 Buscar nombre, teléfono, producto..." style="background:var(--p2);border:1px solid var(--bd);color:var(--tx);padding:6px 10px;border-radius:7px;font-family:inherit;font-size:12px;width:100%;max-width:280px">
@@ -1384,34 +1386,38 @@ function renderFunnel(){const leads=funLeads(),totReal=leads.length,tot=totReal|
 function toggleFunPanel(type){if(S.slaOpen){S.slaOpen=null;$('slaX').classList.remove('open');document.querySelectorAll('.sb2').forEach(c=>c.classList.remove('as'));}if(S.funOpen===type){S.funOpen=null;$('funX').classList.remove('open');renderFunnel();return;}S.funOpen=type;$('funX').classList.add('open');renderFunnel();renderFunPanel(type);setTimeout(()=>$('funX').scrollIntoView({behavior:'smooth',block:'nearest'}),100);}
 function renderFunPanel(type){const cfg=FM[type];if(!cfg)return;const all=funLeads().filter(l=>cfg.sts.includes(l.status));const items=[...all.filter(l=>l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0)),...all.filter(l=>!l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0))];$('funXT').textContent=cfg.label+' ('+items.length+') — sin responder primero';$('funXB').innerHTML=renderXRows(items,l=>fDT(l.lastClientTs||l.lastInteraction));bindXRows($('funXB'));}
 function renderPerfTable(){}
-function renderNuevosResumen(){
-  const box=$('nuevosResumenBox');
+// Helper generico: pinta una cajita de "total + chips por origen, con % del total" y la deja
+// clickeable para abrir el detalle. Usado por el dashboard (Leads Nuevos), Compras RMG y RMG Parts.
+function renderLeadsResumenBox(boxId, storageKey, leads, totalLabel){
+  const box=$(boxId);
   if(!box)return;
-  const leads=normLeads();
-  S._nuevosResumenLeads=leads;
+  S[storageKey]=leads;
+  const total=leads.length;
   const bySrc={};
   leads.forEach(l=>{const s=l.source||'Sin origen';bySrc[s]=(bySrc[s]||0)+1;});
+  const pct=n=>total?((n/total)*100).toFixed(0)+'%':'—';
   const chips=Object.keys(bySrc).sort((a,b)=>bySrc[b]-bySrc[a]).map(s=>{
-    return '<div onclick="showNuevosDetalle(\''+esc(s).replace(/'/g,"\\'")+'\')" style="cursor:pointer;background:var(--p2);border:1px solid var(--bd);border-radius:8px;padding:8px 14px;text-align:center;min-width:96px" title="Ver los '+bySrc[s]+' leads de '+esc(s)+'">'
+    return '<div onclick="showLeadsDetalleModal(S.'+storageKey+',\''+esc(s).replace(/'/g,"\\'")+'\')" style="cursor:pointer;background:var(--p2);border:1px solid var(--bd);border-radius:8px;padding:8px 14px;text-align:center;min-width:96px" title="Ver los '+bySrc[s]+' leads de '+esc(s)+'">'
       +'<div style="font-size:20px;font-weight:800;color:var(--ac)">'+bySrc[s]+'</div>'
       +'<div style="font-size:10.5px;color:var(--tm);margin-top:2px;font-weight:600">'+esc(s)+'</div>'
+      +'<div style="font-size:9.5px;color:var(--tm);margin-top:1px">'+pct(bySrc[s])+' del total</div>'
       +'</div>';
   }).join('');
   box.innerHTML=
-    '<div onclick="showNuevosDetalle()" style="cursor:pointer;text-align:center;padding-right:24px;border-right:1px solid var(--bd)" title="Ver el detalle de los '+leads.length+' leads">'
-    +'<div style="font-size:44px;font-weight:900;color:var(--tx);letter-spacing:-.03em;line-height:1">'+leads.length+'</div>'
-    +'<div style="font-size:11px;color:var(--tm);margin-top:4px;font-weight:600">LEADS NUEVOS EN EL PERÍODO</div>'
+    '<div onclick="showLeadsDetalleModal(S.'+storageKey+')" style="cursor:pointer;text-align:center;padding-right:24px;border-right:1px solid var(--bd)" title="Ver el detalle de los '+total+' leads">'
+    +'<div style="font-size:44px;font-weight:900;color:var(--tx);letter-spacing:-.03em;line-height:1">'+total+'</div>'
+    +'<div style="font-size:11px;color:var(--tm);margin-top:4px;font-weight:600">'+totalLabel+'</div>'
     +'<div style="font-size:9.5px;color:var(--ac);margin-top:3px;font-weight:600">👆 Ver detalle</div>'
     +'</div>'
     +'<div style="display:flex;flex-wrap:wrap;gap:10px;flex:1">'+(chips||'<div style="font-size:12px;color:var(--tm)">Sin leads en este rango.</div>')+'</div>';
 }
-function showNuevosDetalle(filtroSource){
-  const all=S._nuevosResumenLeads||[];
+function showLeadsDetalleModal(allLeads,filtroSource){
+  const all=allLeads||[];
   const leads=filtroSource?all.filter(l=>(l.source||'Sin origen')===filtroSource):all;
   const sorted=[...leads].sort((a,b)=>new Date(b.createdAt||b.id||0)-new Date(a.createdAt||a.id||0));
-  const ex=document.getElementById('modalNuevosDetalle');if(ex)ex.remove();
+  const ex=document.getElementById('modalLeadsDetalle');if(ex)ex.remove();
   const rows=sorted.map(l=>{
-    return '<tr onclick="document.getElementById(\'modalNuevosDetalle\').remove();openModal(\''+l.id+'\')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
+    return '<tr onclick="document.getElementById(\'modalLeadsDetalle\').remove();openModal(\''+l.id+'\')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
       +'<td style="padding:7px 10px;font-size:12.5px;color:var(--tx)">'+esc(l.name||'Sin nombre')+'</td>'
       +'<td style="padding:7px 10px;font-size:12.5px;color:var(--tm)">'+esc(l.source||'—')+'</td>'
       +'<td style="padding:7px 10px;font-size:12.5px;color:var(--tm)">'+esc(l.assignedTo||'—')+'</td>'
@@ -1420,12 +1426,12 @@ function showNuevosDetalle(filtroSource){
       +'</tr>';
   }).join('');
   const m=document.createElement('div');
-  m.id='modalNuevosDetalle';
+  m.id='modalLeadsDetalle';
   m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
   m.innerHTML='<div style="background:var(--p2);border:1px solid var(--bd);border-radius:12px;padding:20px;width:min(720px,92vw);max-height:80vh;display:flex;flex-direction:column;gap:12px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center">'
     +'<div style="font-weight:700;font-size:15px;color:var(--tx)">'+sorted.length+' leads'+(filtroSource?' · '+esc(filtroSource):'')+'</div>'
-    +'<button id="btnCerrarNuevosDetalle" class="bs" style="padding:5px 12px">Cerrar</button>'
+    +'<button id="btnCerrarLeadsDetalle" class="bs" style="padding:5px 12px">Cerrar</button>'
     +'</div>'
     +'<div style="overflow-y:auto;flex:1">'
     +'<table style="width:100%;border-collapse:collapse">'
@@ -1435,9 +1441,10 @@ function showNuevosDetalle(filtroSource){
     +'</div>'
     +'</div>';
   document.body.appendChild(m);
-  document.getElementById('btnCerrarNuevosDetalle').onclick=()=>m.remove();
+  document.getElementById('btnCerrarLeadsDetalle').onclick=()=>m.remove();
   m.addEventListener('click',e=>{if(e.target===m)m.remove();});
 }
+function renderNuevosResumen(){renderLeadsResumenBox('nuevosResumenBox','_nuevosResumenLeads',normLeads(),'LEADS NUEVOS EN EL PERÍODO');}
 function renderDash(){renderNuevosResumen();renderSlaCards();renderFunnel();renderPerfTable();renderTasaciones();}
 function renderXRows(items,timeFn){if(!items.length)return'<div class="xe2">Sin leads.</div>';const gc='grid-template-columns:10px 1fr 1fr 1fr 1fr auto';const hd=`<div class="xlr" style="${gc};cursor:default;background:var(--p2)"><div></div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Nombre</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Canal</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Vendedor</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Estado</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Última</div></div>`;return hd+items.map(l=>`<div class="xlr" data-id="${l.id}" style="${gc}">${adot(l.alertLevel)}<div><div class="lrn">${esc(l.name)}</div><div class="lrs">${l.unread?'● Sin resp · ':''}${esc(l.phone||'')}</div></div><div>${cSrc(l.source)}</div><div>${cUsr(l.assignedTo)}</div><div>${stpl(l.status)}</div><div class="lrt" style="color:var(--tm)">${timeFn(l)}</div></div>`).join('');}
 function bindXRows(c){c.querySelectorAll('.xlr[data-id]').forEach(el=>el.addEventListener('click',()=>openModal(+el.dataset.id)));}
@@ -1497,6 +1504,7 @@ function renderRmgParts(){
   const filtSearch=document.getElementById('rmgpSearch')?.value.toLowerCase().trim()||'';
   let leads=(S.leads||[]).filter(l=>l.isRmgParts===true);
   leads=_filtrarPorFechaVendedor(leads,S.filtrosRmgParts);
+  renderLeadsResumenBox('rmgpResumenBox','_rmgPartsResumenLeads',leads,'LEADS RMG PARTS EN EL PERÍODO');
   if(filtSearch) leads=leads.filter(l=>(l.name||'').toLowerCase().includes(filtSearch)||(l.phone||'').includes(filtSearch)||(l.interest||'').toLowerCase().includes(filtSearch));
 
   leads.sort((a,b)=>{
@@ -3517,6 +3525,7 @@ async function renderComprasFull() {
       if (Array.isArray(fresh)) allLeads = fresh;
     } catch(e) { /* usar S.leads como fallback */ }
     const leads = _filtrarPorFechaVendedor(allLeads.filter(l => l.isCompraRmg === true || FUENTES_COMPRA_RMG.includes((l.source||'').trim())), S.filtrosCompras);
+    renderLeadsResumenBox('comprasResumenBox','_comprasResumenLeads',leads,'LEADS COMPRAS RMG EN EL PERÍODO');
 
     const cl = document.getElementById('compras-leads-tbl');
     if(cl) {
