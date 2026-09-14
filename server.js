@@ -114,7 +114,7 @@ async function sendWA(to, text, retries = 2) {
   return false;
 }
 
-async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
+async function marcela(tenant, history, msg, notes, assignedName, leadSource, isCompraRmg) {
   try {
     let botCfg = await tRead(F.bot, tenant, {});
     // compras_rmg y rmg_parts son personas COMPARTIDAS a nivel de archivo (no van dentro de cada tenant),
@@ -127,9 +127,13 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource) {
     // debe mencionar lubricantes/RMG Parts de forma ambigua.
     const esOrigenRmgParts = leadSource === 'RMG Parts';
     const esMensajeRmgParts = typeof msg === 'string' && RMG_PARTS_KEYWORDS_RE.test(msg);
-    if ((leadSource === 'Compra Directa' || leadSource === 'Compramos tu Auto' || leadSource === 'Compramos tu auto') && botRaw?.compras_rmg?.systemPrompt) {
+    // Antes solo miraba leadSource — si el lead llegó por otro canal (ej. Meta Ads) y luego se marcó
+    // como isCompraRmg (flujo de retoma/tasación), esta condición fallaba y Cata volvía a responder
+    // como vendedora de autos en vez de seguir en modo compradora, confundiendo al vendedor del vehículo.
+    const esCompraRmg = leadSource === 'Compra Directa' || leadSource === 'Compramos tu Auto' || leadSource === 'Compramos tu auto' || isCompraRmg === true;
+    if (esCompraRmg && botRaw?.compras_rmg?.systemPrompt) {
       baseSysPrompt = botRaw.compras_rmg.systemPrompt;
-      console.log('[BOT] Modo COMPRADORA activado (origen:', leadSource, ')');
+      console.log('[BOT] Modo COMPRADORA activado (origen:', leadSource, isCompraRmg ? '/ isCompraRmg' : '', ')');
     } else if ((esOrigenRmgParts || esMensajeRmgParts) && botRaw?.rmg_parts?.systemPrompt) {
       baseSysPrompt = botRaw.rmg_parts.systemPrompt;
       console.log('[BOT] Modo RMG PARTS activado (origen:', leadSource, esMensajeRmgParts ? '/ keyword en mensaje' : '', ')');
@@ -290,7 +294,11 @@ const SLA_GREEN=20;
 const SLA_YELLOW=50;
 const SLA_REASSIGN=30;
 const FINAL_ST=new Set(['Cerrado','Abandonado','Perdido']);
-const VALID_ST=new Set(['Nuevo','En Proceso','Contactado','Calificado','Agendado','Reservado','Seguimiento','Negociación','Atendido','Cerrado','Abandonado','Perdido','esperando_respuesta_chileautos','esperando_respuesta_general']);
+const VALID_ST=new Set(['Nuevo','En Proceso','Contactado','Calificado','Agendado','Reservado','Seguimiento','Negociación','Atendido','Cerrado','Abandonado','Perdido','esperando_respuesta_chileautos','esperando_respuesta_general','Evaluando','Peritaje','Negociando Compra','Oferta Lanzada','Comprado','Descartado']);
+// Estados del pipeline de Compras RMG: se guardan libremente desde el backend (auto-cambios de status,
+// p.ej. al enviar una oferta) sin pasar por la exigencia de nota+agenda que aplica a los cambios manuales
+// de Estados Generales en el modal.
+const ST_COMPRA_PIPELINE=new Set(['Evaluando','Peritaje','Negociando Compra','Oferta Lanzada','Comprado','Descartado']);
 const read=async f=>{
   try{
     return JSON.parse(await fs.readFile(f,'utf8'));
@@ -1388,7 +1396,7 @@ app.post('/api/chat',async(req,res)=>{
     if(message.trim().toLowerCase()==='/reset'){leads.splice(idx,1);await tWrite(F.leads,tenant,leads);return res.json({reply:'🔄 Lead eliminado. Listo para nuevo ingreso desde Chileautos.',status:'eliminado',alertLevel:'none'});}
     const assignedUserChat=allUsers.find(u=>u.username===leads[idx].assignedTo)||RMG_VENDORS.find(v=>v.username===leads[idx].assignedTo);
     const assignedNameChat=leads[idx].botPersona||assignedUserChat?.name||'Cata';
-    const p=await marcela(tenant,leads[idx].chatHistory.slice(0,-1),message,leads[idx].notes,assignedNameChat,leads[idx].source);
+    const p=await marcela(tenant,leads[idx].chatHistory.slice(0,-1),message,leads[idx].notes,assignedNameChat,leads[idx].source,leads[idx].isCompraRmg);
     applySignal(leads[idx],p);
     
     if(p.schedule_detected && p.schedule_text) {
@@ -1814,7 +1822,7 @@ app.post('/webhook',async(req,res)=>{
           const allUsersIMG = await tRead(F.users, tenant);
           const assignedUserIMG = allUsersIMG.find(u => u.username === ld[tenant][idx].assignedTo) || RMG_VENDORS.find(v => v.username === ld[tenant][idx].assignedTo);
           const assignedNameIMG = ld[tenant][idx].botPersona || assignedUserIMG?.name || 'Cata';
-          const pImg = await marcela(tenant, ld[tenant][idx].chatHistory.slice(0, -1), photoBody, ld[tenant][idx].notes, assignedNameIMG, ld[tenant][idx].source);
+          const pImg = await marcela(tenant, ld[tenant][idx].chatHistory.slice(0, -1), photoBody, ld[tenant][idx].notes, assignedNameIMG, ld[tenant][idx].source, ld[tenant][idx].isCompraRmg);
           if (pImg.reply && pImg.reply.trim()) {
             ld[tenant][idx].chatHistory.push({ role: 'bot', content: pImg.reply, ts: Date.now() });
             await tWrite(F.leads, tenant, ld[tenant]);
@@ -2338,7 +2346,7 @@ app.post('/webhook',async(req,res)=>{
           const assignedNameWH=ldF[tenant][idxF].botPersona||assignedUserWH?.name||'Cata';
           const fullHistory = ldF[tenant][idxF].chatHistory;
           const lastUserMsg = fullHistory.filter(m=>m.role==='user').slice(-1)[0]?.content || body;
-          const p=await marcela(tenant,fullHistory.slice(0,-1),lastUserMsg,ldF[tenant][idxF].notes,assignedNameWH,ldF[tenant][idxF].source);
+          const p=await marcela(tenant,fullHistory.slice(0,-1),lastUserMsg,ldF[tenant][idxF].notes,assignedNameWH,ldF[tenant][idxF].source,ldF[tenant][idxF].isCompraRmg);
           applySignal(ldF[tenant][idxF],p);
           if(p.schedule_detected&&p.schedule_text){ldF[tenant][idxF].notes=(ldF[tenant][idxF].notes||[]);ldF[tenant][idxF].notes.push({content:'🚨 CITA AGENDADA POR IA: '+p.schedule_text,author:'Sistema',ts:Date.now()});ldF[tenant][idxF].intentSignal='BLUE';ldF[tenant][idxF].nextAction={text:'📞 Llamar al cliente: '+p.schedule_text,date:new Date(Date.now()+60000).toISOString(),createdAt:new Date().toISOString(),delegateToIA:false,iaCompleted:false};}
           let _isEnd=false;
@@ -2978,6 +2986,15 @@ app.post('/api/tasacion/enviar-precio', auth('admin','supervisor'),async (req, r
     // Registrar en bitácora
     lead.notes = lead.notes || [];
     lead.notes.push({ content: esRechazo ? 'Rechazo (fuera de políticas de compra) enviado al cliente' : `Precio enviado al cliente: ${rango}`, author: req.user?.name || req.user?.username || 'Admin', ts: Date.now() });
+    // Nota con author 'Sistema' — esta SÍ entra a <CONTEXTO_DEL_PORTAL> que lee Cata (marcela() solo
+    // toma notas de author 'Sistema'/'Bot'). Sin esto la IA no sabía que ya se le envió una oferta o
+    // un rechazo al vendedor, y ante cualquier mensaje nuevo del cliente volvía a arrancar el embudo
+    // desde el Paso 1 en vez de reconocer que la conversación ya llegó a su etapa final.
+    lead.notes.push({ content: esRechazo ? 'Ya se le envió al cliente el rechazo de la tasación (fuera de políticas de compra) — la conversación de compra ya concluyó, no reinicies el embudo.' : `Ya se le envió al cliente la oferta de compra por ${rango} y quedó esperando su confirmación — la conversación ya está en etapa final, no reinicies el embudo.`, author: 'Sistema', ts: Date.now() });
+    // Al enviar una oferta (precio != 0) el lead pasa automáticamente a "Oferta Lanzada" en el
+    // pipeline de Compras RMG — se guarda libre, sin pasar por la exigencia de nota+agenda del modal
+    // (esa validación es solo del botón "Guardar cambios" del frontend, este endpoint no la usa).
+    if (!esRechazo) lead.status = 'Oferta Lanzada';
     await tWrite(F.leads, tenant, leads);
     console.log('[PRECIO-CLIENTE]', esRechazo ? 'RECHAZO enviado a' : 'Enviado a', lead.name, ':', esRechazo ? '(fuera de politicas)' : rango);
     res.json({ ok: true });
