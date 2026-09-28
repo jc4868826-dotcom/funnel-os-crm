@@ -981,7 +981,7 @@ const auth=(...roles)=>async(req,res,next)=>{
   req.user=sess.user;req.tenant=sess.tenant;next();
 };
 const isOnlyVendedor = (u) => u.role === 'vendedor';
-const byRole=(leads,user)=>user.role==='vendedor'?leads.filter(l=>l.assignedTo===user.username):leads;
+const byRole=(leads,user)=>(user.role==='vendedor'||user.role==='tasador')?leads.filter(l=>l.assignedTo===user.username):leads;
 
 function defaultPermsForRole(role) {
   if (role === 'admin') {
@@ -994,6 +994,15 @@ function defaultPermsForRole(role) {
       operacion: 2, leads: 3, chileautos: 2, espera: 2, compras: 2,
       pipeline: 3, analitica: 2, equipo: 2, inventario: 2,
       bi: 0, analisis: 2, auditoria: 2, config: 0
+    };
+  }
+  if (role === 'tasador') {
+    // Rol de tasador/compras: gestiona la compra de vehículos (retoma/tasación), no es vendedor.
+    // Vista acotada solo a lo que necesita para evaluar y ofertar autos que se le asignen.
+    return {
+      operacion: 0, leads: 0, chileautos: 0, espera: 0, compras: 3,
+      pipeline: 0, analitica: 1, equipo: 0, inventario: 1,
+      bi: 0, analisis: 0, auditoria: 0, config: 0
     };
   }
   return {
@@ -1050,7 +1059,7 @@ app.post('/api/admin/migrate-comprador-to-compras', auth('admin'), async (req,re
 // [NUEVO ENDPOINT: ENVIAR ARCHIVO A WA]
 const multer = require('multer');
 const uploadWA = multer({ dest: '/tmp/' }); // Guardado temporal
-app.post('/api/leads/:id/send-media', auth('admin','vendedor'), uploadWA.single('file'), async (req, res) => {
+app.post('/api/leads/:id/send-media', auth('admin','vendedor','tasador'), uploadWA.single('file'), async (req, res) => {
   try {
     if(!req.file) return res.status(400).json({error: 'Archivo requerido'});
     const leads = await tRead(F.leads, req.tenant);
@@ -1123,15 +1132,17 @@ async function filterLeadsForUser(leads, user, tenant) {
       const esCompra = l.source === 'Compramos tu Auto' || l.source === 'Compra Directa' || l.isCompraRmg === true;
       if (esCompra) {
         if ((perms.compras || 0) === 0) return false;
-        if (user.role !== 'admin' && !comprasList.includes(user.username) && user.username !== 'comprador') return false;
+        // El rol 'tasador' (y cualquiera fuera del pool de rotación automática) igual debe ver
+        // los leads de compra que se le asignaron manualmente, aunque no esté en comprasAssignees.
+        if (user.role !== 'admin' && !comprasList.includes(user.username) && user.username !== 'comprador' && l.assignedTo !== user.username) return false;
         return true;
       }
-      if (user.role === 'vendedor' && l.assignedTo !== user.username) return false;
+      if ((user.role === 'vendedor' || user.role === 'tasador') && l.assignedTo !== user.username) return false;
       return true;
     });
   } catch(e) {
     console.error('[filterLeadsForUser]', e.message);
-    return user.role === 'vendedor' ? leads.filter(l => l.assignedTo === user.username) : leads;
+    return (user.role === 'vendedor' || user.role === 'tasador') ? leads.filter(l => l.assignedTo === user.username) : leads;
   }
 }
 
@@ -1150,13 +1161,13 @@ app.get('/api/leads',auth(),async(req,res)=>{
     leads.sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0));res.json(leads);
   }catch(err){console.error('[GET /api/leads]',err.message);res.status(500).json({error:'Error cargando leads'});}
 });
-app.get('/api/leads/:id',auth(),async(req,res)=>{await applySlaRules(req.tenant);const leads=await tRead(F.leads,req.tenant);const l=leads.find(x=>x.id==req.params.id);if(!l)return res.status(404).json({error:'No encontrado'});if(req.user.role==='vendedor'&&l.assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});res.json(l);
+app.get('/api/leads/:id',auth(),async(req,res)=>{await applySlaRules(req.tenant);const leads=await tRead(F.leads,req.tenant);const l=leads.find(x=>x.id==req.params.id);if(!l)return res.status(404).json({error:'No encontrado'});if((req.user.role==='vendedor'||req.user.role==='tasador')&&l.assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});res.json(l);
 // supervisor: sin restricción de assignedTo
 });
 app.patch('/api/leads/:id',auth(),async(req,res)=>{
   const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);
   if(idx===-1)return res.status(404).json({error:'No encontrado'});
-  if(req.user.role==='vendedor'&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});
+  if((req.user.role==='vendedor'||req.user.role==='tasador')&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});
   const ALLOWED=['status','interest','name','phone','botActive','nextAction','pastActions','source','lastClientTs','lastInteraction','createdAt'];if(req.user.role==='admin'||req.user.role==='supervisor')ALLOWED.push('assignedTo','isCompraRmg','isRmgParts');
   // Borrado individual via patch status '_delete_'
   if(req.body.status==='_delete_'){
@@ -1180,11 +1191,11 @@ app.patch('/api/leads/:id',auth(),async(req,res)=>{
   await tWrite(F.leads,req.tenant,leads);res.json(leads[idx]);
 });
 app.post('/api/leads/:id/reassign',auth(),async(req,res)=>{if(!req.user.canReassign&&req.user.role!=='admin')return res.status(403).json({error:'Sin permiso para reasignar'});const{to}=req.body||{};if(!to)return res.status(400).json({error:'Falta campo to'});const users=await tRead(F.users,req.tenant);const target=users.find(u=>u.username===to);if(!target)return res.status(404).json({error:'Usuario destino no encontrado'});if((target.status||'Activo')==='Inactivo')return res.status(400).json({error:'El usuario destino está inactivo'});const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);if(idx===-1)return res.status(404).json({error:'Lead no encontrado'});leads[idx].assignedTo=to;leads[idx].reassigned=true;leads[idx].reassignedAt=new Date().toISOString();leads[idx].adminReassignAlertSent=false;leads[idx].lastInteraction=new Date().toISOString();leads[idx].alertLevel=calcAlert(leads[idx]);await tWrite(F.leads,req.tenant,leads);res.json(leads[idx]);});
-app.put('/api/leads/:id',auth(),async(req,res)=>{const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);if(idx===-1)return res.status(404).json({error:'No encontrado'});if(req.user.role==='vendedor'&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});if(req.user.role==='vendedor')delete req.body.assignedTo;
+app.put('/api/leads/:id',auth(),async(req,res)=>{const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);if(idx===-1)return res.status(404).json({error:'No encontrado'});if((req.user.role==='vendedor'||req.user.role==='tasador')&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});if(req.user.role==='vendedor'||req.user.role==='tasador')delete req.body.assignedTo;
 // supervisor puede editar cualquier lead y reasignar
 leads[idx]={...leads[idx],...req.body,lastInteraction:new Date().toISOString()};leads[idx].alertLevel=calcAlert(leads[idx]);await tWrite(F.leads,req.tenant,leads);res.json(leads[idx]);});
 
-app.post('/api/leads/:id/resumen',auth('admin','vendedor','supervisor'),async(req,res)=>{
+app.post('/api/leads/:id/resumen',auth('admin','vendedor','supervisor','tasador'),async(req,res)=>{
   const leads=await tRead(F.leads,req.tenant);
   const idx=leads.findIndex(x=>x.id==req.params.id);
   if(idx===-1)return res.status(404).json({error:'No encontrado'});
@@ -1244,12 +1255,12 @@ app.post('/api/leads/:id/resumen',auth('admin','vendedor','supervisor'),async(re
   }
 });
 
-app.post('/api/leads/:id/bot',auth(),async(req,res)=>{const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);if(idx===-1)return res.status(404).json({error:'No encontrado'});if(req.user.role==='vendedor'&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});leads[idx].botActive=!!req.body.botActive;await tWrite(F.leads,req.tenant,leads);res.json(leads[idx]);});
-app.post('/api/leads/:id/message',auth('admin','vendedor','supervisor'),async(req,res)=>{
+app.post('/api/leads/:id/bot',auth(),async(req,res)=>{const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);if(idx===-1)return res.status(404).json({error:'No encontrado'});if((req.user.role==='vendedor'||req.user.role==='tasador')&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});leads[idx].botActive=!!req.body.botActive;await tWrite(F.leads,req.tenant,leads);res.json(leads[idx]);});
+app.post('/api/leads/:id/message',auth('admin','vendedor','supervisor','tasador'),async(req,res)=>{
   const{content}=req.body||{};if(!content)return res.status(400).json({error:'content requerido'});
   const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);
   if(idx===-1)return res.status(404).json({error:'No encontrado'});
-  if(req.user.role==='vendedor'&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});
+  if((req.user.role==='vendedor'||req.user.role==='tasador')&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});
   leads[idx].chatHistory=leads[idx].chatHistory||[];
   leads[idx].chatHistory.push({role:'agent',content,ts:Date.now(),agent:req.user.username,agentName:req.user.name||req.user.username});
   leads[idx].botPersona=req.user.name||req.user.username;
@@ -1259,10 +1270,10 @@ app.post('/api/leads/:id/message',auth('admin','vendedor','supervisor'),async(re
   res.json(leads[idx]);
 });
 
-app.get('/api/dashboard/vendedor',auth('admin','vendedor','supervisor'),async(req,res)=>{
+app.get('/api/dashboard/vendedor',auth('admin','vendedor','supervisor','tasador'),async(req,res)=>{
   const all=await applySlaRules(req.tenant);const{s,e}=parseDateRange(req.query.start,req.query.end);
   let leads=(s!==null||e!==null)?all.filter(l=>inRange(l,s,e)):all;
-  if(req.user.role==='vendedor') leads=leads.filter(l=>l.assignedTo===req.user.username);
+  if(req.user.role==='vendedor'||req.user.role==='tasador') leads=leads.filter(l=>l.assignedTo===req.user.username);
   const nuevos=leads.filter(l=>l.status==='Nuevo');const closed=leads.filter(l=>l.status==='Cerrado').length;
   const now=Date.now();const minOf=l=>(now-new Date(l.lastClientTs||l.lastInteraction).getTime())/60000;
   const avgResp=nuevos.length?Math.round(nuevos.reduce((a,l)=>a+minOf(l),0)/nuevos.length):0;
@@ -1355,7 +1366,7 @@ app.get('/api/config/canales',auth(),async(req,res)=>{const cfg=await tRead(F.co
 app.put('/api/config/canales',auth('admin'),async(req,res)=>{const{canales}=req.body||{};if(!Array.isArray(canales)||!canales.length)return res.status(400).json({error:'canales debe ser un array no vacío'});const cfg={...await tRead(F.config,req.tenant,{}),canales};await tWrite(F.config,req.tenant,cfg);res.json(canales);});
 app.get('/api/bot',auth('admin'),async(req,res)=>res.json(await tRead(F.bot,req.tenant,{})));
 app.put('/api/bot',auth('admin'),async(req,res)=>{const u={...await tRead(F.bot,req.tenant,{}),...req.body};await tWrite(F.bot,req.tenant,u);res.json(u);});
-app.get('/api/inventory',auth('admin','vendedor','supervisor'),async(req,res)=>res.json(await tRead(F.inventory,req.tenant)));
+app.get('/api/inventory',auth('admin','vendedor','supervisor','tasador'),async(req,res)=>res.json(await tRead(F.inventory,req.tenant)));
 
 app.post('/api/force-sla',auth('admin'),async(req,res)=>{
   const leads=await tRead(F.leads,req.tenant);
@@ -1488,7 +1499,7 @@ app.post('/api/leads/inbound', async (req, res) => {
 });
 
 // ── ENDPOINT: Crear lead manual desde el frontend ────────────────────────
-app.post('/api/leads/manual', auth('admin','vendedor','supervisor'),async (req, res) => {
+app.post('/api/leads/manual', auth('admin','vendedor','supervisor','tasador'),async (req, res) => {
   try {
     const tenant = req.tenant || 'demo_automotora';
     const { nombre, phone='Pendiente', canal='WhatsApp', asignado, interes='', nota='', status='Nuevo', isCompraRmg=false } = req.body;
@@ -2390,7 +2401,7 @@ app.post('/api/inventory/push', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/inventory/scraper',auth('admin','vendedor','supervisor'),async(req,res)=>{
+app.get('/api/inventory/scraper',auth('admin','vendedor','supervisor','tasador'),async(req,res)=>{
   let dbInv = await tRead(F.inventory,req.tenant);
   if(!Array.isArray(dbInv)) dbInv = [];
   const webItems = (scrapeCache.items && scrapeCache.items.length) ? scrapeCache.items : [];
@@ -2655,7 +2666,7 @@ async function scrapePreciosMercado(modelos){
   return res2;
 }
 
-app.get('/api/precios/mercado',auth('admin','vendedor','supervisor'),async(req,res)=>{
+app.get('/api/precios/mercado',auth('admin','vendedor','supervisor','tasador'),async(req,res)=>{
   try{
     if(req.query.refresh==='1')precioCache.ts=0;
     await scrapeRMG();
@@ -2672,7 +2683,7 @@ app.get('/api/precios/mercado',auth('admin','vendedor','supervisor'),async(req,r
   }catch(e){res.status(500).json({error:e.message});}
 });
 
-app.get('/api/precios/inventario',auth('admin','vendedor','supervisor'),async(req,res)=>{
+app.get('/api/precios/inventario',auth('admin','vendedor','supervisor','tasador'),async(req,res)=>{
   try{
     await scrapeRMG();
     let inv = (scrapeCache.items && scrapeCache.items.length) ? scrapeCache.items : [];
@@ -2690,7 +2701,7 @@ app.get('/api/precios/inventario',auth('admin','vendedor','supervisor'),async(re
 });
 
 // ── ANÁLISIS IA DE LEADS ────────────────────────────────────────
-app.post('/api/leads/analisis-ia', auth('admin','vendedor','supervisor'),async (req, res) => {
+app.post('/api/leads/analisis-ia', auth('admin','vendedor','supervisor','tasador'),async (req, res) => {
   try {
     const { leadIds, filtros } = req.body || {};
     const allLeads = await tRead(F.leads, req.tenant);
@@ -2877,7 +2888,7 @@ app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')))
 setInterval(async()=>{for(const t of TENANTS){try{await applySlaRules(t);}catch(e){console.error('SLA',t,e.message);}}},60000);
 
 // ── SPRINT 4: Tasación Request ──────────────────────────────────────────────
-app.post('/api/tasacion/request', auth('admin','vendedor','supervisor'),async (req, res) => {
+app.post('/api/tasacion/request', auth('admin','vendedor','supervisor','tasador'),async (req, res) => {
   try {
     const tenant = req.tenant;
     const { leadId } = req.body;
@@ -2914,7 +2925,7 @@ app.post('/api/tasacion/request', auth('admin','vendedor','supervisor'),async (r
 
 
 // ── SPRINT 4: Tasación Offer ─────────────────────────────────────────────────
-app.post('/api/tasacion/offer', auth('admin','supervisor'),async (req, res) => {
+app.post('/api/tasacion/offer', auth('admin','supervisor','tasador'),async (req, res) => {
   try {
     const tenant = req.tenant;
     const { leadId, offerAmount } = req.body;
@@ -2961,7 +2972,7 @@ app.post('/api/tasacion/offer', auth('admin','supervisor'),async (req, res) => {
 
 
 // ── ENVIAR PRECIO AL CLIENTE (registra en chat + bitácora) ─────────────────
-app.post('/api/tasacion/enviar-precio', auth('admin','supervisor'),async (req, res) => {
+app.post('/api/tasacion/enviar-precio', auth('admin','supervisor','tasador'),async (req, res) => {
   try {
     const tenant = req.tenant;
     const { leadId, rango, mensajeRechazo } = req.body;
@@ -3005,7 +3016,7 @@ app.post('/api/tasacion/enviar-precio', auth('admin','supervisor'),async (req, r
 });
 
 // ── SPRINT 4: PATCH tradeIn fields ──────────────────────────────────────────
-app.patch('/api/leads/:id/tradein', auth('admin','vendedor','supervisor'),async (req, res) => {
+app.patch('/api/leads/:id/tradein', auth('admin','vendedor','supervisor','tasador'),async (req, res) => {
   try {
     const tenant = req.tenant;
     const leads = await tRead(F.leads, tenant, []);
