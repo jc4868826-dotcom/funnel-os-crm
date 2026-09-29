@@ -710,17 +710,18 @@ async function ejecutarAnalisisIA(){
 <div class="tb" id="mainTb"><span class="lbl">Rango</span><div class="qk"><button data-q="all">Todo</button><button data-q="today">Hoy</button><button data-q="yesterday">Ayer</button><button data-q="7d">7d</button><button data-q="30d">30d</button><button data-q="month">📅 Mes</button></div><span class="lbl">Desde</span><input type="date" id="dS"><span class="lbl">Hasta</span><input type="date" id="dE"><button class="clr" id="dC">Limpiar</button><span class="lbl" id="lblS">Vendedor</span><select id="selF"><option value="">Todos</option></select><span class="ri" id="rI">Sin filtro</span></div>
 <section id="view-dashboard" class="view active">
 <div class="st">Dashboard Operativo</div>
-<div class="bt" style="margin-top:0">📊 Leads Nuevos en el Período</div>
-<div id="nuevosResumenBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px;margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:28px"></div>
-<div class="bt">① SLA Primera Respuesta — leads Nuevos</div>
-<div class="s3">
-<div class="sb2 fr" onclick="toggleSlaPanel('fresh')"><div class="si">🟢</div><div class="sl">En Tiempo</div><div class="sc" id="scF">—</div><div class="sh">Nuevos · &lt; 20 min (Verde)</div></div>
-<div class="sb2 ri" onclick="toggleSlaPanel('risk')"><div class="si">🟡</div><div class="sl">En Riesgo</div><div class="sc" id="scR">—</div><div class="sh">Nuevos · 20-30 min (Riesgo)</div></div>
-<div class="sb2 cr" onclick="toggleSlaPanel('crit')"><div class="si">🔴</div><div class="sl">Crítico</div><div class="sc" id="scC">—</div><div class="sh">Nuevos · +50 min</div></div>
-<div class="sb2 rs" onclick="toggleSlaPanel('reassigned')"><div class="si">🔁</div><div class="sl">Reasignados</div><div class="sc" id="scRS">—</div><div class="sh">&gt; 30 min (Reasignado)</div></div>
+<div class="bt" style="margin-top:0;display:flex;align-items:center;gap:6px">🚦 SLA Primera Respuesta <span style="font-size:10px;font-weight:500;color:var(--tm);text-transform:none;letter-spacing:0">— leads Nuevos</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+<div class="sb2 fr" onclick="toggleSlaPanel('fresh')" style="padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px"><span style="font-size:16px;line-height:1">🟢</span><div style="min-width:0"><div style="font-size:17px;font-weight:800;line-height:1" id="scF">—</div><div style="font-size:9px;color:var(--tm);font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap">En Tiempo</div></div></div>
+<div class="sb2 ri" onclick="toggleSlaPanel('risk')" style="padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px"><span style="font-size:16px;line-height:1">🟡</span><div style="min-width:0"><div style="font-size:17px;font-weight:800;line-height:1" id="scR">—</div><div style="font-size:9px;color:var(--tm);font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap">En Riesgo</div></div></div>
+<div class="sb2 cr" onclick="toggleSlaPanel('crit')" style="padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px"><span style="font-size:16px;line-height:1">🔴</span><div style="min-width:0"><div style="font-size:17px;font-weight:800;line-height:1" id="scC">—</div><div style="font-size:9px;color:var(--tm);font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap">Crítico</div></div></div>
+<div class="sb2 rs" onclick="toggleSlaPanel('reassigned')" style="padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px"><span style="font-size:16px;line-height:1">🔁</span><div style="min-width:0"><div style="font-size:17px;font-weight:800;line-height:1" id="scRS">—</div><div style="font-size:9px;color:var(--tm);font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap">Reasignados</div></div></div>
 </div>
 <div class="xe" id="slaX"><div class="xt" id="slaXT">—</div><div class="xs" id="slaXB"></div></div>
-<div class="bt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">② Embudo de Ventas<div style="display:flex;gap:6px" id="funModeToggle">
+<div class="bt">📊 Leads Nuevos en el Período</div>
+<div id="nuevosResumenBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px;margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:28px"></div>
+<div id="origenFunnelBox" style="display:none"></div>
+<div class="bt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">② Embudo de Ventas (General)<div style="display:flex;gap:6px" id="funModeToggle">
   <button type="button" onclick="setFunMode('reales')" id="funModeReales" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--ac);color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Leads Reales</button>
   <button type="button" onclick="setFunMode('gestion')" id="funModeGestion" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg);color:var(--ts);font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Gestión</button>
 </div></div>
@@ -1497,7 +1498,149 @@ function showLeadsDetalleModal(allLeads,filtroSource){
   document.getElementById('btnCerrarLeadsDetalle').onclick=()=>m.remove();
   m.addEventListener('click',e=>{if(e.target===m)m.remove();});
 }
-function renderNuevosResumen(){renderLeadsResumenBox('nuevosResumenBox','_nuevosResumenLeads',normLeads(),'LEADS NUEVOS EN EL PERÍODO');}
+// ── Dashboard: "Leads Nuevos" con embudo de estados por origen (nuevos + gestión) ──
+const DASH_ST=['Nuevo','En Proceso','Contactado','Calificado','Negociación','Agendado','Reservado','Seguimiento','Cerrado','Abandonado'];
+const DASH_ST_META={
+  'Nuevo':{icon:'🆕',color:'#3b82f6'},'En Proceso':{icon:'🔄',color:'#f59e0b'},'Contactado':{icon:'💬',color:'#6366f1'},
+  'Calificado':{icon:'⭐',color:'#ec4899'},'Negociación':{icon:'🤝',color:'#8b5cf6'},'Agendado':{icon:'📅',color:'#8b5cf6'},
+  'Reservado':{icon:'🔒',color:'#f97316'},'Seguimiento':{icon:'🔁',color:'#0891b2'},'Cerrado':{icon:'✅',color:'#10b981'},'Abandonado':{icon:'❌',color:'#6b7280'}
+};
+window._dashCardData=window._dashCardData||{};
+function dashEsc(s){return (s+'').replace(/'/g,"\\'");}
+function dashStatusCards(leads,kind){
+  return DASH_ST.map(function(st){
+    var arr=(leads||[]).filter(function(l){return l.status===st;});
+    var n=arr.length;
+    var meta=DASH_ST_META[st]||{icon:'❔',color:'var(--tm)'};
+    window._dashCardData[kind+'_'+st]=arr;
+    var clickFn=kind==='nuevo'?("dashShowNuevosDetalle('"+dashEsc(st)+"')"):("dashShowGestionDetalle('"+dashEsc(st)+"')");
+    var activeCls=(kind==='gestion'&&S.dashGestionStatusOpen===st)?' af':'';
+    return '<div class="fc'+activeCls+'" data-status="'+esc(st)+'" onclick="'+clickFn+'"><div class="fi">'+meta.icon+'</div><div class="fv" style="color:'+meta.color+'">'+n+'</div><div class="fl">'+esc(st)+'</div></div>';
+  }).join('');
+}
+function dashShowNuevosDetalle(status){
+  var arr=window._dashCardData['nuevo_'+status]||[];
+  showLeadsDetalleModal(arr);
+}
+function dashShowGestionDetalle(status){
+  var grid=$('origenGestionGrid');
+  if(S.dashGestionStatusOpen===status){
+    S.dashGestionStatusOpen=null;
+    var det=$('origenGestionDetalle');if(det){det.style.display='none';det.innerHTML='';}
+    if(grid)grid.querySelectorAll('.fc').forEach(function(c){c.classList.remove('af');});
+    return;
+  }
+  S.dashGestionStatusOpen=status;
+  if(grid)grid.querySelectorAll('.fc').forEach(function(c){c.classList.toggle('af',c.dataset.status===status);});
+  var arr=window._dashCardData['gestion_'+status]||[];
+  var sMs=S.range.start?new Date(S.range.start+'T00:00:00').getTime():null;
+  var eMs=S.range.end?new Date(S.range.end+'T23:59:59').getTime():null;
+  var rows=arr.map(function(l){
+    var notas=(l.notes||[]).filter(function(n){var t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;});
+    return {lead:l,count:notas.length,notas:notas};
+  }).sort(function(a,b){return b.count-a.count;});
+  var totalAcciones=rows.reduce(function(s,r){return s+r.count;},0);
+  var det=$('origenGestionDetalle');if(!det)return;
+  det.style.display='block';
+  det.innerHTML='<div style="background:var(--p2);border:1px solid var(--bd);border-radius:10px;padding:12px 14px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--ts)">🗒 Carga de Gestión — '+esc(status)+' ('+arr.length+' lead'+(arr.length!==1?'s':'')+' · '+totalAcciones+' acci'+(totalAcciones!==1?'ones':'ón')+' en bitácora)</div>'
+    +'<button onclick="document.getElementById(\'origenGestionDetalle\').style.display=\'none\'" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:7px;padding:3px 9px;font-size:10.5px;cursor:pointer;font-family:inherit">✕</button>'
+    +'</div>'
+    +'<div style="max-height:320px;overflow-y:auto">'
+    +'<table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Vendedor</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)"># Acciones</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Última acción</th></tr></thead>'
+    +'<tbody>'+(rows.length?rows.map(function(r){
+      var last=r.notas.length?r.notas[r.notas.length-1]:null;
+      return '<tr onclick="openModal('+r.lead.id+')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
+        +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx)">'+esc(r.lead.name||'Sin nombre')+'</td>'
+        +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tm)">'+esc(r.lead.assignedTo||'—')+'</td>'
+        +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx);text-align:center;font-weight:700">'+r.count+'</td>'
+        +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+(last?fDT(last.ts):'—')+'</td>'
+        +'</tr>';
+    }).join(''):'<tr><td colspan="4" style="padding:12px;text-align:center;color:var(--tm);font-size:12px">Sin leads en este estado.</td></tr>')
+    +'</tbody></table></div></div>';
+  det.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function loadOrigenGestion(origen){
+  S._dashGestionQ=qstr()+'|'+(S.seller||'');
+  var q=qstr();var gq=q?(q+'&mode=gestion'):'?mode=gestion';
+  api('GET','/api/leads'+gq).then(function(all){
+    if(S.dashOrigenSel!==origen)return;
+    var gestLeads=_excluirComprasYParts(all||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
+    S._dashGestionLeads=gestLeads;
+    var grid=$('origenGestionGrid');if(!grid)return;
+    grid.innerHTML=dashStatusCards(gestLeads,'gestion');
+  }).catch(function(e){
+    var grid=$('origenGestionGrid');if(grid)grid.innerHTML='<div style="grid-column:1/-1;font-size:12px;color:#dc2626;text-align:center;padding:10px">Error cargando gestión: '+esc(e.message)+'</div>';
+  });
+}
+function renderOrigenFunnelBox(origen){
+  var box=$('origenFunnelBox');if(!box)return;
+  if(!origen){box.style.display='none';box.innerHTML='';return;}
+  box.style.display='block';
+  S.dashGestionStatusOpen=null;
+  var nuevos=(S._nuevosResumenLeads||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
+  box.innerHTML='<div style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:16px;margin-bottom:16px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
+    +'<div style="font-size:12.5px;font-weight:700;color:var(--ts)">📥 Nuevos por Estado — '+esc(origen)+'</div>'
+    +'<button onclick="toggleOrigenFunnel(\''+dashEsc(origen)+'\')" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:7px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit">✕ Cerrar</button>'
+    +'</div>'
+    +'<div class="fg" id="origenNuevosGrid">'+dashStatusCards(nuevos,'nuevo')+'</div>'
+    +'<div style="font-size:12.5px;font-weight:700;color:var(--ts);margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--bd);display:flex;align-items:center;gap:8px">🛠 Gestión en el Período por Estado — '+esc(origen)+'<button onclick="loadOrigenGestion(\''+dashEsc(origen)+'\')" title="Actualizar gestión" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:6px;padding:2px 7px;font-size:10.5px;cursor:pointer;font-family:inherit">🔄</button></div>'
+    +'<div id="origenGestionGrid" class="fg"><div style="grid-column:1/-1;font-size:12px;color:var(--tm);text-align:center;padding:10px">⏳ Cargando gestión…</div></div>'
+    +'<div id="origenGestionDetalle" style="display:none;margin-top:12px"></div>'
+    +'</div>';
+  loadOrigenGestion(origen);
+}
+function refreshOrigenFunnelNuevos(){
+  var origen=S.dashOrigenSel;if(!origen)return;
+  var grid=$('origenNuevosGrid');if(!grid)return;
+  var nuevos=(S._nuevosResumenLeads||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
+  grid.innerHTML=dashStatusCards(nuevos,'nuevo');
+}
+function toggleOrigenFunnel(origen){
+  if(S.dashOrigenSel===origen){
+    S.dashOrigenSel=null;S._dashGestionQ=null;S.dashGestionStatusOpen=null;
+    var box=$('origenFunnelBox');if(box){box.style.display='none';box.innerHTML='';}
+    renderDashLeadsNuevos();
+    return;
+  }
+  S.dashOrigenSel=origen;S._dashGestionQ=null;
+  renderDashLeadsNuevos();
+  renderOrigenFunnelBox(origen);
+}
+function renderDashLeadsNuevos(){
+  var box=$('nuevosResumenBox');if(!box)return;
+  var leads=normLeads();
+  S._nuevosResumenLeads=leads;
+  var total=leads.length;
+  var bySrc={};
+  leads.forEach(function(l){var s=l.source||'Sin origen';bySrc[s]=(bySrc[s]||0)+1;});
+  var pct=function(n){return total?((n/total)*100).toFixed(0)+'%':'—';};
+  var selOrigen=S.dashOrigenSel;
+  var chips=Object.keys(bySrc).sort(function(a,b){return bySrc[b]-bySrc[a];}).map(function(s){
+    var active=selOrigen===s;
+    return '<div onclick="toggleOrigenFunnel(\''+dashEsc(s)+'\')" style="cursor:pointer;background:'+(active?'var(--ac)':'var(--p2)')+';border:1px solid '+(active?'var(--ac)':'var(--bd)')+';border-radius:8px;padding:8px 14px;text-align:center;min-width:96px" title="Ver el embudo de estados de '+bySrc[s]+' leads de '+esc(s)+'">'
+      +'<div style="font-size:20px;font-weight:800;color:'+(active?'#fff':'var(--ac)')+'">'+bySrc[s]+'</div>'
+      +'<div style="font-size:10.5px;color:'+(active?'#fff':'var(--tm)')+';margin-top:2px;font-weight:600">'+esc(s)+'</div>'
+      +'<div style="font-size:9.5px;color:'+(active?'rgba(255,255,255,.85)':'var(--tm)')+';margin-top:1px">'+pct(bySrc[s])+' del total</div>'
+      +'</div>';
+  }).join('');
+  box.innerHTML='<div onclick="showLeadsDetalleModal(S._nuevosResumenLeads)" style="cursor:pointer;text-align:center;padding-right:24px;border-right:1px solid var(--bd)" title="Ver el detalle de los '+total+' leads">'
+    +'<div style="font-size:44px;font-weight:900;color:var(--tx);letter-spacing:-.03em;line-height:1">'+total+'</div>'
+    +'<div style="font-size:11px;color:var(--tm);margin-top:4px;font-weight:600">LEADS NUEVOS EN EL PERÍODO</div>'
+    +'<div style="font-size:9.5px;color:var(--ac);margin-top:3px;font-weight:600">👆 Ver detalle</div>'
+    +'</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:10px;flex:1">'+(chips||'<div style="font-size:12px;color:var(--tm)">Sin leads en este rango.</div>')+'</div>';
+}
+function _dashOrigenTick(){
+  if(!S.dashOrigenSel)return;
+  var curQ=qstr()+'|'+(S.seller||'');
+  if(S._dashGestionQ!==curQ){renderOrigenFunnelBox(S.dashOrigenSel);}
+  else{refreshOrigenFunnelNuevos();}
+}
+function renderNuevosResumen(){renderDashLeadsNuevos();_dashOrigenTick();}
 function renderDash(){renderNuevosResumen();renderSlaCards();renderFunnel();renderPerfTable();renderTasaciones();}
 function renderXRows(items,timeFn){if(!items.length)return'<div class="xe2">Sin leads.</div>';const gc='grid-template-columns:10px 1fr 1fr 1fr 1fr auto';const hd=`<div class="xlr" style="${gc};cursor:default;background:var(--p2)"><div></div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Nombre</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Canal</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Vendedor</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Estado</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Última</div></div>`;return hd+items.map(l=>`<div class="xlr" data-id="${l.id}" style="${gc}">${adot(l.alertLevel)}<div><div class="lrn">${esc(l.name)}</div><div class="lrs">${l.unread?'● Sin resp · ':''}${esc(l.phone||'')}</div></div><div>${cSrc(l.source)}</div><div>${cUsr(l.assignedTo)}</div><div>${stpl(l.status)}</div><div class="lrt" style="color:var(--tm)">${timeFn(l)}</div></div>`).join('');}
 function bindXRows(c){c.querySelectorAll('.xlr[data-id]').forEach(el=>el.addEventListener('click',()=>openModal(+el.dataset.id)));}
