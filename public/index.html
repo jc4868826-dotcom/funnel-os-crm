@@ -722,10 +722,10 @@ async function ejecutarAnalisisIA(){
 <div id="nuevosResumenBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px;margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:28px"></div>
 <div id="origenFunnelBox" style="display:none"></div>
 <div class="bt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">② Embudo de Ventas (General)<div style="display:flex;gap:6px" id="funModeToggle">
-  <button type="button" onclick="setFunMode('reales')" id="funModeReales" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--ac);color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Leads Reales</button>
-  <button type="button" onclick="setFunMode('gestion')" id="funModeGestion" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg);color:var(--ts);font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Gestión</button>
+  <button type="button" onclick="setFunMode('unicos')" id="funModeUnicos" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--ac);color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Gestión Únicos</button>
+  <button type="button" onclick="setFunMode('acciones')" id="funModeAcciones" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg);color:var(--ts);font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Acciones</button>
 </div></div>
-<div style="font-size:10.5px;color:var(--tm);margin:-4px 0 8px" id="funModeHint">Leads Reales: creados dentro del rango seleccionado.</div>
+<div style="font-size:10.5px;color:var(--tm);margin:-4px 0 8px" id="funModeHint">Gestión Únicos: leads con actividad dentro del rango, contados una sola vez.</div>
 <div id="funTotalBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:12px 16px;margin-bottom:10px;display:flex;align-items:baseline;gap:10px"></div>
 <div class="fg" id="fG"></div>
 <div class="xe" id="funX" style="margin-top:10px"><div class="xt" id="funXT">—</div><div class="xs" id="funXB"></div></div>
@@ -1119,7 +1119,7 @@ async function ejecutarAnalisisIA(){
 <div class="toast" id="tst"></div>
 <script>
 var calWeekOffset=0;
-const S={token:localStorage.getItem('ft')||null,user:JSON.parse(localStorage.getItem('fu')||'null'),tenant:localStorage.getItem('ftn')||'demo_automotora',config:null,leads:[],team:[],channels:[],users:[],range:{start:null,end:null,quick:'all'},seller:'',funMode:'reales',leadsGestion:[],acc:new Set(JSON.parse(localStorage.getItem('fa')||'[]')),pollTimer:null,mid:null,slaOpen:null,funOpen:null,view:'dashboard',filtrosCompras:{start:null,end:null,seller:''},filtrosRmgParts:{start:null,end:null,seller:''}};
+const S={token:localStorage.getItem('ft')||null,user:JSON.parse(localStorage.getItem('fu')||'null'),tenant:localStorage.getItem('ftn')||'demo_automotora',config:null,leads:[],team:[],channels:[],users:[],range:{start:null,end:null,quick:'all'},seller:'',funMode:'unicos',leadsGestion:[],acc:new Set(JSON.parse(localStorage.getItem('fa')||'[]')),pollTimer:null,mid:null,slaOpen:null,funOpen:null,view:'dashboard',filtrosCompras:{start:null,end:null,seller:''},filtrosRmgParts:{start:null,end:null,seller:''}};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fCLP=n=>'$'+(Number(n)||0).toLocaleString('es-CL');
@@ -1178,7 +1178,7 @@ if(btnFF) {
   });
 }
 
-async function refresh(){if(!S.token)return;const q=qstr(),isA=S.user?.role==='admin';try{const gq=q?(q+'&mode=gestion'):'?mode=gestion';const[leads,team,channels,vendKpi,leadsGestion]=await Promise.all([api('GET','/api/leads'+q),isA?api('GET','/api/dashboard/team'+q):Promise.resolve([]),isA?api('GET','/api/analytics/channels'+q):Promise.resolve([]),!isA?api('GET','/api/dashboard/vendedor'+q):Promise.resolve(null),S.funMode==='gestion'?api('GET','/api/leads'+gq):Promise.resolve(null)]);S.leads=leads;S.team=team||[];S.channels=channels||[];S.vendKpi=vendKpi||null;if(leadsGestion)S.leadsGestion=leadsGestion;renderAll();}catch(e){console.error('refresh:',e.message);}}
+async function refresh(){if(!S.token)return;const q=qstr(),isA=S.user?.role==='admin';try{const gq=q?(q+'&mode=gestion'):'?mode=gestion';const[leads,team,channels,vendKpi,leadsGestion]=await Promise.all([api('GET','/api/leads'+q),isA?api('GET','/api/dashboard/team'+q):Promise.resolve([]),isA?api('GET','/api/analytics/channels'+q):Promise.resolve([]),!isA?api('GET','/api/dashboard/vendedor'+q):Promise.resolve(null),api('GET','/api/leads'+gq)]);S.leads=leads;S.team=team||[];S.channels=channels||[];S.vendKpi=vendKpi||null;if(leadsGestion)S.leadsGestion=leadsGestion;renderAll();}catch(e){console.error('refresh:',e.message);}}
 
 function renderChileautos(){
   const leads=(S.leads||[]).filter(l=>l.status==='esperando_respuesta_chileautos');
@@ -1362,22 +1362,22 @@ function renderAll(){const isA=S.user?.role==='admin';const isAorSup2=isA||S.use
 
 function normLeads(){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(S.leads||[]).filter(l=>l.isCompraRmg!==true&&l.isRmgParts!==true&&!FC.includes((l.source||'').trim()));}
 function _excluirComprasYParts(arr){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(arr||[]).filter(l=>l.isCompraRmg!==true&&l.isRmgParts!==true&&!FC.includes((l.source||'').trim()));}
-function funLeads(){return S.funMode==='gestion'?_excluirComprasYParts(S.leadsGestion):normLeads();}
+function funLeads(){return _excluirComprasYParts(S.leadsGestion);}
+function _accionesEnRango(l){
+  const sMs=S.range.start?new Date(S.range.start+'T00:00:00').getTime():null;
+  const eMs=S.range.end?new Date(S.range.end+'T23:59:59').getTime():null;
+  return (l.notes||[]).filter(n=>{const t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;}).length;
+}
 function setFunMode(mode){
   if(S.funMode===mode)return;
   S.funMode=mode;
-  const bR=$('funModeReales'),bG=$('funModeGestion'),hint=$('funModeHint');
-  if(bR)bR.style.background=mode==='reales'?'var(--ac)':'var(--bg)';
-  if(bR)bR.style.color=mode==='reales'?'#fff':'var(--ts)';
-  if(bG)bG.style.background=mode==='gestion'?'var(--ac)':'var(--bg)';
-  if(bG)bG.style.color=mode==='gestion'?'#fff':'var(--ts)';
-  if(hint)hint.textContent=mode==='reales'?'Leads Reales: creados dentro del rango seleccionado.':'Gestión: todos los leads con actividad (mensajes, cambios) dentro del rango, sin importar cuándo se crearon.';
+  const bU=$('funModeUnicos'),bA=$('funModeAcciones'),hint=$('funModeHint');
+  if(bU)bU.style.background=mode==='unicos'?'var(--ac)':'var(--bg)';
+  if(bU)bU.style.color=mode==='unicos'?'#fff':'var(--ts)';
+  if(bA)bA.style.background=mode==='acciones'?'var(--ac)':'var(--bg)';
+  if(bA)bA.style.color=mode==='acciones'?'#fff':'var(--ts)';
+  if(hint)hint.textContent=mode==='unicos'?'Gestión Únicos: leads con actividad dentro del rango, contados una sola vez.':'Acciones: total de acciones de bitácora (notas) registradas dentro del rango, para los leads con actividad.';
   S.funOpen=null;const funX=$('funX');if(funX)funX.classList.remove('open');
-  if(mode==='gestion'){
-    const q=qstr();const gq=q?(q+'&mode=gestion'):'?mode=gestion';
-    api('GET','/api/leads'+gq).then(r=>{S.leadsGestion=r||[];renderFunnel();}).catch(e=>toast(e.message,true));
-    return;
-  }
   renderFunnel();
 }
 
@@ -1436,7 +1436,7 @@ function toggleSlaPanel(type){const cards=document.querySelectorAll('.sb2');if(S
 function renderSlaPanel(type){const lm={fresh:'fresh',risk:'risk',crit:'critical'};const lb={fresh:'🟢 En Tiempo — < 20 min (Verde)',risk:'🟡 En Riesgo — 20-30 min',crit:'🔴 Alerta — > 60 min (Crítico)',reassigned:'🔁 Reasignados — > 30 min sin atención'};let items;if(type==='reassigned'){items=normLeads().filter(l=>l.status==='Nuevo'&&l.reassigned===true).sort((a,b)=>{const ra=a.reassignedAt||a.lastInteraction;const rb=b.reassignedAt||b.lastInteraction;return new Date(ra)-new Date(rb);});}else{items=normLeads().filter(l=>l.status==='Nuevo'&&l.alertLevel===lm[type]).sort((a,b)=>mAgo(a.lastClientTs||a.lastInteraction)-mAgo(b.lastClientTs||b.lastInteraction));}$('slaXT').textContent=lb[type]+' ('+items.length+')';$('slaXB').innerHTML=renderXRows(items,l=>type==='reassigned'?(l.reassignedAt?fDT(l.reassignedAt):'—'):fMin(mAgo(l.lastClientTs||l.lastInteraction)));bindXRows($('slaXB'));}
 
 const FM={espera_ca:{sts:['esperando_respuesta_chileautos'],label:'🏷 Espera CA',color:'#92400e'},espera_gral:{sts:['esperando_respuesta_general'],label:'⏳ Espera Gral',color:'#6d28d9'},nuevos:{sts:['Nuevo'],label:'🆕 Nuevos',color:'var(--tx)'},contactados:{sts:['Contactado'],label:'💬 Contactados',color:'var(--ac)'},proceso:{sts:['En Proceso'],label:'🔄 En Proceso',color:'#f59e0b'},reservado:{sts:['Reservado'],label:'🔒 Reservados',color:'#ea580c'},cerrado:{sts:['Cerrado'],label:'✅ Cerrados',color:'var(--ok)'},perdido:{sts:['Abandonado','Perdido'],label:'❌ Perdidos',color:'var(--bd2)'}};
-function renderFunnel(){const leads=funLeads(),totReal=leads.length,tot=totReal||1;const cnts={};for(const[k,c]of Object.entries(FM))cnts[k]=leads.filter(l=>c.sts.includes(l.status));const ic={espera_ca:'🏷',espera_gral:'⏳',nuevos:'🆕',contactados:'💬',proceso:'🔄',reservado:'🔒',cerrado:'✅',perdido:'❌'};const lb={espera_ca:'Espera CA',espera_gral:'Espera Gral',nuevos:'Nuevos',contactados:'Contactados',proceso:'En Proceso',reservado:'Reservados',cerrado:'Cerrados',perdido:'Perdidos'};const pct=n=>totReal?((n/totReal)*100).toFixed(0)+'%':'—';const ac=S.funOpen;const ftb=$('funTotalBox');if(ftb)ftb.innerHTML='<div style="font-size:28px;font-weight:900;color:var(--tx);letter-spacing:-.02em;line-height:1">'+totReal+'</div><div style="font-size:11px;color:var(--tm);font-weight:600">TOTAL LEADS EN EL EMBUDO ('+(S.funMode==='gestion'?'Gestión':'Reales')+')</div>';$('fG').innerHTML=Object.keys(FM).map(k=>{const arr=cnts[k],n=arr.length,col=FM[k].color;const fr=arr.filter(l=>l.alertLevel==='fresh').length,ri=arr.filter(l=>l.alertLevel==='risk').length,cr=arr.filter(l=>l.alertLevel==='critical').length;const ms=(fr>0||ri>0||cr>0)?`<div class="fs"><span style="color:var(--ok)">🟢 ${fr}</span><span style="color:var(--wn)">🟡 ${ri}</span><span style="color:var(--bd2)">🔴 ${cr}</span></div>`:'<div style="height:22px;margin-top:8px"></div>';return`<div class="fc ${ac===k?'af':''}" onclick="toggleFunPanel('${k}')" style="border-color:${ac===k?'var(--ac)':col+'22'}"><div class="fi">${ic[k]}</div><div class="fv" style="color:${col}">${n}</div><div class="fl">${lb[k]}</div><div class="fp">${pct(n)} del total</div>${ms}<div class="fh">👆 Ver detalle</div></div>`;}).join('');}
+function renderFunnel(){const leads=funLeads(),esAcciones=S.funMode==='acciones';const cnts={};for(const[k,c]of Object.entries(FM))cnts[k]=leads.filter(l=>c.sts.includes(l.status));const vals={};for(const k of Object.keys(FM))vals[k]=esAcciones?cnts[k].reduce((s,l)=>s+_accionesEnRango(l),0):cnts[k].length;const totReal=esAcciones?Object.values(vals).reduce((s,n)=>s+n,0):leads.length;const ic={espera_ca:'🏷',espera_gral:'⏳',nuevos:'🆕',contactados:'💬',proceso:'🔄',reservado:'🔒',cerrado:'✅',perdido:'❌'};const lb={espera_ca:'Espera CA',espera_gral:'Espera Gral',nuevos:'Nuevos',contactados:'Contactados',proceso:'En Proceso',reservado:'Reservados',cerrado:'Cerrados',perdido:'Perdidos'};const pct=n=>totReal?((n/totReal)*100).toFixed(0)+'%':'—';const ac=S.funOpen;const ftb=$('funTotalBox');if(ftb)ftb.innerHTML='<div style="font-size:28px;font-weight:900;color:var(--tx);letter-spacing:-.02em;line-height:1">'+totReal+'</div><div style="font-size:11px;color:var(--tm);font-weight:600">'+(esAcciones?'TOTAL ACCIONES EN BITÁCORA (Acciones)':'TOTAL LEADS ÚNICOS EN GESTIÓN')+'</div>';$('fG').innerHTML=Object.keys(FM).map(k=>{const arr=cnts[k],n=vals[k],col=FM[k].color;const fr=arr.filter(l=>l.alertLevel==='fresh').length,ri=arr.filter(l=>l.alertLevel==='risk').length,cr=arr.filter(l=>l.alertLevel==='critical').length;const ms=(!esAcciones&&(fr>0||ri>0||cr>0))?`<div class="fs"><span style="color:var(--ok)">🟢 ${fr}</span><span style="color:var(--wn)">🟡 ${ri}</span><span style="color:var(--bd2)">🔴 ${cr}</span></div>`:'<div style="height:22px;margin-top:8px"></div>';return`<div class="fc ${ac===k?'af':''}" onclick="toggleFunPanel('${k}')" style="border-color:${ac===k?'var(--ac)':col+'22'}"><div class="fi">${ic[k]}</div><div class="fv" style="color:${col}">${n}</div><div class="fl">${lb[k]}</div><div class="fp">${pct(n)} del total</div>${ms}<div class="fh">👆 Ver detalle</div></div>`;}).join('');}
 function toggleFunPanel(type){if(S.slaOpen){S.slaOpen=null;$('slaX').classList.remove('open');document.querySelectorAll('.sb2').forEach(c=>c.classList.remove('as'));}if(S.funOpen===type){S.funOpen=null;$('funX').classList.remove('open');renderFunnel();return;}S.funOpen=type;$('funX').classList.add('open');renderFunnel();renderFunPanel(type);setTimeout(()=>$('funX').scrollIntoView({behavior:'smooth',block:'nearest'}),100);}
 function renderFunPanel(type){const cfg=FM[type];if(!cfg)return;const all=funLeads().filter(l=>cfg.sts.includes(l.status));const items=[...all.filter(l=>l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0)),...all.filter(l=>!l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0))];$('funXT').textContent=cfg.label+' ('+items.length+') — sin responder primero';$('funXB').innerHTML=renderXRows(items,l=>fDT(l.lastClientTs||l.lastInteraction));bindXRows($('funXB'));}
 function renderPerfTable(){}
@@ -1508,19 +1508,50 @@ const DASH_ST_META={
 window._dashCardData=window._dashCardData||{};
 function dashEsc(s){return (s+'').replace(/'/g,"\\'");}
 function dashStatusCards(leads,kind){
+  var total=(leads||[]).length;
+  var pct=function(n){return total?((n/total)*100).toFixed(0)+'%':'—';};
+  var openSt=kind==='nuevo'?S.dashNuevosStatusOpen:S.dashGestionStatusOpen;
   return DASH_ST.map(function(st){
     var arr=(leads||[]).filter(function(l){return l.status===st;});
     var n=arr.length;
     var meta=DASH_ST_META[st]||{icon:'❔',color:'var(--tm)'};
     window._dashCardData[kind+'_'+st]=arr;
     var clickFn=kind==='nuevo'?("dashShowNuevosDetalle('"+dashEsc(st)+"')"):("dashShowGestionDetalle('"+dashEsc(st)+"')");
-    var activeCls=(kind==='gestion'&&S.dashGestionStatusOpen===st)?' af':'';
-    return '<div class="fc'+activeCls+'" data-status="'+esc(st)+'" onclick="'+clickFn+'"><div class="fi">'+meta.icon+'</div><div class="fv" style="color:'+meta.color+'">'+n+'</div><div class="fl">'+esc(st)+'</div></div>';
+    var activeCls=(openSt===st)?' af':'';
+    return '<div class="fc'+activeCls+'" data-status="'+esc(st)+'" onclick="'+clickFn+'"><div class="fi">'+meta.icon+'</div><div class="fv" style="color:'+meta.color+'">'+n+'</div><div class="fl">'+esc(st)+'</div><div class="fp">'+pct(n)+' del total</div></div>';
   }).join('');
 }
 function dashShowNuevosDetalle(status){
+  var grid=$('origenNuevosGrid');
+  if(S.dashNuevosStatusOpen===status){
+    S.dashNuevosStatusOpen=null;
+    var det=$('origenNuevosDetalle');if(det){det.style.display='none';det.innerHTML='';}
+    if(grid)grid.querySelectorAll('.fc').forEach(function(c){c.classList.remove('af');});
+    return;
+  }
+  S.dashNuevosStatusOpen=status;
+  if(grid)grid.querySelectorAll('.fc').forEach(function(c){c.classList.toggle('af',c.dataset.status===status);});
   var arr=window._dashCardData['nuevo_'+status]||[];
-  showLeadsDetalleModal(arr);
+  var sorted=arr.slice().sort(function(a,b){return new Date(b.createdAt||b.id||0)-new Date(a.createdAt||a.id||0);});
+  var det=$('origenNuevosDetalle');if(!det)return;
+  det.style.display='block';
+  det.innerHTML='<div style="background:var(--p2);border:1px solid var(--bd);border-radius:10px;padding:12px 14px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'
+    +'<div style="font-size:12px;font-weight:700;color:var(--ts)">📋 Leads Nuevos — '+esc(status)+' ('+sorted.length+')</div>'
+    +'<button onclick="document.getElementById(\'origenNuevosDetalle\').style.display=\'none\'" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:7px;padding:3px 9px;font-size:10.5px;cursor:pointer;font-family:inherit">✕</button>'
+    +'</div>'
+    +'<div style="max-height:320px;overflow-y:auto">'
+    +'<table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Vendedor</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Creación</th></tr></thead>'
+    +'<tbody>'+(sorted.length?sorted.map(function(l){
+      return '<tr onclick="openModal('+l.id+')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
+        +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx)">'+esc(l.name||'Sin nombre')+'</td>'
+        +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tm)">'+esc(l.assignedTo||'—')+'</td>'
+        +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+fDT(l.createdAt||l.id)+'</td>'
+        +'</tr>';
+    }).join(''):'<tr><td colspan="3" style="padding:12px;text-align:center;color:var(--tm);font-size:12px">Sin leads en este estado.</td></tr>')
+    +'</tbody></table></div></div>';
+  det.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function dashShowGestionDetalle(status){
   var grid=$('origenGestionGrid');
@@ -1579,7 +1610,7 @@ function renderOrigenFunnelBox(origen){
   var box=$('origenFunnelBox');if(!box)return;
   if(!origen){box.style.display='none';box.innerHTML='';return;}
   box.style.display='block';
-  S.dashGestionStatusOpen=null;
+  S.dashGestionStatusOpen=null;S.dashNuevosStatusOpen=null;
   var nuevos=(S._nuevosResumenLeads||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
   box.innerHTML='<div style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:16px;margin-bottom:16px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
@@ -1587,6 +1618,7 @@ function renderOrigenFunnelBox(origen){
     +'<button onclick="toggleOrigenFunnel(\''+dashEsc(origen)+'\')" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:7px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit">✕ Cerrar</button>'
     +'</div>'
     +'<div class="fg" id="origenNuevosGrid">'+dashStatusCards(nuevos,'nuevo')+'</div>'
+    +'<div id="origenNuevosDetalle" style="display:none;margin-top:12px"></div>'
     +'<div style="font-size:12.5px;font-weight:700;color:var(--ts);margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--bd);display:flex;align-items:center;gap:8px">🛠 Gestión en el Período por Estado — '+esc(origen)+'<button onclick="loadOrigenGestion(\''+dashEsc(origen)+'\')" title="Actualizar gestión" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:6px;padding:2px 7px;font-size:10.5px;cursor:pointer;font-family:inherit">🔄</button></div>'
     +'<div id="origenGestionGrid" class="fg"><div style="grid-column:1/-1;font-size:12px;color:var(--tm);text-align:center;padding:10px">⏳ Cargando gestión…</div></div>'
     +'<div id="origenGestionDetalle" style="display:none;margin-top:12px"></div>'
