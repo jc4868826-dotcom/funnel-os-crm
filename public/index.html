@@ -262,14 +262,60 @@ function dpCalidad(m){
   return 'Nula';
 }
 
-function dpGetOrigenes(){
-  var sel=document.getElementById('dpFOrigen');if(!sel)return[];
-  return Array.prototype.slice.call(sel.selectedOptions||[]).map(function(o){return o.value;}).filter(Boolean);
+// ── Selector tipo "ticket" (chips) para Origen / Anuncio en Análisis Profundo ──
+window._dpMulti = window._dpMulti || {
+  origen:{options:['Meta Ads','MercadoLibre','Chileautos','WhatsApp','Yapo','Manual'],selected:[]},
+  anuncio:{options:[],selected:[]}
+};
+function dpEsc(s){return (s+'').replace(/'/g,"\\'");}
+function dpOptLabel(st,v){
+  for(var i=0;i<st.options.length;i++){var o=st.options[i];if((typeof o==='object'?o.value:o)===v)return typeof o==='object'?o.label:o;}
+  return v;
 }
-function dpGetAnuncios(){
-  var sel=document.getElementById('dpFAnuncio');if(!sel)return[];
-  return Array.prototype.slice.call(sel.selectedOptions||[]).map(function(o){return o.value;}).filter(Boolean);
+function dpMultiRenderChips(key){
+  var st=window._dpMulti[key];var box=document.getElementById('dpMBox_'+key);if(!box)return;
+  if(!st.selected.length){box.innerHTML='<span style="color:var(--tm)">Todos</span>';return;}
+  box.innerHTML=st.selected.map(function(v){
+    var full=dpOptLabel(st,v);
+    var lbl=(full.length>18?full.slice(0,18)+'…':full);
+    return '<span onclick="event.stopPropagation();dpMultiToggle(\''+key+'\',\''+dpEsc(v)+'\')" style="display:inline-flex;align-items:center;gap:4px;background:var(--ac);color:#fff;border-radius:20px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap">'+lbl+' <span style="font-size:12px;line-height:1">×</span></span>';
+  }).join('');
 }
+function dpMultiRenderPanel(key){
+  var st=window._dpMulti[key];var panel=document.getElementById('dpMPanel_'+key);if(!panel)return;
+  if(!st.options.length){panel.innerHTML='<div style="padding:8px;font-size:11px;color:var(--tm);text-align:center">Sin opciones</div>';return;}
+  panel.innerHTML=st.options.map(function(o){
+    var val=typeof o==='object'?o.value:o;var lbl=typeof o==='object'?o.label:o;
+    var checked=st.selected.indexOf(val)>-1;
+    return '<label style="display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:6px;cursor:pointer;font-size:11px;color:var(--ts)" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\'"><input type="checkbox" '+(checked?'checked':'')+' onchange="dpMultiToggle(\''+key+'\',\''+dpEsc(val)+'\')" style="cursor:pointer;flex-shrink:0"><span>'+lbl+'</span></label>';
+  }).join('');
+}
+function dpMultiToggle(key,val){
+  var st=window._dpMulti[key];
+  var i=st.selected.indexOf(val);
+  if(i>-1)st.selected.splice(i,1);else st.selected.push(val);
+  dpMultiRenderChips(key);dpMultiRenderPanel(key);
+  dpAplicarFiltros();
+}
+function dpMultiTogglePanel(key){
+  Object.keys(window._dpMulti).forEach(function(k){
+    var p=document.getElementById('dpMPanel_'+k);
+    if(p&&k!==key)p.style.display='none';
+  });
+  var panel=document.getElementById('dpMPanel_'+key);if(!panel)return;
+  var willOpen=panel.style.display==='none';
+  panel.style.display=willOpen?'block':'none';
+  if(willOpen)dpMultiRenderPanel(key);
+}
+document.addEventListener('click',function(e){
+  Object.keys(window._dpMulti).forEach(function(key){
+    var box=document.getElementById('dpMBox_'+key);var panel=document.getElementById('dpMPanel_'+key);
+    if(!box||!panel)return;
+    if(!box.contains(e.target)&&!panel.contains(e.target))panel.style.display='none';
+  });
+});
+function dpGetOrigenes(){return window._dpMulti.origen.selected.slice();}
+function dpGetAnuncios(){return window._dpMulti.anuncio.selected.slice();}
 function dpFiltrarLeads(leads){
   var origenes=dpGetOrigenes();
   var vend=((document.getElementById('dpFiltroVendedor')||{}).value)||'';
@@ -292,15 +338,14 @@ function dpFiltrarLeads(leads){
 }
 
 function dpPopularAnuncios(leads){
-  var sel=document.getElementById('dpFAnuncio');if(!sel)return;
   var map={};
   leads.forEach(function(l){var a=(l.interest||'').trim();if(a)map[a]=(map[a]||0)+1;});
   var sorted=Object.keys(map).sort(function(a,b){return map[b]-map[a];});
-  sel.innerHTML='';
-  sorted.slice(0,30).forEach(function(a){
-    var o=document.createElement('option');o.value=a;
-    o.textContent=a.slice(0,30)+(a.length>30?'\u2026':'')+' ('+map[a]+')';sel.appendChild(o);
+  window._dpMulti.anuncio.options=sorted.slice(0,30).map(function(a){
+    return {value:a,label:a.slice(0,30)+(a.length>30?'\u2026':'')+' ('+map[a]+')'};
   });
+  window._dpMulti.anuncio.selected=[];
+  dpMultiRenderChips('anuncio');dpMultiRenderPanel('anuncio');
 }
 
 function dpAplicarFiltros(){
@@ -926,8 +971,8 @@ async function ejecutarAnalisisIA(){
 <!-- ── SIDEBAR ── -->
 <div style="width:196px;flex-shrink:0;background:var(--p);border:1px solid var(--bd);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 16px rgba(0,0,0,.07)">
   <div style="font-size:13px;font-weight:800;color:var(--ts);letter-spacing:.01em;padding-bottom:8px;border-bottom:1px solid var(--bd)">🔍 Filtros</div>
-  <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Origen <span style="font-weight:400;text-transform:none;letter-spacing:0">(multi)</span></div><select id="dpFOrigen" multiple size="5" onchange="dpAplicarFiltros()" style="width:100%;padding:5px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="Meta Ads">Meta Ads</option><option value="MercadoLibre">MercadoLibre</option><option value="Chileautos">Chileautos</option><option value="WhatsApp">WhatsApp</option><option value="Yapo">Yapo</option><option value="Manual">Manual</option></select><div style="font-size:9px;color:var(--tm);margin-top:3px">Ctrl/Cmd+clic para elegir varios · sin selección = todos</div></div>
-  <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Anuncio <span style="font-weight:400;text-transform:none;letter-spacing:0">(multi)</span></div><select id="dpFAnuncio" multiple size="5" onchange="dpAplicarFiltros()" style="width:100%;padding:5px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"></select><div style="font-size:9px;color:var(--tm);margin-top:3px">Ctrl/Cmd+clic para elegir varios · sin selección = todos</div></div>
+  <div style="position:relative"><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Origen</div><div id="dpMBox_origen" onclick="dpMultiTogglePanel('origen')" style="width:100%;min-height:32px;padding:5px 8px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit;cursor:pointer;display:flex;align-items:center;flex-wrap:wrap;gap:4px;box-sizing:border-box"><span style="color:var(--tm)">Todos</span></div><div id="dpMPanel_origen" class="dpMPanel" style="display:none;position:absolute;z-index:50;top:100%;left:0;right:0;margin-top:4px;background:var(--p);border:1px solid var(--bd);border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:220px;overflow-y:auto;padding:6px"></div></div>
+  <div style="position:relative"><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Anuncio</div><div id="dpMBox_anuncio" onclick="dpMultiTogglePanel('anuncio')" style="width:100%;min-height:32px;padding:5px 8px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit;cursor:pointer;display:flex;align-items:center;flex-wrap:wrap;gap:4px;box-sizing:border-box"><span style="color:var(--tm)">Todos</span></div><div id="dpMPanel_anuncio" class="dpMPanel" style="display:none;position:absolute;z-index:50;top:100%;left:0;right:0;margin-top:4px;background:var(--p);border:1px solid var(--bd);border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:220px;overflow-y:auto;padding:6px"></div></div>
   <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Vendedor</div><select id="dpFiltroVendedor" onchange="dpAplicarFiltros()" style="width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="">Todos</option></select></div>
   <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Calidad</div><select id="dpFCalidad" onchange="dpAplicarFiltros()" style="width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="">Todas</option><option value="Alta">Alta</option><option value="Media">Media</option><option value="Baja">Baja</option><option value="Nula">Nula</option></select></div>
   <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Interacción</div><select id="dpFInterac" onchange="dpAplicarFiltros()" style="width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="">Todas</option><option value="ia">🤖 IA dominante</option><option value="humano">👤 Humano activo</option><option value="mixto">⚡ Mixto</option></select></div>
