@@ -1132,8 +1132,9 @@ async function filterLeadsForUser(leads, user, tenant) {
       const esCompra = l.source === 'Compramos tu Auto' || l.source === 'Compra Directa' || l.isCompraRmg === true;
       if (esCompra) {
         if ((perms.compras || 0) === 0) return false;
-        // El rol 'tasador' (y cualquiera fuera del pool de rotación automática) igual debe ver
-        // los leads de compra que se le asignaron manualmente, aunque no esté en comprasAssignees.
+        // El rol 'tasador' ve TODOS los leads de compra, estén o no asignados a su nombre —
+        // es su módulo de trabajo completo, no una bandeja personal como la de un vendedor.
+        if (user.role === 'tasador') return true;
         if (user.role !== 'admin' && !comprasList.includes(user.username) && user.username !== 'comprador' && l.assignedTo !== user.username) return false;
         return true;
       }
@@ -1161,13 +1162,13 @@ app.get('/api/leads',auth(),async(req,res)=>{
     leads.sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0));res.json(leads);
   }catch(err){console.error('[GET /api/leads]',err.message);res.status(500).json({error:'Error cargando leads'});}
 });
-app.get('/api/leads/:id',auth(),async(req,res)=>{await applySlaRules(req.tenant);const leads=await tRead(F.leads,req.tenant);const l=leads.find(x=>x.id==req.params.id);if(!l)return res.status(404).json({error:'No encontrado'});if((req.user.role==='vendedor'||req.user.role==='tasador')&&l.assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});res.json(l);
+app.get('/api/leads/:id',auth(),async(req,res)=>{await applySlaRules(req.tenant);const leads=await tRead(F.leads,req.tenant);const l=leads.find(x=>x.id==req.params.id);if(!l)return res.status(404).json({error:'No encontrado'});const _esCompraL=l.source==='Compramos tu Auto'||l.source==='Compra Directa'||l.isCompraRmg===true;if(req.user.role==='vendedor'&&l.assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});if(req.user.role==='tasador'&&!_esCompraL&&l.assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});res.json(l);
 // supervisor: sin restricción de assignedTo
 });
 app.patch('/api/leads/:id',auth(),async(req,res)=>{
   const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);
   if(idx===-1)return res.status(404).json({error:'No encontrado'});
-  if((req.user.role==='vendedor'||req.user.role==='tasador')&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});
+  if(req.user.role==='vendedor'&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});if(req.user.role==='tasador'&&!(leads[idx].source==='Compramos tu Auto'||leads[idx].source==='Compra Directa'||leads[idx].isCompraRmg===true)&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});
   const ALLOWED=['status','interest','name','phone','botActive','nextAction','pastActions','source','lastClientTs','lastInteraction','createdAt'];if(req.user.role==='admin'||req.user.role==='supervisor')ALLOWED.push('assignedTo','isCompraRmg','isRmgParts');
   // Borrado individual via patch status '_delete_'
   if(req.body.status==='_delete_'){
@@ -1191,7 +1192,7 @@ app.patch('/api/leads/:id',auth(),async(req,res)=>{
   await tWrite(F.leads,req.tenant,leads);res.json(leads[idx]);
 });
 app.post('/api/leads/:id/reassign',auth(),async(req,res)=>{if(!req.user.canReassign&&req.user.role!=='admin')return res.status(403).json({error:'Sin permiso para reasignar'});const{to}=req.body||{};if(!to)return res.status(400).json({error:'Falta campo to'});const users=await tRead(F.users,req.tenant);const target=users.find(u=>u.username===to);if(!target)return res.status(404).json({error:'Usuario destino no encontrado'});if((target.status||'Activo')==='Inactivo')return res.status(400).json({error:'El usuario destino está inactivo'});const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);if(idx===-1)return res.status(404).json({error:'Lead no encontrado'});leads[idx].assignedTo=to;leads[idx].reassigned=true;leads[idx].reassignedAt=new Date().toISOString();leads[idx].adminReassignAlertSent=false;leads[idx].lastInteraction=new Date().toISOString();leads[idx].alertLevel=calcAlert(leads[idx]);await tWrite(F.leads,req.tenant,leads);res.json(leads[idx]);});
-app.put('/api/leads/:id',auth(),async(req,res)=>{const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);if(idx===-1)return res.status(404).json({error:'No encontrado'});if((req.user.role==='vendedor'||req.user.role==='tasador')&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});if(req.user.role==='vendedor'||req.user.role==='tasador')delete req.body.assignedTo;
+app.put('/api/leads/:id',auth(),async(req,res)=>{const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);if(idx===-1)return res.status(404).json({error:'No encontrado'});if(req.user.role==='vendedor'&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});if(req.user.role==='tasador'&&!(leads[idx].source==='Compramos tu Auto'||leads[idx].source==='Compra Directa'||leads[idx].isCompraRmg===true)&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});if(req.user.role==='vendedor'||req.user.role==='tasador')delete req.body.assignedTo;
 // supervisor puede editar cualquier lead y reasignar
 leads[idx]={...leads[idx],...req.body,lastInteraction:new Date().toISOString()};leads[idx].alertLevel=calcAlert(leads[idx]);await tWrite(F.leads,req.tenant,leads);res.json(leads[idx]);});
 
@@ -1255,12 +1256,12 @@ app.post('/api/leads/:id/resumen',auth('admin','vendedor','supervisor','tasador'
   }
 });
 
-app.post('/api/leads/:id/bot',auth(),async(req,res)=>{const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);if(idx===-1)return res.status(404).json({error:'No encontrado'});if((req.user.role==='vendedor'||req.user.role==='tasador')&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});leads[idx].botActive=!!req.body.botActive;await tWrite(F.leads,req.tenant,leads);res.json(leads[idx]);});
+app.post('/api/leads/:id/bot',auth(),async(req,res)=>{const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);if(idx===-1)return res.status(404).json({error:'No encontrado'});if(req.user.role==='vendedor'&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});if(req.user.role==='tasador'&&!(leads[idx].source==='Compramos tu Auto'||leads[idx].source==='Compra Directa'||leads[idx].isCompraRmg===true)&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});leads[idx].botActive=!!req.body.botActive;await tWrite(F.leads,req.tenant,leads);res.json(leads[idx]);});
 app.post('/api/leads/:id/message',auth('admin','vendedor','supervisor','tasador'),async(req,res)=>{
   const{content}=req.body||{};if(!content)return res.status(400).json({error:'content requerido'});
   const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);
   if(idx===-1)return res.status(404).json({error:'No encontrado'});
-  if((req.user.role==='vendedor'||req.user.role==='tasador')&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});
+  if(req.user.role==='vendedor'&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});if(req.user.role==='tasador'&&!(leads[idx].source==='Compramos tu Auto'||leads[idx].source==='Compra Directa'||leads[idx].isCompraRmg===true)&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});
   leads[idx].chatHistory=leads[idx].chatHistory||[];
   leads[idx].chatHistory.push({role:'agent',content,ts:Date.now(),agent:req.user.username,agentName:req.user.name||req.user.username});
   leads[idx].botPersona=req.user.name||req.user.username;
@@ -2710,7 +2711,8 @@ app.post('/api/leads/analisis-ia', auth('admin','vendedor','supervisor','tasador
     if (leadIds && leadIds.length) {
       leads = allLeads.filter(l => leadIds.includes(String(l.id)));
     } else if (filtros) {
-      if (filtros.source) leads = leads.filter(l => l.source === filtros.source);
+      if (filtros.sources && filtros.sources.length) leads = leads.filter(l => filtros.sources.includes(l.source));
+      else if (filtros.source) leads = leads.filter(l => l.source === filtros.source);
       if (filtros.status) leads = leads.filter(l => l.status === filtros.status);
       if (filtros.assignedTo) leads = leads.filter(l => l.assignedTo === filtros.assignedTo);
       if (filtros.desde) leads = leads.filter(l => new Date(l.lastInteraction||l.createdAt||0) >= new Date(filtros.desde));

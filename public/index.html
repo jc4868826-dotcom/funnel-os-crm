@@ -262,8 +262,12 @@ function dpCalidad(m){
   return 'Nula';
 }
 
+function dpGetOrigenes(){
+  var sel=document.getElementById('dpFOrigen');if(!sel)return[];
+  return Array.prototype.slice.call(sel.selectedOptions||[]).map(function(o){return o.value;}).filter(Boolean);
+}
 function dpFiltrarLeads(leads){
-  var origen=((document.getElementById('dpFOrigen')||{}).value)||'';
+  var origenes=dpGetOrigenes();
   var vend=((document.getElementById('dpFiltroVendedor')||{}).value)||'';
   var cal=((document.getElementById('dpFCalidad')||{}).value)||'';
   var anuncio=((document.getElementById('dpFAnuncio')||{}).value)||'';
@@ -271,7 +275,7 @@ function dpFiltrarLeads(leads){
   var des=((document.getElementById('dpFiltroDes')||{}).value)||'';
   var has=((document.getElementById('dpFiltroHas')||{}).value)||'';
   return leads.filter(function(l){
-    if(origen&&l.source!==origen) return false;
+    if(origenes.length&&origenes.indexOf(l.source)===-1) return false;
     if(vend&&l.assignedTo!==vend) return false;
     if(cal&&(l._calidad||'')!==cal) return false;
     if(anuncio&&(l.interest||'')!==anuncio) return false;
@@ -530,12 +534,12 @@ async function ejecutarAnalisisProfundo(){
   var btn=document.getElementById('btnAnalisisProfundo');
   var res=document.getElementById('dpResultado');
   if(!btn)return;
-  var origen=((document.getElementById('dpFOrigen')||{}).value)||'';
+  var origenes=dpGetOrigenes();
   var vend=((document.getElementById('dpFiltroVendedor')||{}).value)||'';
   var des=((document.getElementById('dpFiltroDes')||{}).value)||'';
   var has=((document.getElementById('dpFiltroHas')||{}).value)||'';
   var leads=(S.leads||[]).filter(function(l){
-    if(origen&&l.source!==origen)return false;
+    if(origenes.length&&origenes.indexOf(l.source)===-1)return false;
     if(vend&&l.assignedTo!==vend)return false;
     var cr=new Date(l.createdAt||l.lastInteraction||0);
     if(des&&cr<new Date(des))return false;
@@ -561,7 +565,7 @@ async function ejecutarAnalisisProfundo(){
   // IA solo para diagnóstico textual
   try{
     var filtros={};
-    if(origen)filtros.source=origen;if(vend)filtros.assignedTo=vend;
+    if(origenes.length)filtros.sources=origenes;if(vend)filtros.assignedTo=vend;
     if(des)filtros.desde=des;if(has)filtros.hasta=has+'T23:59:59';
     var r=await fetch('/api/leads/clasificar-ia',{method:'POST',
       headers:{'Content-Type':'application/json','X-Auth-Token':S.token||''},
@@ -918,7 +922,7 @@ async function ejecutarAnalisisIA(){
 <!-- ── SIDEBAR ── -->
 <div style="width:196px;flex-shrink:0;background:var(--p);border:1px solid var(--bd);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 16px rgba(0,0,0,.07)">
   <div style="font-size:13px;font-weight:800;color:var(--ts);letter-spacing:.01em;padding-bottom:8px;border-bottom:1px solid var(--bd)">🔍 Filtros</div>
-  <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Origen</div><select id="dpFOrigen" onchange="dpAplicarFiltros()" style="width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="">Todos</option><option value="Meta Ads">Meta Ads</option><option value="MercadoLibre">MercadoLibre</option><option value="Chileautos">Chileautos</option><option value="WhatsApp">WhatsApp</option><option value="Yapo">Yapo</option><option value="Manual">Manual</option></select></div>
+  <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Origen <span style="font-weight:400;text-transform:none;letter-spacing:0">(multi)</span></div><select id="dpFOrigen" multiple size="5" onchange="dpAplicarFiltros()" style="width:100%;padding:5px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="Meta Ads">Meta Ads</option><option value="MercadoLibre">MercadoLibre</option><option value="Chileautos">Chileautos</option><option value="WhatsApp">WhatsApp</option><option value="Yapo">Yapo</option><option value="Manual">Manual</option></select><div style="font-size:9px;color:var(--tm);margin-top:3px">Ctrl/Cmd+clic para elegir varios · sin selección = todos</div></div>
   <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Anuncio</div><select id="dpFAnuncio" onchange="dpAplicarFiltros()" style="width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="">Todos</option></select></div>
   <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Vendedor</div><select id="dpFiltroVendedor" onchange="dpAplicarFiltros()" style="width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="">Todos</option></select></div>
   <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Calidad</div><select id="dpFCalidad" onchange="dpAplicarFiltros()" style="width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="">Todas</option><option value="Alta">Alta</option><option value="Media">Media</option><option value="Baja">Baja</option><option value="Nula">Nula</option></select></div>
