@@ -1363,10 +1363,13 @@ function renderAll(){const isA=S.user?.role==='admin';const isAorSup2=isA||S.use
 function normLeads(){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(S.leads||[]).filter(l=>l.isCompraRmg!==true&&l.isRmgParts!==true&&!FC.includes((l.source||'').trim()));}
 function _excluirComprasYParts(arr){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(arr||[]).filter(l=>l.isCompraRmg!==true&&l.isRmgParts!==true&&!FC.includes((l.source||'').trim()));}
 function funLeads(){return _excluirComprasYParts(S.leadsGestion);}
+// Solo cuenta notas escritas por un vendedor/humano real, no las que graba el sistema o la IA
+// (p.ej. "Sistema", "Bot", "Resumen IA" — mismo criterio usado en el resto de la app, ver notasVendedor).
+function _esNotaVendedor(n){return n.author!=='Sistema'&&n.author!=='Bot'&&n.author!=='Resumen IA';}
 function _accionesEnRango(l){
   const sMs=S.range.start?new Date(S.range.start+'T00:00:00').getTime():null;
   const eMs=S.range.end?new Date(S.range.end+'T23:59:59').getTime():null;
-  return (l.notes||[]).filter(n=>{const t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;}).length;
+  return (l.notes||[]).filter(n=>{if(!_esNotaVendedor(n))return false;const t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;}).length;
 }
 function setFunMode(mode){
   if(S.funMode===mode)return;
@@ -1435,8 +1438,15 @@ function toggleSlaPanel(type){const cards=document.querySelectorAll('.sb2');if(S
 
 function renderSlaPanel(type){const lm={fresh:'fresh',risk:'risk',crit:'critical'};const lb={fresh:'🟢 En Tiempo — < 20 min (Verde)',risk:'🟡 En Riesgo — 20-30 min',crit:'🔴 Alerta — > 60 min (Crítico)',reassigned:'🔁 Reasignados — > 30 min sin atención'};let items;if(type==='reassigned'){items=normLeads().filter(l=>l.status==='Nuevo'&&l.reassigned===true).sort((a,b)=>{const ra=a.reassignedAt||a.lastInteraction;const rb=b.reassignedAt||b.lastInteraction;return new Date(ra)-new Date(rb);});}else{items=normLeads().filter(l=>l.status==='Nuevo'&&l.alertLevel===lm[type]).sort((a,b)=>mAgo(a.lastClientTs||a.lastInteraction)-mAgo(b.lastClientTs||b.lastInteraction));}$('slaXT').textContent=lb[type]+' ('+items.length+')';$('slaXB').innerHTML=renderXRows(items,l=>type==='reassigned'?(l.reassignedAt?fDT(l.reassignedAt):'—'):fMin(mAgo(l.lastClientTs||l.lastInteraction)));bindXRows($('slaXB'));}
 
-const FM={espera_ca:{sts:['esperando_respuesta_chileautos'],label:'🏷 Espera CA',color:'#92400e'},espera_gral:{sts:['esperando_respuesta_general'],label:'⏳ Espera Gral',color:'#6d28d9'},nuevos:{sts:['Nuevo'],label:'🆕 Nuevos',color:'var(--tx)'},contactados:{sts:['Contactado'],label:'💬 Contactados',color:'var(--ac)'},proceso:{sts:['En Proceso'],label:'🔄 En Proceso',color:'#f59e0b'},reservado:{sts:['Reservado'],label:'🔒 Reservados',color:'#ea580c'},cerrado:{sts:['Cerrado'],label:'✅ Cerrados',color:'var(--ok)'},perdido:{sts:['Abandonado','Perdido'],label:'❌ Perdidos',color:'var(--bd2)'}};
-function renderFunnel(){const leads=funLeads(),esAcciones=S.funMode==='acciones';const cnts={};for(const[k,c]of Object.entries(FM))cnts[k]=leads.filter(l=>c.sts.includes(l.status));const vals={};for(const k of Object.keys(FM))vals[k]=esAcciones?cnts[k].reduce((s,l)=>s+_accionesEnRango(l),0):cnts[k].length;const totReal=esAcciones?Object.values(vals).reduce((s,n)=>s+n,0):leads.length;const ic={espera_ca:'🏷',espera_gral:'⏳',nuevos:'🆕',contactados:'💬',proceso:'🔄',reservado:'🔒',cerrado:'✅',perdido:'❌'};const lb={espera_ca:'Espera CA',espera_gral:'Espera Gral',nuevos:'Nuevos',contactados:'Contactados',proceso:'En Proceso',reservado:'Reservados',cerrado:'Cerrados',perdido:'Perdidos'};const pct=n=>totReal?((n/totReal)*100).toFixed(0)+'%':'—';const ac=S.funOpen;const ftb=$('funTotalBox');if(ftb)ftb.innerHTML='<div style="font-size:28px;font-weight:900;color:var(--tx);letter-spacing:-.02em;line-height:1">'+totReal+'</div><div style="font-size:11px;color:var(--tm);font-weight:600">'+(esAcciones?'TOTAL ACCIONES EN BITÁCORA (Acciones)':'TOTAL LEADS ÚNICOS EN GESTIÓN')+'</div>';$('fG').innerHTML=Object.keys(FM).map(k=>{const arr=cnts[k],n=vals[k],col=FM[k].color;const fr=arr.filter(l=>l.alertLevel==='fresh').length,ri=arr.filter(l=>l.alertLevel==='risk').length,cr=arr.filter(l=>l.alertLevel==='critical').length;const ms=(!esAcciones&&(fr>0||ri>0||cr>0))?`<div class="fs"><span style="color:var(--ok)">🟢 ${fr}</span><span style="color:var(--wn)">🟡 ${ri}</span><span style="color:var(--bd2)">🔴 ${cr}</span></div>`:'<div style="height:22px;margin-top:8px"></div>';return`<div class="fc ${ac===k?'af':''}" onclick="toggleFunPanel('${k}')" style="border-color:${ac===k?'var(--ac)':col+'22'}"><div class="fi">${ic[k]}</div><div class="fv" style="color:${col}">${n}</div><div class="fl">${lb[k]}</div><div class="fp">${pct(n)} del total</div>${ms}<div class="fh">👆 Ver detalle</div></div>`;}).join('');}
+const DASH_ST=['Nuevo','En Proceso','Contactado','Calificado','Negociación','Agendado','Reservado','Seguimiento','Cerrado','Abandonado'];
+const DASH_ST_META={
+  'Nuevo':{icon:'🆕',color:'#3b82f6'},'En Proceso':{icon:'🔄',color:'#f59e0b'},'Contactado':{icon:'💬',color:'#6366f1'},
+  'Calificado':{icon:'⭐',color:'#ec4899'},'Negociación':{icon:'🤝',color:'#8b5cf6'},'Agendado':{icon:'📅',color:'#8b5cf6'},
+  'Reservado':{icon:'🔒',color:'#f97316'},'Seguimiento':{icon:'🔁',color:'#0891b2'},'Cerrado':{icon:'✅',color:'#10b981'},'Abandonado':{icon:'❌',color:'#6b7280'}
+};
+// El Embudo General usa exactamente los mismos 10 estados que "Nuevos" y "Gestión" (DASH_ST), para que sean idénticos en todo el dashboard.
+const FM={};DASH_ST.forEach(st=>{const meta=DASH_ST_META[st];FM[st]={sts:st==='Abandonado'?['Abandonado','Perdido']:[st],label:meta.icon+' '+st,color:meta.color};});
+function renderFunnel(){const leads=funLeads(),esAcciones=S.funMode==='acciones';const cnts={};for(const[k,c]of Object.entries(FM))cnts[k]=leads.filter(l=>c.sts.includes(l.status));const vals={};for(const k of Object.keys(FM))vals[k]=esAcciones?cnts[k].reduce((s,l)=>s+_accionesEnRango(l),0):cnts[k].length;const totReal=esAcciones?Object.values(vals).reduce((s,n)=>s+n,0):leads.length;const pct=n=>totReal?((n/totReal)*100).toFixed(0)+'%':'—';const ac=S.funOpen;const ftb=$('funTotalBox');if(ftb)ftb.innerHTML='<div style="font-size:28px;font-weight:900;color:var(--tx);letter-spacing:-.02em;line-height:1">'+totReal+'</div><div style="font-size:11px;color:var(--tm);font-weight:600">'+(esAcciones?'TOTAL ACCIONES EN BITÁCORA (Acciones)':'TOTAL LEADS ÚNICOS EN GESTIÓN')+'</div>';$('fG').innerHTML=Object.keys(FM).map(k=>{const arr=cnts[k],n=vals[k],col=FM[k].color,meta=DASH_ST_META[k];const fr=arr.filter(l=>l.alertLevel==='fresh').length,ri=arr.filter(l=>l.alertLevel==='risk').length,cr=arr.filter(l=>l.alertLevel==='critical').length;const ms=(!esAcciones&&(fr>0||ri>0||cr>0))?`<div class="fs"><span style="color:var(--ok)">🟢 ${fr}</span><span style="color:var(--wn)">🟡 ${ri}</span><span style="color:var(--bd2)">🔴 ${cr}</span></div>`:'<div style="height:22px;margin-top:8px"></div>';return`<div class="fc ${ac===k?'af':''}" onclick="toggleFunPanel('${k}')" style="border-color:${ac===k?'var(--ac)':col+'22'}"><div class="fi">${meta.icon}</div><div class="fv" style="color:${col}">${n}</div><div class="fl">${k}</div><div class="fp">${pct(n)} del total</div>${ms}<div class="fh">👆 Ver detalle</div></div>`;}).join('');}
 function toggleFunPanel(type){if(S.slaOpen){S.slaOpen=null;$('slaX').classList.remove('open');document.querySelectorAll('.sb2').forEach(c=>c.classList.remove('as'));}if(S.funOpen===type){S.funOpen=null;$('funX').classList.remove('open');renderFunnel();return;}S.funOpen=type;$('funX').classList.add('open');renderFunnel();renderFunPanel(type);setTimeout(()=>$('funX').scrollIntoView({behavior:'smooth',block:'nearest'}),100);}
 function renderFunPanel(type){const cfg=FM[type];if(!cfg)return;const all=funLeads().filter(l=>cfg.sts.includes(l.status));const items=[...all.filter(l=>l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0)),...all.filter(l=>!l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0))];$('funXT').textContent=cfg.label+' ('+items.length+') — sin responder primero';$('funXB').innerHTML=renderXRows(items,l=>fDT(l.lastClientTs||l.lastInteraction));bindXRows($('funXB'));}
 function renderPerfTable(){}
@@ -1499,12 +1509,6 @@ function showLeadsDetalleModal(allLeads,filtroSource){
   m.addEventListener('click',e=>{if(e.target===m)m.remove();});
 }
 // ── Dashboard: "Leads Nuevos" con embudo de estados por origen (nuevos + gestión) ──
-const DASH_ST=['Nuevo','En Proceso','Contactado','Calificado','Negociación','Agendado','Reservado','Seguimiento','Cerrado','Abandonado'];
-const DASH_ST_META={
-  'Nuevo':{icon:'🆕',color:'#3b82f6'},'En Proceso':{icon:'🔄',color:'#f59e0b'},'Contactado':{icon:'💬',color:'#6366f1'},
-  'Calificado':{icon:'⭐',color:'#ec4899'},'Negociación':{icon:'🤝',color:'#8b5cf6'},'Agendado':{icon:'📅',color:'#8b5cf6'},
-  'Reservado':{icon:'🔒',color:'#f97316'},'Seguimiento':{icon:'🔁',color:'#0891b2'},'Cerrado':{icon:'✅',color:'#10b981'},'Abandonado':{icon:'❌',color:'#6b7280'}
-};
 window._dashCardData=window._dashCardData||{};
 function dashEsc(s){return (s+'').replace(/'/g,"\\'");}
 function dashStatusCards(leads,kind){
@@ -1567,7 +1571,7 @@ function dashShowGestionDetalle(status){
   var sMs=S.range.start?new Date(S.range.start+'T00:00:00').getTime():null;
   var eMs=S.range.end?new Date(S.range.end+'T23:59:59').getTime():null;
   var rows=arr.map(function(l){
-    var notas=(l.notes||[]).filter(function(n){var t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;});
+    var notas=(l.notes||[]).filter(function(n){if(!_esNotaVendedor(n))return false;var t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;});
     return {lead:l,count:notas.length,notas:notas};
   }).sort(function(a,b){return b.count-a.count;});
   var totalAcciones=rows.reduce(function(s,r){return s+r.count;},0);
