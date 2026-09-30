@@ -1366,10 +1366,20 @@ function funLeads(){return _excluirComprasYParts(S.leadsGestion);}
 // Solo cuenta notas escritas por un vendedor/humano real, no las que graba el sistema o la IA
 // (p.ej. "Sistema", "Bot", "Resumen IA" — mismo criterio usado en el resto de la app, ver notasVendedor).
 function _esNotaVendedor(n){return n.author!=='Sistema'&&n.author!=='Bot'&&n.author!=='Resumen IA';}
+// Nombre para mostrar de un username (según S.users), usado para comparar contra el autor de la nota.
+function _vendedorNombre(username){const u=(S.users||[]).find(x=>x.username===username);return u?(u.name||u.username):username;}
+// "Acción" válida = nota de bitácora escrita por el VENDEDOR ASIGNADO al lead (no por el sistema/IA,
+// ni por otro vendedor, ni por un tasador u otro usuario que haya tocado el lead sin ser el asignado).
+function _esNotaDelVendedorAsignado(n,l){
+  if(!_esNotaVendedor(n))return false;
+  if(!l.assignedTo)return false;
+  const nombreAsignado=_vendedorNombre(l.assignedTo);
+  return n.author===nombreAsignado||n.author===l.assignedTo;
+}
 function _accionesEnRango(l){
   const sMs=S.range.start?new Date(S.range.start+'T00:00:00').getTime():null;
   const eMs=S.range.end?new Date(S.range.end+'T23:59:59').getTime():null;
-  return (l.notes||[]).filter(n=>{if(!_esNotaVendedor(n))return false;const t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;}).length;
+  return (l.notes||[]).filter(n=>{if(!_esNotaDelVendedorAsignado(n,l))return false;const t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;}).length;
 }
 function setFunMode(mode){
   if(S.funMode===mode)return;
@@ -1575,7 +1585,7 @@ function dashDetalleTabla(leads){
   var sMs=S.range.start?new Date(S.range.start+'T00:00:00').getTime():null;
   var eMs=S.range.end?new Date(S.range.end+'T23:59:59').getTime():null;
   var rows=(leads||[]).map(function(l){
-    var notas=(l.notes||[]).filter(function(n){if(!_esNotaVendedor(n))return false;var t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;});
+    var notas=(l.notes||[]).filter(function(n){if(!_esNotaDelVendedorAsignado(n,l))return false;var t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;});
     var last=notas.length?notas[notas.length-1]:null;
     return {lead:l,count:notas.length,last:last};
   });
