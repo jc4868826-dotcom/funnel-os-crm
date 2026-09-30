@@ -727,7 +727,7 @@ async function ejecutarAnalisisIA(){
 </div></div>
 <div style="font-size:10.5px;color:var(--tm);margin:-4px 0 8px" id="funModeHint">Gestión Únicos: leads con actividad dentro del rango, contados una sola vez.</div>
 <div id="funTotalBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:12px 16px;margin-bottom:10px;display:flex;align-items:baseline;gap:10px"></div>
-<div class="fg" id="fG"></div>
+<div class="fg" id="fG" style="grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:6px"></div>
 <div class="xe" id="funX" style="margin-top:10px"><div class="xt" id="funXT">—</div><div class="xs" id="funXB"></div></div>
 <div class="bt">③ Tasaciones</div>
 <div class="s3" id="tasGrid" style="grid-template-columns:1fr 1fr">
@@ -1438,17 +1438,47 @@ function toggleSlaPanel(type){const cards=document.querySelectorAll('.sb2');if(S
 
 function renderSlaPanel(type){const lm={fresh:'fresh',risk:'risk',crit:'critical'};const lb={fresh:'🟢 En Tiempo — < 20 min (Verde)',risk:'🟡 En Riesgo — 20-30 min',crit:'🔴 Alerta — > 60 min (Crítico)',reassigned:'🔁 Reasignados — > 30 min sin atención'};let items;if(type==='reassigned'){items=normLeads().filter(l=>l.status==='Nuevo'&&l.reassigned===true).sort((a,b)=>{const ra=a.reassignedAt||a.lastInteraction;const rb=b.reassignedAt||b.lastInteraction;return new Date(ra)-new Date(rb);});}else{items=normLeads().filter(l=>l.status==='Nuevo'&&l.alertLevel===lm[type]).sort((a,b)=>mAgo(a.lastClientTs||a.lastInteraction)-mAgo(b.lastClientTs||b.lastInteraction));}$('slaXT').textContent=lb[type]+' ('+items.length+')';$('slaXB').innerHTML=renderXRows(items,l=>type==='reassigned'?(l.reassignedAt?fDT(l.reassignedAt):'—'):fMin(mAgo(l.lastClientTs||l.lastInteraction)));bindXRows($('slaXB'));}
 
-const DASH_ST=['Nuevo','En Proceso','Contactado','Calificado','Negociación','Agendado','Reservado','Seguimiento','Cerrado','Abandonado'];
-const DASH_ST_META={
-  'Nuevo':{icon:'🆕',color:'#3b82f6'},'En Proceso':{icon:'🔄',color:'#f59e0b'},'Contactado':{icon:'💬',color:'#6366f1'},
-  'Calificado':{icon:'⭐',color:'#ec4899'},'Negociación':{icon:'🤝',color:'#8b5cf6'},'Agendado':{icon:'📅',color:'#8b5cf6'},
-  'Reservado':{icon:'🔒',color:'#f97316'},'Seguimiento':{icon:'🔁',color:'#0891b2'},'Cerrado':{icon:'✅',color:'#10b981'},'Abandonado':{icon:'❌',color:'#6b7280'}
-};
-// El Embudo General usa exactamente los mismos 10 estados que "Nuevos" y "Gestión" (DASH_ST), para que sean idénticos en todo el dashboard.
-const FM={};DASH_ST.forEach(st=>{const meta=DASH_ST_META[st];FM[st]={sts:st==='Abandonado'?['Abandonado','Perdido']:[st],label:meta.icon+' '+st,color:meta.color};});
-function renderFunnel(){const leads=funLeads(),esAcciones=S.funMode==='acciones';const cnts={};for(const[k,c]of Object.entries(FM))cnts[k]=leads.filter(l=>c.sts.includes(l.status));const vals={};for(const k of Object.keys(FM))vals[k]=esAcciones?cnts[k].reduce((s,l)=>s+_accionesEnRango(l),0):cnts[k].length;const totReal=esAcciones?Object.values(vals).reduce((s,n)=>s+n,0):leads.length;const pct=n=>totReal?((n/totReal)*100).toFixed(0)+'%':'—';const ac=S.funOpen;const ftb=$('funTotalBox');if(ftb)ftb.innerHTML='<div style="font-size:28px;font-weight:900;color:var(--tx);letter-spacing:-.02em;line-height:1">'+totReal+'</div><div style="font-size:11px;color:var(--tm);font-weight:600">'+(esAcciones?'TOTAL ACCIONES EN BITÁCORA (Acciones)':'TOTAL LEADS ÚNICOS EN GESTIÓN')+'</div>';$('fG').innerHTML=Object.keys(FM).map(k=>{const arr=cnts[k],n=vals[k],col=FM[k].color,meta=DASH_ST_META[k];const fr=arr.filter(l=>l.alertLevel==='fresh').length,ri=arr.filter(l=>l.alertLevel==='risk').length,cr=arr.filter(l=>l.alertLevel==='critical').length;const ms=(!esAcciones&&(fr>0||ri>0||cr>0))?`<div class="fs"><span style="color:var(--ok)">🟢 ${fr}</span><span style="color:var(--wn)">🟡 ${ri}</span><span style="color:var(--bd2)">🔴 ${cr}</span></div>`:'<div style="height:22px;margin-top:8px"></div>';return`<div class="fc ${ac===k?'af':''}" onclick="toggleFunPanel('${k}')" style="border-color:${ac===k?'var(--ac)':col+'22'}"><div class="fi">${meta.icon}</div><div class="fv" style="color:${col}">${n}</div><div class="fl">${k}</div><div class="fp">${pct(n)} del total</div>${ms}<div class="fh">👆 Ver detalle</div></div>`;}).join('');}
-function toggleFunPanel(type){if(S.slaOpen){S.slaOpen=null;$('slaX').classList.remove('open');document.querySelectorAll('.sb2').forEach(c=>c.classList.remove('as'));}if(S.funOpen===type){S.funOpen=null;$('funX').classList.remove('open');renderFunnel();return;}S.funOpen=type;$('funX').classList.add('open');renderFunnel();renderFunPanel(type);setTimeout(()=>$('funX').scrollIntoView({behavior:'smooth',block:'nearest'}),100);}
-function renderFunPanel(type){const cfg=FM[type];if(!cfg)return;const all=funLeads().filter(l=>cfg.sts.includes(l.status));const items=[...all.filter(l=>l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0)),...all.filter(l=>!l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0))];$('funXT').textContent=cfg.label+' ('+items.length+') — sin responder primero';$('funXB').innerHTML=renderXRows(items,l=>fDT(l.lastClientTs||l.lastInteraction));bindXRows($('funXB'));}
+// 11 cajitas de estado (Nivel 2), idénticas en Nuevos / Gestión / Embudo General.
+// "En Espera" agrupa los leads que aún están en la sala de espera (Chileautos / General),
+// para que la suma de las cajitas siempre cuadre con el total de "Leads Nuevos".
+const DASH_BUCKETS=[
+  {key:'espera',label:'En Espera',icon:'⏳',color:'#7c3aed',sts:['esperando_respuesta_chileautos','esperando_respuesta_general']},
+  {key:'Nuevo',label:'Nuevo',icon:'🆕',color:'#3b82f6',sts:['Nuevo']},
+  {key:'En Proceso',label:'En Proceso',icon:'🔄',color:'#f59e0b',sts:['En Proceso']},
+  {key:'Contactado',label:'Contactado',icon:'💬',color:'#6366f1',sts:['Contactado']},
+  {key:'Calificado',label:'Calificado',icon:'⭐',color:'#ec4899',sts:['Calificado']},
+  {key:'Negociación',label:'Negociación',icon:'🤝',color:'#8b5cf6',sts:['Negociación']},
+  {key:'Agendado',label:'Agendado',icon:'📅',color:'#8b5cf6',sts:['Agendado']},
+  {key:'Reservado',label:'Reservado',icon:'🔒',color:'#f97316',sts:['Reservado']},
+  {key:'Seguimiento',label:'Seguimiento',icon:'🔁',color:'#0891b2',sts:['Seguimiento']},
+  {key:'Cerrado',label:'Cerrado',icon:'✅',color:'#10b981',sts:['Cerrado']},
+  {key:'Abandonado',label:'Abandonado',icon:'❌',color:'#6b7280',sts:['Abandonado','Perdido']}
+];
+function renderFunnel(){
+  var leads=funLeads(),acciones=S.funMode==='acciones';
+  var vals={},tot=0;
+  DASH_BUCKETS.forEach(function(b){
+    var arr=leads.filter(function(l){return b.sts.indexOf(l.status)!==-1;});
+    var n=acciones?arr.reduce(function(s,l){return s+_accionesEnRango(l);},0):arr.length;
+    vals[b.key]=n;tot+=n;
+  });
+  var ftb=$('funTotalBox');
+  if(ftb)ftb.innerHTML='<div style="font-size:28px;font-weight:900;color:var(--tx);letter-spacing:-.02em;line-height:1">'+tot+'</div><div style="font-size:11px;color:var(--tm);font-weight:600">'+(acciones?'TOTAL ACCIONES EN BITÁCORA (Acciones)':'TOTAL LEADS ÚNICOS EN GESTIÓN')+'</div>';
+  $('fG').innerHTML=dashBucketCards(leads,'general',acciones);
+}
+function toggleFunPanel(key){
+  if(S.slaOpen){S.slaOpen=null;$('slaX').classList.remove('open');document.querySelectorAll('.sb2').forEach(function(c){c.classList.remove('as');});}
+  if(S.funOpen===key){S.funOpen=null;$('funX').classList.remove('open');renderFunnel();return;}
+  S.funOpen=key;$('funX').classList.add('open');renderFunnel();renderFunPanel(key);
+  setTimeout(function(){$('funX').scrollIntoView({behavior:'smooth',block:'nearest'});},100);
+}
+function renderFunPanel(key){
+  var bucket=_dashBucketFind(key);if(!bucket)return;
+  var arr=window._dashCardData['general_'+key]||[];
+  var tabla=dashDetalleTabla(arr);
+  $('funXT').textContent=bucket.icon+' '+bucket.label+' ('+tabla.count+' lead'+(tabla.count!==1?'s':'')+' · '+tabla.totalAcciones+' acci'+(tabla.totalAcciones!==1?'ones':'ón')+' en bitácora)';
+  $('funXB').innerHTML=tabla.html;
+}
 function renderPerfTable(){}
 // Helper generico: pinta una cajita de "total + chips por origen, con % del total" y la deja
 // clickeable para abrir el detalle. Usado por el dashboard (Leads Nuevos), Compras RMG y RMG Parts.
@@ -1511,90 +1541,96 @@ function showLeadsDetalleModal(allLeads,filtroSource){
 // ── Dashboard: "Leads Nuevos" con embudo de estados por origen (nuevos + gestión) ──
 window._dashCardData=window._dashCardData||{};
 function dashEsc(s){return (s+'').replace(/'/g,"\\'");}
-function dashStatusCards(leads,kind){
-  var total=(leads||[]).length;
-  var pct=function(n){return total?((n/total)*100).toFixed(0)+'%':'—';};
-  var openSt=kind==='nuevo'?S.dashNuevosStatusOpen:S.dashGestionStatusOpen;
-  return DASH_ST.map(function(st){
-    var arr=(leads||[]).filter(function(l){return l.status===st;});
-    var n=arr.length;
-    var meta=DASH_ST_META[st]||{icon:'❔',color:'var(--tm)'};
-    window._dashCardData[kind+'_'+st]=arr;
-    var clickFn=kind==='nuevo'?("dashShowNuevosDetalle('"+dashEsc(st)+"')"):("dashShowGestionDetalle('"+dashEsc(st)+"')");
-    var activeCls=(openSt===st)?' af':'';
-    return '<div class="fc'+activeCls+'" data-status="'+esc(st)+'" onclick="'+clickFn+'"><div class="fi">'+meta.icon+'</div><div class="fv" style="color:'+meta.color+'">'+n+'</div><div class="fl">'+esc(st)+'</div><div class="fp">'+pct(n)+' del total</div></div>';
+function _dashBucketFind(key){return DASH_BUCKETS.find(function(b){return b.key===key;});}
+function _dashBucketOf(l){for(var i=0;i<DASH_BUCKETS.length;i++){if(DASH_BUCKETS[i].sts.indexOf(l.status)!==-1)return DASH_BUCKETS[i].key;}return null;}
+// Grid de 11 cajitas (Nivel 2), compacto, reutilizado por Nuevos / Gestión / Embudo General.
+// leads: ya filtrados por origen/rango. kind: 'nuevo'|'gestion'|'general'. acciones: cuantifica acciones en bitácora en vez de leads (solo General).
+function dashBucketCards(leads,kind,acciones){
+  leads=leads||[];
+  var byKey={};DASH_BUCKETS.forEach(function(b){byKey[b.key]=[];});
+  leads.forEach(function(l){var k=_dashBucketOf(l);if(k)byKey[k].push(l);});
+  var vals={},tot=0;
+  DASH_BUCKETS.forEach(function(b){
+    window._dashCardData[kind+'_'+b.key]=byKey[b.key];
+    var n=acciones?byKey[b.key].reduce(function(s,l){return s+_accionesEnRango(l);},0):byKey[b.key].length;
+    vals[b.key]=n;tot+=n;
+  });
+  var pct=function(n){return tot?((n/tot)*100).toFixed(0)+'%':'—';};
+  var openKey=kind==='nuevo'?S.dashNuevosStatusOpen:(kind==='gestion'?S.dashGestionStatusOpen:S.funOpen);
+  return DASH_BUCKETS.map(function(b){
+    var n=vals[b.key];
+    var isOpen=openKey===b.key;
+    var clickFn="dashToggleDetalle('"+kind+"','"+dashEsc(b.key)+"')";
+    return '<div class="fc'+(isOpen?' af':'')+'" data-bucket="'+esc(b.key)+'" onclick="'+clickFn+'" style="padding:8px 6px;border-color:'+(isOpen?'var(--ac)':b.color+'22')+'">'
+      +'<div class="fi" style="font-size:15px;margin-bottom:3px">'+b.icon+'</div>'
+      +'<div class="fv" style="color:'+b.color+';font-size:17px">'+n+'</div>'
+      +'<div class="fl" style="font-size:9.5px;margin-top:2px">'+esc(b.label)+'</div>'
+      +'<div class="fp" style="font-size:8.5px;margin-top:2px">'+pct(n)+' del total</div>'
+      +'</div>';
   }).join('');
 }
-function dashShowNuevosDetalle(status){
-  var grid=$('origenNuevosGrid');
-  if(S.dashNuevosStatusOpen===status){
-    S.dashNuevosStatusOpen=null;
-    var det=$('origenNuevosDetalle');if(det){det.style.display='none';det.innerHTML='';}
-    if(grid)grid.querySelectorAll('.fc').forEach(function(c){c.classList.remove('af');});
-    return;
-  }
-  S.dashNuevosStatusOpen=status;
-  if(grid)grid.querySelectorAll('.fc').forEach(function(c){c.classList.toggle('af',c.dataset.status===status);});
-  var arr=window._dashCardData['nuevo_'+status]||[];
-  var sorted=arr.slice().sort(function(a,b){return new Date(b.createdAt||b.id||0)-new Date(a.createdAt||a.id||0);});
-  var det=$('origenNuevosDetalle');if(!det)return;
-  det.style.display='block';
-  det.innerHTML='<div style="background:var(--p2);border:1px solid var(--bd);border-radius:10px;padding:12px 14px">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'
-    +'<div style="font-size:12px;font-weight:700;color:var(--ts)">📋 Leads Nuevos — '+esc(status)+' ('+sorted.length+')</div>'
-    +'<button onclick="document.getElementById(\'origenNuevosDetalle\').style.display=\'none\'" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:7px;padding:3px 9px;font-size:10.5px;cursor:pointer;font-family:inherit">✕</button>'
-    +'</div>'
-    +'<div style="max-height:320px;overflow-y:auto">'
-    +'<table style="width:100%;border-collapse:collapse">'
-    +'<thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Vendedor</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Creación</th></tr></thead>'
-    +'<tbody>'+(sorted.length?sorted.map(function(l){
-      return '<tr onclick="openModal('+l.id+')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
-        +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx)">'+esc(l.name||'Sin nombre')+'</td>'
-        +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tm)">'+esc(l.assignedTo||'—')+'</td>'
-        +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+fDT(l.createdAt||l.id)+'</td>'
-        +'</tr>';
-    }).join(''):'<tr><td colspan="3" style="padding:12px;text-align:center;color:var(--tm);font-size:12px">Sin leads en este estado.</td></tr>')
-    +'</tbody></table></div></div>';
-  det.scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-function dashShowGestionDetalle(status){
-  var grid=$('origenGestionGrid');
-  if(S.dashGestionStatusOpen===status){
-    S.dashGestionStatusOpen=null;
-    var det=$('origenGestionDetalle');if(det){det.style.display='none';det.innerHTML='';}
-    if(grid)grid.querySelectorAll('.fc').forEach(function(c){c.classList.remove('af');});
-    return;
-  }
-  S.dashGestionStatusOpen=status;
-  if(grid)grid.querySelectorAll('.fc').forEach(function(c){c.classList.toggle('af',c.dataset.status===status);});
-  var arr=window._dashCardData['gestion_'+status]||[];
+// Tabla de detalle (Nivel 3) unificada: misma estructura de columnas en Nuevos, Gestión y Embudo General.
+// Agrupada/ordenada por Vendedor y luego Fecha de creación; fila de totales al final.
+function dashDetalleTabla(leads){
   var sMs=S.range.start?new Date(S.range.start+'T00:00:00').getTime():null;
   var eMs=S.range.end?new Date(S.range.end+'T23:59:59').getTime():null;
-  var rows=arr.map(function(l){
+  var rows=(leads||[]).map(function(l){
     var notas=(l.notes||[]).filter(function(n){if(!_esNotaVendedor(n))return false;var t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;});
-    return {lead:l,count:notas.length,notas:notas};
-  }).sort(function(a,b){return b.count-a.count;});
+    var last=notas.length?notas[notas.length-1]:null;
+    return {lead:l,count:notas.length,last:last};
+  });
+  rows.sort(function(a,b){
+    var va=a.lead.assignedTo||'zzz',vb=b.lead.assignedTo||'zzz';
+    if(va!==vb)return va<vb?-1:1;
+    return new Date(b.lead.createdAt||b.lead.id||0)-new Date(a.lead.createdAt||a.lead.id||0);
+  });
   var totalAcciones=rows.reduce(function(s,r){return s+r.count;},0);
-  var det=$('origenGestionDetalle');if(!det)return;
+  var body=rows.length?rows.map(function(r){
+    var l=r.lead;
+    return '<tr onclick="openModal('+l.id+')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
+      +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx)">'+esc(l.name||'Sin nombre')+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(l.phone||'—')+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(l.source||'—')+'</td>'
+      +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tm)">'+esc(l.assignedTo||'—')+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+fDT(l.createdAt||l.id)+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(l.interest||'—')+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+(r.last?fDT(r.last.ts):'—')+'</td>'
+      +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx);text-align:center;font-weight:700">'+r.count+'</td>'
+      +'</tr>';
+  }).join(''):'<tr><td colspan="8" style="padding:12px;text-align:center;color:var(--tm);font-size:12px">Sin leads en este estado.</td></tr>';
+  var totalsRow=rows.length?('<tr style="border-top:2px solid var(--bd);font-weight:800"><td colspan="7" style="padding:7px 8px;font-size:11.5px;color:var(--tx);text-align:right">Total: '+rows.length+' lead'+(rows.length!==1?'s':'')+'</td><td style="padding:7px 8px;font-size:11.5px;color:var(--tx);text-align:center">'+totalAcciones+'</td></tr>'):'';
+  var head='<thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Teléfono</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Origen</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Vendedor</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Creación</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Interés/Resumen</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Última acción</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)"># Acciones</th></tr></thead>';
+  return {html:'<table style="width:100%;border-collapse:collapse">'+head+'<tbody>'+body+totalsRow+'</tbody></table>',count:rows.length,totalAcciones:totalAcciones};
+}
+const DASH_CTX={
+  nuevo:{gridId:'origenNuevosGrid',detalleId:'origenNuevosDetalle',prop:'dashNuevosStatusOpen',title:'📋 Nuevos'},
+  gestion:{gridId:'origenGestionGrid',detalleId:'origenGestionDetalle',prop:'dashGestionStatusOpen',title:'🛠 Gestión'}
+};
+// Abre/cierra el detalle (Nivel 3) para cualquiera de los 3 contextos, reusando la misma tabla.
+function dashToggleDetalle(kind,key){
+  if(kind==='general'){toggleFunPanel(key);return;}
+  var ctx=DASH_CTX[kind];if(!ctx)return;
+  var grid=$(ctx.gridId);
+  if(S[ctx.prop]===key){
+    S[ctx.prop]=null;
+    var det0=$(ctx.detalleId);if(det0){det0.style.display='none';det0.innerHTML='';}
+    if(grid)grid.querySelectorAll('.fc').forEach(function(c){c.classList.remove('af');});
+    return;
+  }
+  S[ctx.prop]=key;
+  if(grid)grid.querySelectorAll('.fc').forEach(function(c){c.classList.toggle('af',c.dataset.bucket===key);});
+  var arr=window._dashCardData[kind+'_'+key]||[];
+  var bucket=_dashBucketFind(key);
+  var tabla=dashDetalleTabla(arr);
+  var det=$(ctx.detalleId);if(!det)return;
   det.style.display='block';
   det.innerHTML='<div style="background:var(--p2);border:1px solid var(--bd);border-radius:10px;padding:12px 14px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'
-    +'<div style="font-size:12px;font-weight:700;color:var(--ts)">🗒 Carga de Gestión — '+esc(status)+' ('+arr.length+' lead'+(arr.length!==1?'s':'')+' · '+totalAcciones+' acci'+(totalAcciones!==1?'ones':'ón')+' en bitácora)</div>'
-    +'<button onclick="document.getElementById(\'origenGestionDetalle\').style.display=\'none\'" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:7px;padding:3px 9px;font-size:10.5px;cursor:pointer;font-family:inherit">✕</button>'
+    +'<div style="font-size:12px;font-weight:700;color:var(--ts)">'+ctx.title+' — '+esc(bucket?bucket.label:key)+' ('+tabla.count+' lead'+(tabla.count!==1?'s':'')+' · '+tabla.totalAcciones+' acci'+(tabla.totalAcciones!==1?'ones':'ón')+' en bitácora)</div>'
+    +'<button onclick="document.getElementById(\''+ctx.detalleId+'\').style.display=\'none\'" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:7px;padding:3px 9px;font-size:10.5px;cursor:pointer;font-family:inherit">✕</button>'
     +'</div>'
-    +'<div style="max-height:320px;overflow-y:auto">'
-    +'<table style="width:100%;border-collapse:collapse">'
-    +'<thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Vendedor</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)"># Acciones</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Última acción</th></tr></thead>'
-    +'<tbody>'+(rows.length?rows.map(function(r){
-      var last=r.notas.length?r.notas[r.notas.length-1]:null;
-      return '<tr onclick="openModal('+r.lead.id+')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
-        +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx)">'+esc(r.lead.name||'Sin nombre')+'</td>'
-        +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tm)">'+esc(r.lead.assignedTo||'—')+'</td>'
-        +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx);text-align:center;font-weight:700">'+r.count+'</td>'
-        +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+(last?fDT(last.ts):'—')+'</td>'
-        +'</tr>';
-    }).join(''):'<tr><td colspan="4" style="padding:12px;text-align:center;color:var(--tm);font-size:12px">Sin leads en este estado.</td></tr>')
-    +'</tbody></table></div></div>';
+    +'<div style="max-height:340px;overflow-y:auto">'+tabla.html+'</div>'
+    +'</div>';
   det.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function loadOrigenGestion(origen){
@@ -1605,7 +1641,7 @@ function loadOrigenGestion(origen){
     var gestLeads=_excluirComprasYParts(all||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
     S._dashGestionLeads=gestLeads;
     var grid=$('origenGestionGrid');if(!grid)return;
-    grid.innerHTML=dashStatusCards(gestLeads,'gestion');
+    grid.innerHTML=dashBucketCards(gestLeads,'gestion',false);
   }).catch(function(e){
     var grid=$('origenGestionGrid');if(grid)grid.innerHTML='<div style="grid-column:1/-1;font-size:12px;color:#dc2626;text-align:center;padding:10px">Error cargando gestión: '+esc(e.message)+'</div>';
   });
@@ -1616,15 +1652,16 @@ function renderOrigenFunnelBox(origen){
   box.style.display='block';
   S.dashGestionStatusOpen=null;S.dashNuevosStatusOpen=null;
   var nuevos=(S._nuevosResumenLeads||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
+  var gridStyle='grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:6px';
   box.innerHTML='<div style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:16px;margin-bottom:16px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
     +'<div style="font-size:12.5px;font-weight:700;color:var(--ts)">📥 Nuevos por Estado — '+esc(origen)+'</div>'
     +'<button onclick="toggleOrigenFunnel(\''+dashEsc(origen)+'\')" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:7px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit">✕ Cerrar</button>'
     +'</div>'
-    +'<div class="fg" id="origenNuevosGrid">'+dashStatusCards(nuevos,'nuevo')+'</div>'
+    +'<div class="fg" id="origenNuevosGrid" style="'+gridStyle+'">'+dashBucketCards(nuevos,'nuevo',false)+'</div>'
     +'<div id="origenNuevosDetalle" style="display:none;margin-top:12px"></div>'
     +'<div style="font-size:12.5px;font-weight:700;color:var(--ts);margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--bd);display:flex;align-items:center;gap:8px">🛠 Gestión en el Período por Estado — '+esc(origen)+'<button onclick="loadOrigenGestion(\''+dashEsc(origen)+'\')" title="Actualizar gestión" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:6px;padding:2px 7px;font-size:10.5px;cursor:pointer;font-family:inherit">🔄</button></div>'
-    +'<div id="origenGestionGrid" class="fg"><div style="grid-column:1/-1;font-size:12px;color:var(--tm);text-align:center;padding:10px">⏳ Cargando gestión…</div></div>'
+    +'<div id="origenGestionGrid" class="fg" style="'+gridStyle+'"><div style="grid-column:1/-1;font-size:12px;color:var(--tm);text-align:center;padding:10px">⏳ Cargando gestión…</div></div>'
     +'<div id="origenGestionDetalle" style="display:none;margin-top:12px"></div>'
     +'</div>';
   loadOrigenGestion(origen);
@@ -1633,7 +1670,7 @@ function refreshOrigenFunnelNuevos(){
   var origen=S.dashOrigenSel;if(!origen)return;
   var grid=$('origenNuevosGrid');if(!grid)return;
   var nuevos=(S._nuevosResumenLeads||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
-  grid.innerHTML=dashStatusCards(nuevos,'nuevo');
+  grid.innerHTML=dashBucketCards(nuevos,'nuevo',false);
 }
 function toggleOrigenFunnel(origen){
   if(S.dashOrigenSel===origen){
