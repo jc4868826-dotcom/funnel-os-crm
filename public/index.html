@@ -1793,13 +1793,17 @@ function _dashOrigenTick(){
   else{refreshOrigenFunnelNuevos();}
 }
 function renderNuevosResumen(){renderDashLeadsNuevos();_dashOrigenTick();}
-// ── Análisis de Calidad de Leads: interés del cliente vs. calidad de gestión, independiente del estado ──
-const VEREDICTO_META={
-  oportunidad_perdida:{label:'Oportunidad perdida por gestión',icon:'⚠️',color:'#dc2626'},
-  lead_malo:{label:'Lead de baja calidad',icon:'🧊',color:'#6b7280'},
-  bien_gestionado:{label:'Bien gestionado',icon:'✅',color:'#10b981'},
-  inconcluyente:{label:'Inconcluyente',icon:'❔',color:'#94a3b8'},
-  a_revisar:{label:'A revisar (señal media)',icon:'🔎',color:'#f59e0b'}
+// ── Análisis de Calidad de Leads: organizado por Nivel de Interés (funnel real), con Gestión como diagnóstico dentro de cada nivel ──
+const NIVEL_INTERES_META={
+  Alto:{label:'Interés Alto',icon:'🔥',color:'#dc2626'},
+  Medio:{label:'Interés Medio',icon:'🌤️',color:'#f59e0b'},
+  Bajo:{label:'Interés Bajo',icon:'❄️',color:'#6b7280'}
+};
+const DIAG_META={
+  oportunidad_perdida:{label:'⚠️ Oportunidad perdida',color:'#dc2626'},
+  bien_gestionado:{label:'✅ Bien gestionado',color:'#10b981'},
+  a_validar:{label:'🔎 A validar / seguimiento',color:'#f59e0b'},
+  baja_calidad:{label:'🧊 Baja calidad',color:'#6b7280'}
 };
 // El cliente siguió respondiendo hasta cerca del cierre del caso (no se "enfrió" solo mucho antes).
 function _clienteActivoHastaElFinal(l){
@@ -1855,13 +1859,19 @@ function _leadGestionScore(l){
 function _leadVeredicto(l){
   const si=_leadInteresScore(l),sg=_leadGestionScore(l);
   const interes=_nivelDe(si),gestion=_nivelDe(sg);
-  let v;
-  if(interes==='Medio'||gestion==='Medio')v='a_revisar';
-  else if(interes==='Alto'&&gestion==='Bajo')v='oportunidad_perdida';
-  else if(interes==='Bajo'&&gestion==='Alto')v='lead_malo';
-  else if(interes==='Alto'&&gestion==='Alto')v='bien_gestionado';
-  else v='inconcluyente';
-  return{interesScore:si,gestionScore:sg,interes:interes,gestion:gestion,veredicto:v};
+  return{interesScore:si,gestionScore:sg,interes:interes,gestion:gestion};
+}
+// Diagnóstico (Gestión) DENTRO de cada nivel de interés: el interés manda la clasificación primaria (las cajas),
+// la gestión explica el "por qué" dentro de cada caja. Interés Bajo = probable lead de baja calidad,
+// sin importar la gestión (no es responsabilidad del vendedor si la intención nunca existió).
+function _leadDiagnostico(l){
+  const ev=_leadVeredicto(l);
+  let diag;
+  if(ev.interes==='Bajo')diag='baja_calidad';
+  else if(ev.interes==='Medio')diag='a_validar';
+  else if(ev.gestion==='Bajo')diag='oportunidad_perdida';
+  else diag='bien_gestionado';
+  return Object.assign({},ev,{diag:diag});
 }
 function _calidadLeads(){return S.calidadMode==='creados'?normLeads():funLeads();}
 function setCalidadMode(mode){
@@ -1878,64 +1888,79 @@ function setCalidadMode(mode){
   renderCalidad();
 }
 function calidadDetalleTabla(leads){
-  const rows=(leads||[]).map(l=>({lead:l,ev:_leadVeredicto(l)}));
+  const rows=(leads||[]).map(l=>({lead:l,d:_leadDiagnostico(l)}));
+  // Dentro de la caja, primero lo más accionable: peor gestión primero (oportunidades perdidas arriba).
   rows.sort((a,b)=>{
+    if(a.d.gestionScore!==b.d.gestionScore)return a.d.gestionScore-b.d.gestionScore;
     const va=a.lead.assignedTo||'zzz',vb=b.lead.assignedTo||'zzz';
     if(va!==vb)return va<vb?-1:1;
     return new Date(b.lead.createdAt||b.lead.id||0)-new Date(a.lead.createdAt||a.lead.id||0);
   });
-  const nivelColor=n=>n==='Alto'?'var(--ok)':n==='Medio'?'#f59e0b':'var(--bd2)';
   const body=rows.length?rows.map(r=>{
-    const l=r.lead,ev=r.ev;
+    const l=r.lead,d=r.d,dm=DIAG_META[d.diag];
     return '<tr onclick="openModal('+l.id+')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
       +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx)">'+esc(l.name||'Sin nombre')+'</td>'
       +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(l.source||'—')+'</td>'
       +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tm)">'+esc(l.assignedTo||'—')+'</td>'
       +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(l.status||'—')+'</td>'
       +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(_abandonReasonLabel(l.abandonReason))+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;text-align:center;font-weight:700;color:'+nivelColor(ev.interes)+'">'+ev.interes+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;text-align:center;font-weight:700;color:'+nivelColor(ev.gestion)+'">'+ev.gestion+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;text-align:center;font-weight:700;color:'+dm.color+'">'+dm.label+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;text-align:center;color:var(--tm)">'+d.gestion+'</td>'
       +'</tr>';
   }).join(''):'<tr><td colspan="7" style="padding:12px;text-align:center;color:var(--tm);font-size:12px">Sin leads en esta categoría.</td></tr>';
-  const head='<thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Origen</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Vendedor</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Estado</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Motivo Abandono</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)">Interés</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)">Gestión</th></tr></thead>';
+  const head='<thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Origen</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Vendedor</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Estado</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Motivo Abandono</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)">Diagnóstico</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)">Gestión</th></tr></thead>';
   return{html:'<table style="width:100%;border-collapse:collapse">'+head+'<tbody>'+body+'</tbody></table>',count:rows.length};
 }
-function calidadToggleDetalle(key){
-  if(S.calidadOpen===key){
+function calidadToggleDetalle(nivel){
+  if(S.calidadOpen===nivel){
     S.calidadOpen=null;
     const x=$('calidadX');if(x)x.classList.remove('open');
     renderCalidad();
     return;
   }
-  S.calidadOpen=key;
+  S.calidadOpen=nivel;
   const x=$('calidadX');if(x)x.classList.add('open');
   renderCalidad();
-  const arr=window._dashCardData['calidad_'+key]||[];
-  const meta=VEREDICTO_META[key];
+  const arr=window._dashCardData['calidad_'+nivel]||[];
+  const meta=NIVEL_INTERES_META[nivel];
   const tabla=calidadDetalleTabla(arr);
-  $('calidadXT').textContent=meta.icon+' '+meta.label+' ('+tabla.count+' lead'+(tabla.count!==1?'s':'')+')';
+  $('calidadXT').textContent=meta.icon+' '+meta.label+' ('+tabla.count+' lead'+(tabla.count!==1?'s':'')+') — peor gestión primero';
   $('calidadXB').innerHTML=tabla.html;
   setTimeout(()=>x&&x.scrollIntoView({behavior:'smooth',block:'nearest'}),100);
 }
+// Las cajas se organizan por Nivel de Interés (Alto/Medio/Bajo) — siempre suman el 100% del total, como un funnel real.
+// La Gestión aparece como diagnóstico DENTRO de cada caja (subtítulo + columna en el detalle), no como una 4ta dimensión que fragmenta el conteo.
 function renderCalidad(){
   const grid=$('calidadMatrizGrid');if(!grid)return;
   const leads=_calidadLeads();
-  const buckets={oportunidad_perdida:[],lead_malo:[],bien_gestionado:[],inconcluyente:[],a_revisar:[]};
-  leads.forEach(l=>{buckets[_leadVeredicto(l).veredicto].push(l);});
+  const evals=leads.map(l=>({lead:l,d:_leadDiagnostico(l)}));
   const tot=leads.length;
   const pct=n=>tot?((n/tot)*100).toFixed(0)+'%':'—';
   const res=$('calidadResumenBox');if(res)res.innerHTML=_dashResumenHTML(leads);
-  const order=['oportunidad_perdida','lead_malo','bien_gestionado','inconcluyente','a_revisar'];
   window._dashCardData=window._dashCardData||{};
-  grid.innerHTML=order.map(k=>{
-    const meta=VEREDICTO_META[k],arr=buckets[k],n=arr.length;
-    window._dashCardData['calidad_'+k]=arr;
-    const isOpen=S.calidadOpen===k;
-    return '<div class="fc'+(isOpen?' af':'')+'" onclick="calidadToggleDetalle(\''+k+'\')" style="border-color:'+(isOpen?'var(--ac)':meta.color+'22')+'">'
+  const order=['Alto','Medio','Bajo'];
+  grid.innerHTML=order.map(nivel=>{
+    const arr=evals.filter(e=>e.d.interes===nivel);
+    window._dashCardData['calidad_'+nivel]=arr.map(e=>e.lead);
+    const meta=NIVEL_INTERES_META[nivel];
+    const n=arr.length;
+    const isOpen=S.calidadOpen===nivel;
+    let sub;
+    if(nivel==='Alto'){
+      const bien=arr.filter(e=>e.d.diag==='bien_gestionado').length;
+      const perdidos=arr.filter(e=>e.d.diag==='oportunidad_perdida').length;
+      sub='<div class="fs" style="font-size:10px;margin-top:6px"><span style="color:var(--ok);font-weight:700">✅ '+bien+'</span> <span style="color:var(--bd2);font-weight:700">⚠️ '+perdidos+'</span></div>';
+    }else if(nivel==='Bajo'){
+      sub='<div class="fs" style="font-size:10px;margin-top:6px;color:var(--tm)">probable baja calidad</div>';
+    }else{
+      sub='<div class="fs" style="font-size:10px;margin-top:6px;color:var(--tm)">a validar / seguimiento</div>';
+    }
+    return '<div class="fc'+(isOpen?' af':'')+'" onclick="calidadToggleDetalle(\''+nivel+'\')" style="border-color:'+(isOpen?'var(--ac)':meta.color+'22')+'">'
       +'<div class="fi">'+meta.icon+'</div>'
       +'<div class="fv" style="color:'+meta.color+'">'+n+'</div>'
-      +'<div class="fl" style="font-size:10px">'+esc(meta.label)+'</div>'
+      +'<div class="fl" style="font-size:10.5px">'+esc(meta.label)+'</div>'
       +'<div class="fp">'+pct(n)+' del total</div>'
+      +sub
       +'</div>';
   }).join('');
 }
