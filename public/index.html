@@ -1643,15 +1643,43 @@ function dashToggleDetalle(kind,key){
     +'</div>';
   det.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
+const DASH_ALL='__todos__'; // sentinel de origen para "Todos los orígenes" (no puede ser '' porque eso es falsy)
+function _dashLeadsPorOrigen(leads,origen){
+  if(origen===DASH_ALL)return leads||[];
+  return (leads||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
+}
+// Total + % de abandono + % de contactabilidad de un conjunto de leads.
+// Contactabilidad = leads que avanzaron más allá de "Nuevo"/"En Espera" (es decir, hubo algún contacto real).
+function _dashResumenStats(leads){
+  leads=leads||[];
+  var total=leads.length;
+  var abandonados=leads.filter(function(l){return l.status==='Abandonado'||l.status==='Perdido';}).length;
+  var sinContactar=leads.filter(function(l){return l.status==='Nuevo'||l.status==='esperando_respuesta_chileautos'||l.status==='esperando_respuesta_general';}).length;
+  var contactados=total-sinContactar;
+  return{
+    total:total,
+    pctAband:total?((abandonados/total)*100).toFixed(0)+'%':'—',
+    pctContact:total?((contactados/total)*100).toFixed(0)+'%':'—'
+  };
+}
+function _dashResumenHTML(leads){
+  var st=_dashResumenStats(leads);
+  return '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--bd);font-size:11.5px">'
+    +'<div style="color:var(--tx);font-weight:800">Total: '+st.total+'</div>'
+    +'<div style="color:var(--bd2);font-weight:700">❌ % Abandono: '+st.pctAband+'</div>'
+    +'<div style="color:var(--ok);font-weight:700">💬 % Contactabilidad: '+st.pctContact+'</div>'
+    +'</div>';
+}
 function loadOrigenGestion(origen){
   S._dashGestionQ=qstr()+'|'+(S.seller||'');
   var q=qstr();var gq=q?(q+'&mode=gestion'):'?mode=gestion';
   api('GET','/api/leads'+gq).then(function(all){
     if(S.dashOrigenSel!==origen)return;
-    var gestLeads=_excluirComprasYParts(all||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
+    var gestLeads=_dashLeadsPorOrigen(_excluirComprasYParts(all||[]),origen);
     S._dashGestionLeads=gestLeads;
     var grid=$('origenGestionGrid');if(!grid)return;
     grid.innerHTML=dashBucketCards(gestLeads,'gestion',false);
+    var res=$('origenGestionResumen');if(res)res.innerHTML=_dashResumenHTML(gestLeads);
   }).catch(function(e){
     var grid=$('origenGestionGrid');if(grid)grid.innerHTML='<div style="grid-column:1/-1;font-size:12px;color:#dc2626;text-align:center;padding:10px">Error cargando gestión: '+esc(e.message)+'</div>';
   });
@@ -1661,16 +1689,19 @@ function renderOrigenFunnelBox(origen){
   if(!origen){box.style.display='none';box.innerHTML='';return;}
   box.style.display='block';
   S.dashGestionStatusOpen=null;S.dashNuevosStatusOpen=null;
-  var nuevos=(S._nuevosResumenLeads||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
+  var nuevos=_dashLeadsPorOrigen(S._nuevosResumenLeads,origen);
+  var etiqueta=origen===DASH_ALL?'Todos los orígenes':origen;
   var gridStyle='grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:6px';
   box.innerHTML='<div style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:16px;margin-bottom:16px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
-    +'<div style="font-size:12.5px;font-weight:700;color:var(--ts)">📥 Nuevos por Estado — '+esc(origen)+'</div>'
+    +'<div style="font-size:12.5px;font-weight:700;color:var(--ts)">📥 Nuevos por Estado — '+esc(etiqueta)+'</div>'
     +'<button onclick="toggleOrigenFunnel(\''+dashEsc(origen)+'\')" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:7px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit">✕ Cerrar</button>'
     +'</div>'
+    +'<div id="origenNuevosResumen">'+_dashResumenHTML(nuevos)+'</div>'
     +'<div class="fg" id="origenNuevosGrid" style="'+gridStyle+'">'+dashBucketCards(nuevos,'nuevo',false)+'</div>'
     +'<div id="origenNuevosDetalle" style="display:none;margin-top:12px"></div>'
-    +'<div style="font-size:12.5px;font-weight:700;color:var(--ts);margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--bd);display:flex;align-items:center;gap:8px">🛠 Gestión en el Período por Estado — '+esc(origen)+'<button onclick="loadOrigenGestion(\''+dashEsc(origen)+'\')" title="Actualizar gestión" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:6px;padding:2px 7px;font-size:10.5px;cursor:pointer;font-family:inherit">🔄</button></div>'
+    +'<div style="font-size:12.5px;font-weight:700;color:var(--ts);margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--bd);display:flex;align-items:center;gap:8px">🛠 Gestión en el Período por Estado — '+esc(etiqueta)+'<button onclick="loadOrigenGestion(\''+dashEsc(origen)+'\')" title="Actualizar gestión" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:6px;padding:2px 7px;font-size:10.5px;cursor:pointer;font-family:inherit">🔄</button></div>'
+    +'<div id="origenGestionResumen"></div>'
     +'<div id="origenGestionGrid" class="fg" style="'+gridStyle+'"><div style="grid-column:1/-1;font-size:12px;color:var(--tm);text-align:center;padding:10px">⏳ Cargando gestión…</div></div>'
     +'<div id="origenGestionDetalle" style="display:none;margin-top:12px"></div>'
     +'</div>';
@@ -1679,8 +1710,9 @@ function renderOrigenFunnelBox(origen){
 function refreshOrigenFunnelNuevos(){
   var origen=S.dashOrigenSel;if(!origen)return;
   var grid=$('origenNuevosGrid');if(!grid)return;
-  var nuevos=(S._nuevosResumenLeads||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
+  var nuevos=_dashLeadsPorOrigen(S._nuevosResumenLeads,origen);
   grid.innerHTML=dashBucketCards(nuevos,'nuevo',false);
+  var res=$('origenNuevosResumen');if(res)res.innerHTML=_dashResumenHTML(nuevos);
 }
 function toggleOrigenFunnel(origen){
   if(S.dashOrigenSel===origen){
@@ -1702,6 +1734,12 @@ function renderDashLeadsNuevos(){
   leads.forEach(function(l){var s=l.source||'Sin origen';bySrc[s]=(bySrc[s]||0)+1;});
   var pct=function(n){return total?((n/total)*100).toFixed(0)+'%':'—';};
   var selOrigen=S.dashOrigenSel;
+  var activeTodos=selOrigen===DASH_ALL;
+  var chipTodos='<div onclick="toggleOrigenFunnel(\''+DASH_ALL+'\')" style="cursor:pointer;background:'+(activeTodos?'var(--ac)':'var(--p2)')+';border:1px solid '+(activeTodos?'var(--ac)':'var(--bd)')+';border-radius:8px;padding:8px 14px;text-align:center;min-width:96px" title="Ver el embudo de estados de los '+total+' leads (todos los orígenes)">'
+    +'<div style="font-size:20px;font-weight:800;color:'+(activeTodos?'#fff':'var(--ac)')+'">'+total+'</div>'
+    +'<div style="font-size:10.5px;color:'+(activeTodos?'#fff':'var(--tm)')+';margin-top:2px;font-weight:700">🌐 TODOS</div>'
+    +'<div style="font-size:9.5px;color:'+(activeTodos?'rgba(255,255,255,.85)':'var(--tm)')+';margin-top:1px">100% del total</div>'
+    +'</div>';
   var chips=Object.keys(bySrc).sort(function(a,b){return bySrc[b]-bySrc[a];}).map(function(s){
     var active=selOrigen===s;
     return '<div onclick="toggleOrigenFunnel(\''+dashEsc(s)+'\')" style="cursor:pointer;background:'+(active?'var(--ac)':'var(--p2)')+';border:1px solid '+(active?'var(--ac)':'var(--bd)')+';border-radius:8px;padding:8px 14px;text-align:center;min-width:96px" title="Ver el embudo de estados de '+bySrc[s]+' leads de '+esc(s)+'">'
@@ -1710,12 +1748,12 @@ function renderDashLeadsNuevos(){
       +'<div style="font-size:9.5px;color:'+(active?'rgba(255,255,255,.85)':'var(--tm)')+';margin-top:1px">'+pct(bySrc[s])+' del total</div>'
       +'</div>';
   }).join('');
-  box.innerHTML='<div onclick="showLeadsDetalleModal(S._nuevosResumenLeads)" style="cursor:pointer;text-align:center;padding-right:24px;border-right:1px solid var(--bd)" title="Ver el detalle de los '+total+' leads">'
+  box.innerHTML='<div onclick="toggleOrigenFunnel(\''+DASH_ALL+'\')" style="cursor:pointer;text-align:center;padding-right:24px;border-right:1px solid var(--bd)" title="Ver el embudo de estados de los '+total+' leads">'
     +'<div style="font-size:44px;font-weight:900;color:var(--tx);letter-spacing:-.03em;line-height:1">'+total+'</div>'
     +'<div style="font-size:11px;color:var(--tm);margin-top:4px;font-weight:600">LEADS NUEVOS EN EL PERÍODO</div>'
-    +'<div style="font-size:9.5px;color:var(--ac);margin-top:3px;font-weight:600">👆 Ver detalle</div>'
+    +'<div style="font-size:9.5px;color:var(--ac);margin-top:3px;font-weight:600">👆 Ver detalle por estado</div>'
     +'</div>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:10px;flex:1">'+(chips||'<div style="font-size:12px;color:var(--tm)">Sin leads en este rango.</div>')+'</div>';
+    +'<div style="display:flex;flex-wrap:wrap;gap:10px;flex:1">'+(total?chipTodos+chips:'<div style="font-size:12px;color:var(--tm)">Sin leads en este rango.</div>')+'</div>';
 }
 function _dashOrigenTick(){
   if(!S.dashOrigenSel)return;
