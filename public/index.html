@@ -1648,18 +1648,17 @@ function _dashLeadsPorOrigen(leads,origen){
   if(origen===DASH_ALL)return leads||[];
   return (leads||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
 }
-// Total + % de abandono + % de contactabilidad de un conjunto de leads.
-// Contactabilidad = leads que avanzaron más allá de "Nuevo"/"En Espera" (es decir, hubo algún contacto real).
+// Total + % de abandono + % de efectividad de un conjunto de leads.
+// Efectividad = leads que llegaron a Reservado o Cerrado (venta concretada o asegurada) sobre el total.
 function _dashResumenStats(leads){
   leads=leads||[];
   var total=leads.length;
   var abandonados=leads.filter(function(l){return l.status==='Abandonado'||l.status==='Perdido';}).length;
-  var sinContactar=leads.filter(function(l){return l.status==='Nuevo'||l.status==='esperando_respuesta_chileautos'||l.status==='esperando_respuesta_general';}).length;
-  var contactados=total-sinContactar;
+  var efectivos=leads.filter(function(l){return l.status==='Reservado'||l.status==='Cerrado';}).length;
   return{
     total:total,
     pctAband:total?((abandonados/total)*100).toFixed(0)+'%':'—',
-    pctContact:total?((contactados/total)*100).toFixed(0)+'%':'—'
+    pctEfect:total?((efectivos/total)*100).toFixed(0)+'%':'—'
   };
 }
 function _dashResumenHTML(leads){
@@ -1667,7 +1666,7 @@ function _dashResumenHTML(leads){
   return '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--bd);font-size:11.5px">'
     +'<div style="color:var(--tx);font-weight:800">Total: '+st.total+'</div>'
     +'<div style="color:var(--bd2);font-weight:700">❌ % Abandono: '+st.pctAband+'</div>'
-    +'<div style="color:var(--ok);font-weight:700">💬 % Contactabilidad: '+st.pctContact+'</div>'
+    +'<div style="color:var(--ok);font-weight:700">🎯 % Efectividad: '+st.pctEfect+'</div>'
     +'</div>';
 }
 function loadOrigenGestion(origen){
