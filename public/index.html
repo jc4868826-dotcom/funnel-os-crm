@@ -729,9 +729,10 @@ async function ejecutarAnalisisIA(){
 <div id="funTotalBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:12px 16px;margin-bottom:10px;display:flex;align-items:baseline;gap:10px"></div>
 <div class="fg" id="fG" style="grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:6px"></div>
 <div class="xe" id="funX" style="margin-top:10px"><div class="xt" id="funXT">—</div><div class="xs" id="funXB"></div></div>
-<div class="bt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">③ Análisis de Calidad de Leads<div style="display:flex;gap:6px" id="calidadModeToggle">
+<div class="bt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">③ Análisis de Calidad de Leads<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center" id="calidadModeToggle">
   <button type="button" onclick="setCalidadMode('periodo')" id="calidadModePeriodo" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--ac);color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Leads en el Período</button>
   <button type="button" onclick="setCalidadMode('creados')" id="calidadModeCreados" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg);color:var(--ts);font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Leads Creados</button>
+  <button type="button" onclick="analizarCalidadIA()" id="calidadAnalizarBtn" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:#7c3aed;color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">🔄 Analizar con IA</button>
 </div></div>
 <div style="font-size:10.5px;color:var(--tm);margin:-4px 0 8px" id="calidadModeHint">Leads en el Período: actividad dentro del rango, sin importar cuándo se crearon. Independiente del estado actual del lead.</div>
 <div id="calidadResumenBox"></div>
@@ -1797,7 +1798,8 @@ function renderNuevosResumen(){renderDashLeadsNuevos();_dashOrigenTick();}
 const NIVEL_INTERES_META={
   Alto:{label:'Interés Alto',icon:'🔥',color:'#dc2626'},
   Medio:{label:'Interés Medio',icon:'🌤️',color:'#f59e0b'},
-  Bajo:{label:'Interés Bajo',icon:'❄️',color:'#6b7280'}
+  Bajo:{label:'Interés Bajo',icon:'❄️',color:'#6b7280'},
+  SinAnalizar:{label:'Sin analizar',icon:'❔',color:'#94a3b8'}
 };
 const DIAG_META={
   oportunidad_perdida:{label:'⚠️ Oportunidad perdida',color:'#dc2626'},
@@ -1887,28 +1889,32 @@ function setCalidadMode(mode){
   const x=$('calidadX');if(x)x.classList.remove('open');
   renderCalidad();
 }
+// Orden de prioridad para ordenar el detalle: lo más accionable primero (oportunidades perdidas arriba).
+const DIAG_ORDER={oportunidad_perdida:0,a_validar:1,baja_calidad:2,bien_gestionado:3};
 function calidadDetalleTabla(leads){
-  const rows=(leads||[]).map(l=>({lead:l,d:_leadDiagnostico(l)}));
-  // Dentro de la caja, primero lo más accionable: peor gestión primero (oportunidades perdidas arriba).
+  const rows=(leads||[]).map(l=>({lead:l,ia:l.calidadIA||null}));
   rows.sort((a,b)=>{
-    if(a.d.gestionScore!==b.d.gestionScore)return a.d.gestionScore-b.d.gestionScore;
+    const oa=a.ia?(DIAG_ORDER[a.ia.diagnostico]??9):9,ob=b.ia?(DIAG_ORDER[b.ia.diagnostico]??9):9;
+    if(oa!==ob)return oa-ob;
     const va=a.lead.assignedTo||'zzz',vb=b.lead.assignedTo||'zzz';
     if(va!==vb)return va<vb?-1:1;
     return new Date(b.lead.createdAt||b.lead.id||0)-new Date(a.lead.createdAt||a.lead.id||0);
   });
   const body=rows.length?rows.map(r=>{
-    const l=r.lead,d=r.d,dm=DIAG_META[d.diag];
+    const l=r.lead,ia=r.ia,dm=ia?DIAG_META[ia.diagnostico]:null;
+    const diagCell=dm?('<span style="font-weight:700;color:'+dm.color+'">'+dm.label+'</span>'):'<span style="color:var(--tm)">— sin analizar</span>';
+    const razon=ia?esc(ia.razon||''):'Pendiente de análisis IA.';
     return '<tr onclick="openModal('+l.id+')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
       +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx)">'+esc(l.name||'Sin nombre')+'</td>'
       +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(l.source||'—')+'</td>'
       +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tm)">'+esc(l.assignedTo||'—')+'</td>'
       +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(l.status||'—')+'</td>'
       +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(_abandonReasonLabel(l.abandonReason))+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;text-align:center;font-weight:700;color:'+dm.color+'">'+dm.label+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;text-align:center;color:var(--tm)">'+d.gestion+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;text-align:center">'+diagCell+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm);max-width:260px">'+razon+'</td>'
       +'</tr>';
   }).join(''):'<tr><td colspan="7" style="padding:12px;text-align:center;color:var(--tm);font-size:12px">Sin leads en esta categoría.</td></tr>';
-  const head='<thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Origen</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Vendedor</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Estado</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Motivo Abandono</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)">Diagnóstico</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)">Gestión</th></tr></thead>';
+  const head='<thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Origen</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Vendedor</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Estado</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Motivo Abandono</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)">Diagnóstico</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Razón (IA)</th></tr></thead>';
   return{html:'<table style="width:100%;border-collapse:collapse">'+head+'<tbody>'+body+'</tbody></table>',count:rows.length};
 }
 function calidadToggleDetalle(nivel){
@@ -1924,36 +1930,37 @@ function calidadToggleDetalle(nivel){
   const arr=window._dashCardData['calidad_'+nivel]||[];
   const meta=NIVEL_INTERES_META[nivel];
   const tabla=calidadDetalleTabla(arr);
-  $('calidadXT').textContent=meta.icon+' '+meta.label+' ('+tabla.count+' lead'+(tabla.count!==1?'s':'')+') — peor gestión primero';
+  $('calidadXT').textContent=meta.icon+' '+meta.label+' ('+tabla.count+' lead'+(tabla.count!==1?'s':'')+')'+(nivel==='SinAnalizar'?'':' — oportunidades perdidas primero');
   $('calidadXB').innerHTML=tabla.html;
   setTimeout(()=>x&&x.scrollIntoView({behavior:'smooth',block:'nearest'}),100);
 }
-// Las cajas se organizan por Nivel de Interés (Alto/Medio/Bajo) — siempre suman el 100% del total, como un funnel real.
-// La Gestión aparece como diagnóstico DENTRO de cada caja (subtítulo + columna en el detalle), no como una 4ta dimensión que fragmenta el conteo.
+// Las cajas se organizan por Nivel de Interés según la IA (Alto/Medio/Bajo/Sin analizar) — siempre suman el 100% del total.
+// La Gestión (diagnóstico) viene directo del análisis de IA (lee chat + bitácora), no de un puntaje de reglas.
 function renderCalidad(){
   const grid=$('calidadMatrizGrid');if(!grid)return;
   const leads=_calidadLeads();
-  const evals=leads.map(l=>({lead:l,d:_leadDiagnostico(l)}));
   const tot=leads.length;
   const pct=n=>tot?((n/tot)*100).toFixed(0)+'%':'—';
   const res=$('calidadResumenBox');if(res)res.innerHTML=_dashResumenHTML(leads);
   window._dashCardData=window._dashCardData||{};
-  const order=['Alto','Medio','Bajo'];
+  const order=['Alto','Medio','Bajo','SinAnalizar'];
   grid.innerHTML=order.map(nivel=>{
-    const arr=evals.filter(e=>e.d.interes===nivel);
-    window._dashCardData['calidad_'+nivel]=arr.map(e=>e.lead);
+    const arr=leads.filter(l=>nivel==='SinAnalizar'?!l.calidadIA:(l.calidadIA&&l.calidadIA.nivelInteres===nivel));
+    window._dashCardData['calidad_'+nivel]=arr;
     const meta=NIVEL_INTERES_META[nivel];
     const n=arr.length;
     const isOpen=S.calidadOpen===nivel;
     let sub;
     if(nivel==='Alto'){
-      const bien=arr.filter(e=>e.d.diag==='bien_gestionado').length;
-      const perdidos=arr.filter(e=>e.d.diag==='oportunidad_perdida').length;
+      const bien=arr.filter(l=>l.calidadIA.diagnostico==='bien_gestionado').length;
+      const perdidos=arr.filter(l=>l.calidadIA.diagnostico==='oportunidad_perdida').length;
       sub='<div class="fs" style="font-size:10px;margin-top:6px"><span style="color:var(--ok);font-weight:700">✅ '+bien+'</span> <span style="color:var(--bd2);font-weight:700">⚠️ '+perdidos+'</span></div>';
     }else if(nivel==='Bajo'){
       sub='<div class="fs" style="font-size:10px;margin-top:6px;color:var(--tm)">probable baja calidad</div>';
-    }else{
+    }else if(nivel==='Medio'){
       sub='<div class="fs" style="font-size:10px;margin-top:6px;color:var(--tm)">a validar / seguimiento</div>';
+    }else{
+      sub='<div class="fs" style="font-size:10px;margin-top:6px;color:var(--tm)">presiona "Analizar con IA"</div>';
     }
     return '<div class="fc'+(isOpen?' af':'')+'" onclick="calidadToggleDetalle(\''+nivel+'\')" style="border-color:'+(isOpen?'var(--ac)':meta.color+'22')+'">'
       +'<div class="fi">'+meta.icon+'</div>'
@@ -1963,6 +1970,38 @@ function renderCalidad(){
       +sub
       +'</div>';
   }).join('');
+}
+async function analizarCalidadIA(){
+  const leads=_calidadLeads();
+  const pendientes=leads.filter(l=>!l.calidadIA);
+  if(!pendientes.length){toast('Todos los leads de esta vista ya fueron analizados.');return;}
+  const btn=$('calidadAnalizarBtn');
+  const CHUNK=15;
+  let hechos=0;
+  if(btn){btn.disabled=true;btn.style.opacity='.6';btn.textContent='Analizando… 0/'+pendientes.length;}
+  try{
+    for(let i=0;i<pendientes.length;i+=CHUNK){
+      const chunk=pendientes.slice(i,i+CHUNK);
+      const d=await api('POST','/api/leads/calidad-ia',{leadIds:chunk.map(l=>l.id)});
+      (d.resultados||[]).forEach(r=>{
+        const id=String(r.id),ia={nivelInteres:r.nivelInteres,diagnostico:r.diagnostico,razon:r.razon,analizadoEn:new Date().toISOString()};
+        [S.leads,S.leadsGestion].forEach(arr=>{
+          if(!arr)return;
+          const l=arr.find(x=>String(x.id)===id);
+          if(l)l.calidadIA=ia;
+        });
+      });
+      hechos+=chunk.length;
+      if(btn)btn.textContent='Analizando… '+Math.min(hechos,pendientes.length)+'/'+pendientes.length;
+      renderCalidad();
+    }
+    toast('Análisis IA completo: '+pendientes.length+' lead'+(pendientes.length!==1?'s':'')+' clasificado'+(pendientes.length!==1?'s':'')+'.');
+  }catch(e){
+    toast(e.message||'Error analizando con IA',true);
+  }finally{
+    if(btn){btn.disabled=false;btn.style.opacity='';btn.textContent='🔄 Analizar con IA';}
+    renderCalidad();
+  }
 }
 function renderDash(){renderNuevosResumen();renderSlaCards();renderFunnel();renderCalidad();renderPerfTable();renderTasaciones();}
 function renderXRows(items,timeFn){if(!items.length)return'<div class="xe2">Sin leads.</div>';const gc='grid-template-columns:10px 1fr 1fr 1fr 1fr auto';const hd=`<div class="xlr" style="${gc};cursor:default;background:var(--p2)"><div></div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Nombre</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Canal</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Vendedor</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Estado</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Última</div></div>`;return hd+items.map(l=>`<div class="xlr" data-id="${l.id}" style="${gc}">${adot(l.alertLevel)}<div><div class="lrn">${esc(l.name)}</div><div class="lrs">${l.unread?'● Sin resp · ':''}${esc(l.phone||'')}</div></div><div>${cSrc(l.source)}</div><div>${cUsr(l.assignedTo)}</div><div>${stpl(l.status)}</div><div class="lrt" style="color:var(--tm)">${timeFn(l)}</div></div>`).join('');}

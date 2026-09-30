@@ -908,6 +908,15 @@ function inRange(lead,s,e){if(s===null&&e===null)return true;const ts=new Date(l
 function inRangeGestion(lead,s,e){if(s===null&&e===null)return true;const ts=new Date(lead.lastInteraction||lead.createdAt||lead.id||0).getTime();return(s===null||ts>=s)&&(e===null||ts<=e);}
 // Motivo de Abandono (Análisis de Calidad de Leads): categorías válidas al marcar un lead como Abandonado.
 const ABANDON_REASONS=new Set(['sin_respuesta','presupuesto','sin_stock','otra_marca','compro_otro_lado','no_calificaba','otro']);
+const ABANDON_REASON_LABELS={
+  sin_respuesta:'Sin respuesta del cliente',
+  presupuesto:'Presupuesto insuficiente',
+  sin_stock:'No teníamos el vehículo/producto que buscaba',
+  otra_marca:'Prefirió otra marca o concesionario',
+  compro_otro_lado:'Ya compró en otro lado',
+  no_calificaba:'No calificaba (intención débil o nula)',
+  otro:'Otro'
+};
 
 async function seed(){
 
@@ -2756,6 +2765,70 @@ app.post('/api/leads/analisis-ia', auth('admin','vendedor','supervisor','tasador
   } catch(e) {
     console.error('[ANALISIS-IA]', e.message);
     try { res.write('data: ' + JSON.stringify({type:'error', error: e.message}) + '\n\n'); res.end(); } catch(_) {}
+  }
+});
+
+// ── ANÁLISIS DE CALIDAD DE LEADS (IA estructurada): interés real vs. calidad de gestión ──
+// Lee chat + bitácora + interés de cada lead (mismo contexto que /api/leads/analisis-ia) y le pide a
+// GPT-4o-mini una clasificación estructurada por lead, en vez de un score rígido por reglas. El resultado
+// se guarda en el propio lead (l.calidadIA) para no tener que re-analizar en cada carga del dashboard —
+// el frontend solo pide análisis para los leads que aún no lo tienen ("Sin analizar"), vía botón manual.
+const CALIDAD_NIVELES = new Set(['Alto', 'Medio', 'Bajo']);
+const CALIDAD_DIAGNOSTICOS = new Set(['oportunidad_perdida', 'bien_gestionado', 'baja_calidad', 'a_validar']);
+app.post('/api/leads/calidad-ia', auth('admin', 'vendedor', 'supervisor', 'tasador'), async (req, res) => {
+  try {
+    const { leadIds } = req.body || {};
+    if (!leadIds || !leadIds.length) return res.status(400).json({ error: 'Falta leadIds' });
+    const allLeads = await tRead(F.leads, req.tenant);
+    const allUsers = await tRead(F.users, req.tenant);
+    const targets = allLeads.filter(l => leadIds.includes(String(l.id)));
+    if (!targets.length) return res.status(404).json({ error: 'No se encontraron esos leads' });
+
+    const CHUNK = 15;
+    const resultados = [];
+    for (let i = 0; i < targets.length; i += CHUNK) {
+      const chunk = targets.slice(i, i + CHUNK);
+      const contexto = chunk.map(l => {
+        const vendedor = allUsers.find(u => u.username === l.assignedTo)?.name || l.assignedTo || 'Sin asignar';
+        const chat = (l.chatHistory || []).slice(-6).map(m => `[${m.role === 'user' ? 'Cliente' : 'Asesor'}]: ${(m.content || '').slice(0, 150)}`).join('\n');
+        const notas = (l.notes || []).filter(n => n.author !== 'Sistema' && n.author !== 'Bot' && n.author !== 'Resumen IA').slice(-5).map(n => `${n.author || '?'}: ${(n.content || '').slice(0, 150)}`).join(' | ');
+        const motivo = l.abandonReason ? ABANDON_REASON_LABELS[l.abandonReason] || l.abandonReason : '';
+        return `---\nID: ${l.id}\nESTADO: ${l.status}${motivo ? ' | MOTIVO ABANDONO: ' + motivo : ''}\nVENDEDOR: ${vendedor}\nINTERES DECLARADO: ${(l.interest || 'No especificado').slice(0, 150)}\nNOTAS DE BITACORA DEL VENDEDOR: ${notas || 'Sin notas'}\nCHAT (bot/cliente):\n${chat || 'Sin historial de chat'}`;
+      }).join('\n\n');
+      const r = await openai.chat.completions.create({
+        model: 'gpt-4o-mini', temperature: 0.2, max_tokens: 3000,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: 'Eres un analista comercial senior de una automotora chilena (RMG Autos). Tu trabajo es leer el chat y la bitácora real de cada lead y juzgar, con criterio humano, dos cosas por separado:\n\n1) NIVEL DE INTERES DEL CLIENTE (independiente de si compró o no lo que pidió originalmente): ¿la intención de compra es clara? Señales de interés alto: pregunta por un auto específico, entrega datos de un vehículo para parte de pago, pregunta por financiamiento o precio, pide agendar visita, manda fotos/documentos, responde activamente. Un lead que buscaba un auto que no había en stock SIGUE siendo interés alto si la intención de compra era real — eso no es un lead malo, es una oportunidad de venta cruzada. Si el lead terminó Cerrado o Reservado, el interés es Alto siempre (compró = máxima prueba de interés). Si terminó Abandonado/Perdido, evalúa si el cliente se apagó solo mucho antes del cierre (interés bajó) o si seguía respondiendo activamente hasta el final (interés se mantiene, el problema fue de gestión).\n\n2) DIAGNOSTICO DE GESTION DEL VENDEDOR: si el interés del cliente fue Bajo, el diagnóstico es siempre "baja_calidad" (no es responsabilidad del vendedor si la intención nunca existió). Si el interés fue Medio (señal ambigua), el diagnóstico es "a_validar". Si el interés fue Alto, evalúa la bitácora y el chat: ¿el vendedor dio seguimiento oportuno, respondió rápido, y si no había stock del vehículo pedido ofreció una alternativa? Si sí → "bien_gestionado". Si el vendedor no dio seguimiento adecuado, se demoró mucho, o no ofreció alternativa cuando correspondía → "oportunidad_perdida".\n\nResponde EXCLUSIVAMENTE con un objeto JSON con la forma {"resultados":[{"id":<id del lead, número>,"nivelInteres":"Alto"|"Medio"|"Bajo","diagnostico":"oportunidad_perdida"|"bien_gestionado"|"baja_calidad"|"a_validar","razon":"una frase breve y específica, con hechos reales del chat/bitácora, no genérica"}]}. Un objeto por cada lead del contexto, en el mismo orden, usando el ID exacto que te doy. Sin texto fuera del JSON.' },
+          { role: 'user', content: contexto }
+        ]
+      });
+      let parsed;
+      try { parsed = JSON.parse(r.choices?.[0]?.message?.content || '{}'); } catch (e) { parsed = {}; }
+      const items = Array.isArray(parsed.resultados) ? parsed.resultados : [];
+      items.forEach(it => {
+        const id = String(it.id);
+        if (!chunk.some(l => String(l.id) === id)) return;
+        if (!CALIDAD_NIVELES.has(it.nivelInteres) || !CALIDAD_DIAGNOSTICOS.has(it.diagnostico)) return;
+        resultados.push({ id, nivelInteres: it.nivelInteres, diagnostico: it.diagnostico, razon: String(it.razon || '').slice(0, 300) });
+      });
+    }
+
+    const now = new Date().toISOString();
+    const byId = new Map(resultados.map(r => [r.id, r]));
+    const leadsFull = await tRead(F.leads, req.tenant);
+    let escritos = 0;
+    leadsFull.forEach(l => {
+      const r = byId.get(String(l.id));
+      if (!r) return;
+      l.calidadIA = { nivelInteres: r.nivelInteres, diagnostico: r.diagnostico, razon: r.razon, analizadoEn: now };
+      escritos++;
+    });
+    await tWrite(F.leads, req.tenant, leadsFull);
+    res.json({ ok: true, analizados: escritos, resultados });
+  } catch (e) {
+    console.error('[CALIDAD-IA]', e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
