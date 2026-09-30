@@ -906,6 +906,8 @@ function inRange(lead,s,e){if(s===null&&e===null)return true;const ts=new Date(l
 // "Gestion": leads con actividad (lastInteraction) en el rango, sin importar cuando se crearon —
 // para diferenciar del conteo de "Leads Reales" (creados en el rango, funcion inRange de arriba).
 function inRangeGestion(lead,s,e){if(s===null&&e===null)return true;const ts=new Date(lead.lastInteraction||lead.createdAt||lead.id||0).getTime();return(s===null||ts>=s)&&(e===null||ts<=e);}
+// Motivo de Abandono (Análisis de Calidad de Leads): categorías válidas al marcar un lead como Abandonado.
+const ABANDON_REASONS=new Set(['sin_respuesta','presupuesto','sin_stock','otra_marca','compro_otro_lado','no_calificaba','otro']);
 
 async function seed(){
 
@@ -1169,7 +1171,7 @@ app.patch('/api/leads/:id',auth(),async(req,res)=>{
   const leads=await tRead(F.leads,req.tenant);const idx=leads.findIndex(x=>x.id==req.params.id);
   if(idx===-1)return res.status(404).json({error:'No encontrado'});
   if(req.user.role==='vendedor'&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});if(req.user.role==='tasador'&&!(leads[idx].source==='Compramos tu Auto'||leads[idx].source==='Compra Directa'||leads[idx].isCompraRmg===true)&&leads[idx].assignedTo!==req.user.username)return res.status(403).json({error:'Sin permisos'});
-  const ALLOWED=['status','interest','name','phone','botActive','nextAction','pastActions','source','lastClientTs','lastInteraction','createdAt'];if(req.user.role==='admin'||req.user.role==='supervisor')ALLOWED.push('assignedTo','isCompraRmg','isRmgParts');
+  const ALLOWED=['status','interest','name','phone','botActive','nextAction','pastActions','source','lastClientTs','lastInteraction','createdAt','abandonReason'];if(req.user.role==='admin'||req.user.role==='supervisor')ALLOWED.push('assignedTo','isCompraRmg','isRmgParts');
   // Borrado individual via patch status '_delete_'
   if(req.body.status==='_delete_'){
     const before=leads.length;
@@ -1179,6 +1181,12 @@ app.patch('/api/leads/:id',auth(),async(req,res)=>{
   }
   const patch={};for(const k of ALLOWED)if(req.body[k]!==undefined)patch[k]=req.body[k];
   if(patch.status!==undefined&&!VALID_ST.has(patch.status))return res.status(400).json({error:'Status inválido'});
+  // Motivo de Abandono: obligatorio al transicionar el lead a Abandonado (Análisis de Calidad de Leads).
+  if(patch.status==='Abandonado'&&leads[idx].status!=='Abandonado'){
+    if(!patch.abandonReason||!ABANDON_REASONS.has(patch.abandonReason))return res.status(400).json({error:'Debes indicar el motivo de abandono'});
+    patch.abandonReasonAt=new Date().toISOString();
+    patch.abandonReasonBy=req.user.name||req.user.username;
+  }
   if(req.body.note&&String(req.body.note).trim()){leads[idx].notes=Array.isArray(leads[idx].notes)?leads[idx].notes:[];leads[idx].notes.push({content:String(req.body.note).trim(),author:req.user.name||req.user.username,ts:Date.now()});}
   if(patch.status==='Reservado'&&leads[idx].status!=='Reservado')patch.reservadoAt=new Date().toISOString();
   if(patch.status==='Nuevo' && (leads[idx].status==='esperando_respuesta_chileautos'||leads[idx].status==='esperando_respuesta_general')){

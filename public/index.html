@@ -729,7 +729,15 @@ async function ejecutarAnalisisIA(){
 <div id="funTotalBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:12px 16px;margin-bottom:10px;display:flex;align-items:baseline;gap:10px"></div>
 <div class="fg" id="fG" style="grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:6px"></div>
 <div class="xe" id="funX" style="margin-top:10px"><div class="xt" id="funXT">—</div><div class="xs" id="funXB"></div></div>
-<div class="bt">③ Tasaciones</div>
+<div class="bt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">③ Análisis de Calidad de Leads<div style="display:flex;gap:6px" id="calidadModeToggle">
+  <button type="button" onclick="setCalidadMode('periodo')" id="calidadModePeriodo" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--ac);color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Leads en el Período</button>
+  <button type="button" onclick="setCalidadMode('creados')" id="calidadModeCreados" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg);color:var(--ts);font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Leads Creados</button>
+</div></div>
+<div style="font-size:10.5px;color:var(--tm);margin:-4px 0 8px" id="calidadModeHint">Leads en el Período: actividad dentro del rango, sin importar cuándo se crearon. Independiente del estado actual del lead.</div>
+<div id="calidadResumenBox"></div>
+<div class="fg" id="calidadMatrizGrid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px"></div>
+<div class="xe" id="calidadX" style="margin-top:10px"><div class="xt" id="calidadXT">—</div><div class="xs" id="calidadXB"></div></div>
+<div class="bt">④ Tasaciones</div>
 <div class="s3" id="tasGrid" style="grid-template-columns:1fr 1fr">
 <div class="sb2" onclick="toggleTasPanel('pendientes')" id="tasPendCard" style="cursor:pointer">
   <div class="si">🔧</div>
@@ -1091,6 +1099,7 @@ async function ejecutarAnalisisIA(){
 <div class="ca2">
 <div><h4>Control IA</h4><div class="btw"><div class="btl"><span>🤖</span><span>Cata IA</span></div><div style="display:flex;align-items:center;gap:8px"><span class="bst" id="bTxt">ON</span><label class="bsw"><input type="checkbox" id="bChk" checked><span class="bsl"></span></label></div></div></div>
 <div><h4>Estado</h4><select id="mSt"></select></div>
+<div id="mAbandonBlock" style="display:none"><h4>Motivo de Abandono</h4><select id="mAbandonReason" style="width:100%;padding:8px 10px;background:var(--p2);border:1px solid var(--bd);color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
 <div id="mAssignBlock" style="display:none"><h4>Reasignar a <span style="font-size:10px;background:var(--as);color:var(--ac);padding:2px 6px;border-radius:4px;font-weight:700">ADMIN</span></h4><select id="mAssign" style="width:100%;padding:8px 10px;background:var(--p2);border:1px solid var(--bd);color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
 <div>
   <h4>Notas internas</h4>
@@ -1119,7 +1128,7 @@ async function ejecutarAnalisisIA(){
 <div class="toast" id="tst"></div>
 <script>
 var calWeekOffset=0;
-const S={token:localStorage.getItem('ft')||null,user:JSON.parse(localStorage.getItem('fu')||'null'),tenant:localStorage.getItem('ftn')||'demo_automotora',config:null,leads:[],team:[],channels:[],users:[],range:{start:null,end:null,quick:'all'},seller:'',funMode:'unicos',leadsGestion:[],acc:new Set(JSON.parse(localStorage.getItem('fa')||'[]')),pollTimer:null,mid:null,slaOpen:null,funOpen:null,view:'dashboard',filtrosCompras:{start:null,end:null,seller:''},filtrosRmgParts:{start:null,end:null,seller:''}};
+const S={token:localStorage.getItem('ft')||null,user:JSON.parse(localStorage.getItem('fu')||'null'),tenant:localStorage.getItem('ftn')||'demo_automotora',config:null,leads:[],team:[],channels:[],users:[],range:{start:null,end:null,quick:'all'},seller:'',funMode:'unicos',leadsGestion:[],calidadMode:'periodo',calidadOpen:null,acc:new Set(JSON.parse(localStorage.getItem('fa')||'[]')),pollTimer:null,mid:null,slaOpen:null,funOpen:null,view:'dashboard',filtrosCompras:{start:null,end:null,seller:''},filtrosRmgParts:{start:null,end:null,seller:''}};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fCLP=n=>'$'+(Number(n)||0).toLocaleString('es-CL');
@@ -1380,6 +1389,29 @@ function _accionesEnRango(l){
   const sMs=S.range.start?new Date(S.range.start+'T00:00:00').getTime():null;
   const eMs=S.range.end?new Date(S.range.end+'T23:59:59').getTime():null;
   return (l.notes||[]).filter(n=>{if(!_esNotaDelVendedorAsignado(n,l))return false;const t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;}).length;
+}
+// ── Motivo de Abandono (Análisis de Calidad de Leads) ──
+const ABANDON_REASONS=[
+  {key:'sin_respuesta',label:'Sin respuesta del cliente'},
+  {key:'presupuesto',label:'Presupuesto insuficiente'},
+  {key:'sin_stock',label:'No teníamos el vehículo/producto que buscaba'},
+  {key:'otra_marca',label:'Prefirió otra marca o concesionario'},
+  {key:'compro_otro_lado',label:'Ya compró en otro lado'},
+  {key:'no_calificaba',label:'No calificaba (intención débil o nula)'},
+  {key:'otro',label:'Otro'}
+];
+function _abandonReasonLabel(key){const r=ABANDON_REASONS.find(x=>x.key===key);return r?r.label:(key?esc(key):'Sin motivo registrado');}
+// Muestra/oculta y llena el selector de Motivo de Abandono en la ficha del lead, según el estado elegido en #mSt.
+function renderAbandonReasonBlock(l){
+  const st=$('mSt')?.value;
+  const block=$('mAbandonBlock'),sel=$('mAbandonReason');
+  if(!block||!sel)return;
+  if(st==='Abandonado'){
+    block.style.display='block';
+    sel.innerHTML='<option value="">— Selecciona un motivo —</option>'+ABANDON_REASONS.map(r=>`<option value="${r.key}" ${l.abandonReason===r.key?'selected':''}>${esc(r.label)}</option>`).join('');
+  }else{
+    block.style.display='none';
+  }
 }
 function setFunMode(mode){
   if(S.funMode===mode)return;
@@ -1761,7 +1793,153 @@ function _dashOrigenTick(){
   else{refreshOrigenFunnelNuevos();}
 }
 function renderNuevosResumen(){renderDashLeadsNuevos();_dashOrigenTick();}
-function renderDash(){renderNuevosResumen();renderSlaCards();renderFunnel();renderPerfTable();renderTasaciones();}
+// ── Análisis de Calidad de Leads: interés del cliente vs. calidad de gestión, independiente del estado ──
+const VEREDICTO_META={
+  oportunidad_perdida:{label:'Oportunidad perdida por gestión',icon:'⚠️',color:'#dc2626'},
+  lead_malo:{label:'Lead de baja calidad',icon:'🧊',color:'#6b7280'},
+  bien_gestionado:{label:'Bien gestionado',icon:'✅',color:'#10b981'},
+  inconcluyente:{label:'Inconcluyente',icon:'❔',color:'#94a3b8'},
+  a_revisar:{label:'A revisar (señal media)',icon:'🔎',color:'#f59e0b'}
+};
+// El cliente siguió respondiendo hasta cerca del cierre del caso (no se "enfrió" solo mucho antes).
+function _clienteActivoHastaElFinal(l){
+  const msgs=(l.chatHistory||[]).filter(m=>m.role==='user');
+  if(!msgs.length)return false;
+  const lastClientTs=new Date(l.lastClientTs||msgs[msgs.length-1].ts||0).getTime();
+  const refTs=new Date(l.lastInteraction||Date.now()).getTime();
+  if(!lastClientTs||!refTs)return false;
+  return (refTs-lastClientTs)/3600000<=72;
+}
+// El lead quedó "colgado": el cliente escribió y no hay evidencia de que se le haya respondido después.
+function _leadQuedoColgado(l){
+  if(!l.unread)return false;
+  const lastClientTs=new Date(l.lastClientTs||0).getTime();
+  if(!lastClientTs)return false;
+  return (Date.now()-lastClientTs)/3600000>48;
+}
+function _nivelDe(score){return score>=70?'Alto':score>=40?'Medio':'Bajo';}
+// 6.1 — Score de interés del lead (cliente), templado por el estado final del lead.
+function _leadInteresScore(l){
+  let score=0;
+  if(l.intentSignal==='BLUE')score+=40;
+  const clientMsgs=(l.chatHistory||[]).filter(m=>m.role==='user').length;
+  score+=clientMsgs>=6?30:clientMsgs>=3?20:clientMsgs>=1?10:0;
+  if(l.nextAction&&l.nextAction.date)score+=15;
+  if(l.abandonReason==='sin_stock')score+=15;
+  score=Math.min(score,100);
+  const esGanado=l.status==='Cerrado'||l.status==='Reservado';
+  const esAbandonado=l.status==='Abandonado'||l.status==='Perdido';
+  if(esGanado){
+    score=Math.max(score,90);
+  }else if(esAbandonado){
+    if(!_clienteActivoHastaElFinal(l)&&l.abandonReason!=='sin_stock')score=Math.max(0,score-25);
+  }
+  return Math.max(0,Math.min(100,score));
+}
+// 6.2 — Score de gestión del vendedor asignado.
+function _leadGestionScore(l){
+  let score=0;
+  const slaMap={fresh:35,risk:15,critical:0};
+  score+=(l.alertLevel in slaMap)?slaMap[l.alertLevel]:20;
+  const notas=(l.notes||[]).filter(n=>_esNotaDelVendedorAsignado(n,l));
+  score+=notas.length>=6?35:notas.length>=3?25:notas.length>=1?15:0;
+  if(!_leadQuedoColgado(l))score+=15;
+  if(l.abandonReason==='sin_stock'){
+    const ofrecioAlternativa=notas.some(n=>/alternativ|otro modelo|otra opci[oó]n|le ofrec/i.test(n.content||''));
+    if(ofrecioAlternativa)score+=15;
+  }else{
+    score+=15;
+  }
+  return Math.max(0,Math.min(100,score));
+}
+function _leadVeredicto(l){
+  const si=_leadInteresScore(l),sg=_leadGestionScore(l);
+  const interes=_nivelDe(si),gestion=_nivelDe(sg);
+  let v;
+  if(interes==='Medio'||gestion==='Medio')v='a_revisar';
+  else if(interes==='Alto'&&gestion==='Bajo')v='oportunidad_perdida';
+  else if(interes==='Bajo'&&gestion==='Alto')v='lead_malo';
+  else if(interes==='Alto'&&gestion==='Alto')v='bien_gestionado';
+  else v='inconcluyente';
+  return{interesScore:si,gestionScore:sg,interes:interes,gestion:gestion,veredicto:v};
+}
+function _calidadLeads(){return S.calidadMode==='creados'?normLeads():funLeads();}
+function setCalidadMode(mode){
+  if(S.calidadMode===mode)return;
+  S.calidadMode=mode;
+  const pBtn=$('calidadModePeriodo'),cBtn=$('calidadModeCreados'),hint=$('calidadModeHint');
+  if(pBtn&&cBtn){
+    pBtn.style.background=mode==='periodo'?'var(--ac)':'var(--bg)';pBtn.style.color=mode==='periodo'?'#fff':'var(--ts)';
+    cBtn.style.background=mode==='creados'?'var(--ac)':'var(--bg)';cBtn.style.color=mode==='creados'?'#fff':'var(--ts)';
+  }
+  if(hint)hint.textContent=mode==='periodo'?'Leads en el Período: actividad dentro del rango, sin importar cuándo se crearon. Independiente del estado actual del lead.':'Leads Creados: nacieron dentro del rango seleccionado. Independiente del estado actual del lead.';
+  S.calidadOpen=null;
+  const x=$('calidadX');if(x)x.classList.remove('open');
+  renderCalidad();
+}
+function calidadDetalleTabla(leads){
+  const rows=(leads||[]).map(l=>({lead:l,ev:_leadVeredicto(l)}));
+  rows.sort((a,b)=>{
+    const va=a.lead.assignedTo||'zzz',vb=b.lead.assignedTo||'zzz';
+    if(va!==vb)return va<vb?-1:1;
+    return new Date(b.lead.createdAt||b.lead.id||0)-new Date(a.lead.createdAt||a.lead.id||0);
+  });
+  const nivelColor=n=>n==='Alto'?'var(--ok)':n==='Medio'?'#f59e0b':'var(--bd2)';
+  const body=rows.length?rows.map(r=>{
+    const l=r.lead,ev=r.ev;
+    return '<tr onclick="openModal('+l.id+')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
+      +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx)">'+esc(l.name||'Sin nombre')+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(l.source||'—')+'</td>'
+      +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tm)">'+esc(l.assignedTo||'—')+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(l.status||'—')+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(_abandonReasonLabel(l.abandonReason))+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;text-align:center;font-weight:700;color:'+nivelColor(ev.interes)+'">'+ev.interes+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;text-align:center;font-weight:700;color:'+nivelColor(ev.gestion)+'">'+ev.gestion+'</td>'
+      +'</tr>';
+  }).join(''):'<tr><td colspan="7" style="padding:12px;text-align:center;color:var(--tm);font-size:12px">Sin leads en esta categoría.</td></tr>';
+  const head='<thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Origen</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Vendedor</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Estado</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Motivo Abandono</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)">Interés</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)">Gestión</th></tr></thead>';
+  return{html:'<table style="width:100%;border-collapse:collapse">'+head+'<tbody>'+body+'</tbody></table>',count:rows.length};
+}
+function calidadToggleDetalle(key){
+  if(S.calidadOpen===key){
+    S.calidadOpen=null;
+    const x=$('calidadX');if(x)x.classList.remove('open');
+    renderCalidad();
+    return;
+  }
+  S.calidadOpen=key;
+  const x=$('calidadX');if(x)x.classList.add('open');
+  renderCalidad();
+  const arr=window._dashCardData['calidad_'+key]||[];
+  const meta=VEREDICTO_META[key];
+  const tabla=calidadDetalleTabla(arr);
+  $('calidadXT').textContent=meta.icon+' '+meta.label+' ('+tabla.count+' lead'+(tabla.count!==1?'s':'')+')';
+  $('calidadXB').innerHTML=tabla.html;
+  setTimeout(()=>x&&x.scrollIntoView({behavior:'smooth',block:'nearest'}),100);
+}
+function renderCalidad(){
+  const grid=$('calidadMatrizGrid');if(!grid)return;
+  const leads=_calidadLeads();
+  const buckets={oportunidad_perdida:[],lead_malo:[],bien_gestionado:[],inconcluyente:[],a_revisar:[]};
+  leads.forEach(l=>{buckets[_leadVeredicto(l).veredicto].push(l);});
+  const tot=leads.length;
+  const pct=n=>tot?((n/tot)*100).toFixed(0)+'%':'—';
+  const res=$('calidadResumenBox');if(res)res.innerHTML=_dashResumenHTML(leads);
+  const order=['oportunidad_perdida','lead_malo','bien_gestionado','inconcluyente','a_revisar'];
+  window._dashCardData=window._dashCardData||{};
+  grid.innerHTML=order.map(k=>{
+    const meta=VEREDICTO_META[k],arr=buckets[k],n=arr.length;
+    window._dashCardData['calidad_'+k]=arr;
+    const isOpen=S.calidadOpen===k;
+    return '<div class="fc'+(isOpen?' af':'')+'" onclick="calidadToggleDetalle(\''+k+'\')" style="border-color:'+(isOpen?'var(--ac)':meta.color+'22')+'">'
+      +'<div class="fi">'+meta.icon+'</div>'
+      +'<div class="fv" style="color:'+meta.color+'">'+n+'</div>'
+      +'<div class="fl" style="font-size:10px">'+esc(meta.label)+'</div>'
+      +'<div class="fp">'+pct(n)+' del total</div>'
+      +'</div>';
+  }).join('');
+}
+function renderDash(){renderNuevosResumen();renderSlaCards();renderFunnel();renderCalidad();renderPerfTable();renderTasaciones();}
 function renderXRows(items,timeFn){if(!items.length)return'<div class="xe2">Sin leads.</div>';const gc='grid-template-columns:10px 1fr 1fr 1fr 1fr auto';const hd=`<div class="xlr" style="${gc};cursor:default;background:var(--p2)"><div></div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Nombre</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Canal</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Vendedor</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Estado</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Última</div></div>`;return hd+items.map(l=>`<div class="xlr" data-id="${l.id}" style="${gc}">${adot(l.alertLevel)}<div><div class="lrn">${esc(l.name)}</div><div class="lrs">${l.unread?'● Sin resp · ':''}${esc(l.phone||'')}</div></div><div>${cSrc(l.source)}</div><div>${cUsr(l.assignedTo)}</div><div>${stpl(l.status)}</div><div class="lrt" style="color:var(--tm)">${timeFn(l)}</div></div>`).join('');}
 function bindXRows(c){c.querySelectorAll('.xlr[data-id]').forEach(el=>el.addEventListener('click',()=>openModal(+el.dataset.id)));}
 function renderLeads(){
@@ -2286,6 +2464,8 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
     html+=ST_VENTA.map(s=>`<option value="${esc(s)}" ${s===l.status?'selected':''}>${esc(s)}</option>`).join('');
   }
   $('mSt').innerHTML=html;
+  renderAbandonReasonBlock(l);
+  $('mSt').onchange=function(){renderAbandonReasonBlock(l);};
 })();const bOn=l.botActive!==false;$('bChk').checked=bOn;$('bTxt').textContent=bOn?'ON':'OFF';$('bTxt').className='bst '+(bOn?'on':'of');$('aMsg').value=''; const isW=(l.status==='esperando_respuesta_chileautos'||l.status==='esperando_respuesta_general'); const cR=isW&&l.chatHistory?.some(m=>m.role==='user'); const blk=isW&&!cR; $('aMsg').disabled=blk; $('aSnd').disabled=blk; $('aMsg').placeholder=blk?'⏳ Bloqueado: Esperando respuesta...':'Escribe un mensaje...';
   renderAgendaDetails(l);
   renderModalCtx(l);renderModalChat(l);renderModalNotes(l);
@@ -2497,7 +2677,7 @@ $('btnResumen').addEventListener('click',async()=>{
 });
 
 const ST_COMPRA_LIBRE=['Evaluando','Peritaje','Negociando Compra','Oferta Lanzada','Comprado','Descartado'];
-$('mSv').addEventListener('click',async()=>{if(!S.mid)return;const btn=$('mSv');btn.disabled=true;btn.textContent='…';try{const l=findLead(S.mid);const st=$('mSt').value;const note=$('mNt').value.trim();const payload={}; if(st&&st!==l?.status) { const esCambioPipelineCompras=ST_COMPRA_LIBRE.includes(st); if(!esCambioPipelineCompras){ if(!note){toast('⚠️ OBLIGATORIO: Escribe una leyenda en la bitácora', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} const aT=$('agendaText').value.trim(), aD=$('agendaDate').value; if(!aT || !aD){toast('⚠️ OBLIGATORIO: Agenda una tarea (fecha/hora)', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} } payload.status=st; }if(S.user&&(S.user.role==='admin'||S.user.role==='supervisor')){var _a=$('mAssign');if(_a&&_a.value&&_a.value!==l?.assignedTo)payload.assignedTo=_a.value;}if(note)payload.note=note;if(!Object.keys(payload).length){toast('Sin cambios');btn.disabled=false;btn.textContent='Guardar cambios';return;}await api('PATCH','/api/leads/'+S.mid,payload);$('mNt').value='';toast('Lead actualizado ✓');await refresh();renderModal();}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='Guardar cambios';}});
+$('mSv').addEventListener('click',async()=>{if(!S.mid)return;const btn=$('mSv');btn.disabled=true;btn.textContent='…';try{const l=findLead(S.mid);const st=$('mSt').value;const note=$('mNt').value.trim();const payload={}; if(st&&st!==l?.status) { const esCambioPipelineCompras=ST_COMPRA_LIBRE.includes(st); if(!esCambioPipelineCompras){ if(!note){toast('⚠️ OBLIGATORIO: Escribe una leyenda en la bitácora', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} const aT=$('agendaText').value.trim(), aD=$('agendaDate').value; if(!aT || !aD){toast('⚠️ OBLIGATORIO: Agenda una tarea (fecha/hora)', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} } if(st==='Abandonado'){const ar=$('mAbandonReason').value; if(!ar){toast('⚠️ OBLIGATORIO: Selecciona el Motivo de Abandono', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} payload.abandonReason=ar;} payload.status=st; }if(S.user&&(S.user.role==='admin'||S.user.role==='supervisor')){var _a=$('mAssign');if(_a&&_a.value&&_a.value!==l?.assignedTo)payload.assignedTo=_a.value;}if(note)payload.note=note;if(!Object.keys(payload).length){toast('Sin cambios');btn.disabled=false;btn.textContent='Guardar cambios';return;}await api('PATCH','/api/leads/'+S.mid,payload);$('mNt').value='';toast('Lead actualizado ✓');await refresh();renderModal();}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='Guardar cambios';}});
 function loadBI(t){const f=document.getElementById('biFr');const b1=document.getElementById('biT1');const b2=document.getElementById('biT2');if(!f)return;if(t==='mapa'){f.src='/mapa_zonas_v4.html';if(b1){b1.style.color='#6d28d9';b1.style.borderBottomColor='#6d28d9';}if(b2){b2.style.color='#888';b2.style.borderBottomColor='transparent';}}else{f.src='/agente_precios.html';if(b2){b2.style.color='#6d28d9';b2.style.borderBottomColor='#6d28d9';}if(b1){b1.style.color='#888';b1.style.borderBottomColor='transparent';}}}
 document.querySelectorAll('.sb nav button').forEach(btn=>{btn.addEventListener('click',async()=>{const view=btn.dataset.view;document.querySelectorAll('.sb nav button').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));btn.classList.add('active');$('view-'+view).classList.add('active');S.view=view;$('mainTb').style.display=view==='config'?'none':'';if(view==='bi'){loadBI('mapa');}else if(view==='analisis'){initAnalisisIA();}else if(view==='auditoria'){initAuditoria();}else if(view==='reporte'){initReporte();}else if(view==='config'){await loadConfig();await loadUsers();loadBackups();}else if(view==='inventario'){await renderInventario();}});});
 // ── REPORTE DE LEADS ─────────────────────────────────────────────────────
