@@ -843,31 +843,12 @@ async function applySlaRules(tenant){
         alertStaff(tenant, assignedUser, '🔴 Reserva Vencida', msg);
       }
     }
-    if(lead.status==='Nuevo'){
-      if(!enHorarioHabil()) continue;
-      const ref=(lead.status==='esperando_respuesta_chileautos'||lead.status==='esperando_respuesta_general')?lead.lastInteraction:(lead.lastClientTs||lead.lastInteraction);
-      const mins=ref?businessMinutesBetween(ref, new Date()):0;
-      /* SLA CONGELADO — modelo cambió a asignador único con reasignación manual
-      if(mins>SLA_REASSIGN&&!lead.reassigned){
-        console.log('[SLA-REASSIGN]', 'lead='+lead.name, 'mins='+mins.toFixed(1), 'Santiago='+_santiagoNowString());
-        const nextObj=await rrNext(tenant,lead.assignedTo);
-        if(nextObj&&nextObj.username!==lead.assignedTo){
-          const aiSumR=lead.ai_summary?' Resumen IA: '+lead.ai_summary:'';
-          lead.assignedTo=nextObj.username;lead.reassigned=true;lead.reassignedAt=new Date().toISOString();lead.adminReassignAlertSent=false;changed=true;
-          alertStaff(tenant, nextObj, '🚨 Reasignación', '🚨 REASIGNACIÓN: Se te asignó el lead ['+lead.name+'] porque el anterior no respondió en 30 min.'+aiSumR);
-        }else{lead.reassigned=true;lead.reassignedAt=new Date().toISOString();lead.adminReassignAlertSent=false;changed=true;}
-      }
-      if(lead.reassigned&&lead.reassignedAt&&lead.unread&&lead.adminReassignAlertSent===false){
-        const minsR=businessMinutesBetween(lead.reassignedAt, new Date());
-        if(minsR>SLA_REASSIGN){
-          lead.adminReassignAlertSent=true;changed=true;
-          const adminU=allUsers.find(u=>u.role==='admin');
-          const aiSumA=lead.ai_summary?' Resumen IA: '+lead.ai_summary:'';
-          alertStaff(tenant, adminU, '📢 Alerta Admin', '📢 ALERTA ADMIN: ['+lead.name+'] lleva 30+ min sin atención tras reasignación.'+aiSumA);
-        }
-      }
-      */
-    }
+    // NOTA (06-oct-2026): este bloque calculaba `mins` vía businessMinutesBetween() para cada lead
+    // 'Nuevo' en cada llamada a applySlaRules (que corre en cada GET /api/leads, cada 4s por pestaña
+    // abierta) pero el único consumidor de `mins` era la reasignación automática a 30 min, congelada
+    // (comentada) desde que el modelo cambió a asignador único con reasignación manual. Era cómputo
+    // puro desperdiciado — se elimina. Si se reactiva la reasignación automática, recalcular `mins`
+    // ahí mismo en vez de restaurar este bloque entero.
     const lvl=calcAlert(lead);
     if(lvl!==prev){lead.alertLevel=lvl;changed=true;}
     if(lead.botActive===undefined){lead.botActive=true;changed=true;}
