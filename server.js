@@ -1139,6 +1139,134 @@ async function filterLeadsForUser(leads, user, tenant) {
   }
 }
 
+// ── ACTA DE ENTREGA/RECEPCIÓN PDF ──────────────────────────────────────────
+app.get('/api/acta-pdf', async (req, res) => {
+  try {
+    const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([595, 842]); // A4
+    const { width, height } = page.getSize();
+    const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+    const regular = await doc.embedFont(StandardFonts.Helvetica);
+    const form = doc.getForm();
+
+    // Función helper para línea
+    const line = (y) => page.drawLine({ start:{x:40,y}, end:{x:width-40,y}, thickness:0.5, color:rgb(0.7,0.7,0.7) });
+    // Texto helper
+    const txt = (text, x, y, size=10, font=regular, color=rgb(0,0,0)) =>
+      page.drawText(text, {x, y, size, font, color});
+    // Crear campo de texto
+    const addField = (name, x, y, w, h2=16, maxLen=60) => {
+      const field = form.createTextField(name);
+      field.setMaxLength(maxLen);
+      field.addToPage(page, { x, y, width:w, height:h2, borderWidth:0.5, borderColor:rgb(0.6,0.6,0.6), backgroundColor:rgb(0.97,0.97,1) });
+      return field;
+    };
+
+    // ── ENCABEZADO ──
+    page.drawRectangle({ x:0, y:height-60, width, height:60, color:rgb(0.02,0.37,0.27) });
+    txt('ACTA DE ENTREGA / RECEPCIÓN', 40, height-22, 16, bold, rgb(1,1,1));
+    txt('RMG Autos · www.rmgautos.cl', 40, height-42, 9, regular, rgb(0.8,1,0.9));
+    txt('Fecha:', width-130, height-22, 9, bold, rgb(1,1,1));
+    addField('fecha', width-100, height-36, 80, 14);
+
+    let y = height - 80;
+    // ── DATOS DEL VEHÍCULO EN RETOMA ──
+    page.drawRectangle({ x:40, y:y-2, width:width-80, height:18, color:rgb(0.93,0.97,0.95) });
+    txt('VEHÍCULO EN RETOMA (Patente de Retoma)', 45, y+2, 9, bold, rgb(0.02,0.37,0.27));
+    y -= 26;
+
+    const col1 = 40, col2 = 310, fw = 240, fw2 = 220;
+    txt('Patente de Retoma *', col1, y+3, 8, bold); addField('patenteRetoma', col1, y-14, fw, 16, 10);
+    txt('Marca', col2, y+3, 8, bold); addField('marcaRetoma', col2, y-14, fw2, 16, 30);
+    y -= 32;
+    txt('Modelo', col1, y+3, 8, bold); addField('modeloRetoma', col1, y-14, fw, 16, 30);
+    txt('Año', col2, y+3, 8, bold); addField('anioRetoma', col2, y-14, fw2, 16, 4);
+    y -= 32;
+    txt('Color', col1, y+3, 8, bold); addField('colorRetoma', col1, y-14, fw, 16, 20);
+    txt('Kilometraje', col2, y+3, 8, bold); addField('kmRetoma', col2, y-14, fw2, 16, 10);
+    y -= 32;
+    txt('Versión / Equipamiento', col1, y+3, 8, bold); addField('versionRetoma', col1, y-14, width-100, 16, 50);
+    y -= 36;
+
+    line(y); y -= 14;
+    // ── VEHÍCULO VENDIDO ──
+    page.drawRectangle({ x:40, y:y-2, width:width-80, height:18, color:rgb(0.93,0.97,0.95) });
+    txt('VEHÍCULO VENDIDO', 45, y+2, 9, bold, rgb(0.02,0.37,0.27));
+    y -= 26;
+
+    txt('Patente', col1, y+3, 8, bold); addField('patenteVendido', col1, y-14, fw, 16, 10);
+    txt('Marca', col2, y+3, 8, bold); addField('marcaVendido', col2, y-14, fw2, 16, 30);
+    y -= 32;
+    txt('Modelo', col1, y+3, 8, bold); addField('modeloVendido', col1, y-14, fw, 16, 30);
+    txt('Año', col2, y+3, 8, bold); addField('anioVendido', col2, y-14, fw2, 16, 4);
+    y -= 36;
+
+    line(y); y -= 14;
+    // ── DATOS DEL CLIENTE ──
+    page.drawRectangle({ x:40, y:y-2, width:width-80, height:18, color:rgb(0.93,0.97,0.95) });
+    txt('DATOS DEL CLIENTE', 45, y+2, 9, bold, rgb(0.02,0.37,0.27));
+    y -= 26;
+
+    txt('Nombre Completo', col1, y+3, 8, bold); addField('nombreCliente', col1, y-14, fw, 16, 60);
+    txt('RUT', col2, y+3, 8, bold); addField('rutCliente', col2, y-14, fw2, 16, 12);
+    y -= 32;
+    txt('Teléfono', col1, y+3, 8, bold); addField('telefonoCliente', col1, y-14, fw, 16, 12);
+    txt('Correo', col2, y+3, 8, bold); addField('correoCliente', col2, y-14, fw2, 16, 50);
+    y -= 36;
+
+    line(y); y -= 14;
+    // ── ESTADO GENERAL ──
+    page.drawRectangle({ x:40, y:y-2, width:width-80, height:18, color:rgb(0.93,0.97,0.95) });
+    txt('ESTADO GENERAL DEL VEHÍCULO', 45, y+2, 9, bold, rgb(0.02,0.37,0.27));
+    y -= 26;
+
+    const items = ['Carrocería','Motor','Frenos','Neumáticos','Luces','Interior','Documentación'];
+    items.forEach((item, i) => {
+      const cx = col1 + (i % 2 === 0 ? 0 : 270);
+      const cy = y - Math.floor(i / 2) * 26;
+      txt(item, cx, cy+3, 8, bold);
+      addField('estado_' + item.toLowerCase().replace(/[^a-z]/g,''), cx, cy-14, 240, 14, 30);
+    });
+    y -= Math.ceil(items.length / 2) * 26 + 10;
+
+    line(y); y -= 14;
+    // ── OBSERVACIONES ──
+    txt('OBSERVACIONES / ACCESORIOS INCLUIDOS', col1, y+3, 9, bold, rgb(0.02,0.37,0.27));
+    y -= 18;
+    const obsField = form.createTextField('observaciones');
+    obsField.setMaxLength(400);
+    obsField.enableMultiline();
+    obsField.addToPage(page, { x:40, y:y-55, width:width-80, height:60, borderWidth:0.5, borderColor:rgb(0.6,0.6,0.6), backgroundColor:rgb(0.97,0.97,1) });
+    y -= 80;
+
+    line(y); y -= 14;
+    // ── FIRMAS ──
+    txt('Vendedor', col1, y+3, 8, bold); txt('Cliente', col2, y+3, 8, bold);
+    y -= 50;
+    page.drawRectangle({ x:40, y:y-2, width:fw, height:48, borderWidth:0.5, borderColor:rgb(0.7,0.7,0.7) });
+    page.drawRectangle({ x:310, y:y-2, width:fw2, height:48, borderWidth:0.5, borderColor:rgb(0.7,0.7,0.7) });
+    txt('Firma', col1+80, y+20, 8, regular, rgb(0.7,0.7,0.7));
+    txt('Firma', col2+80, y+20, 8, regular, rgb(0.7,0.7,0.7));
+    y -= 18;
+    txt('Nombre:', col1, y, 7, bold); addField('firmaVendedor', col1+42, y-4, fw-50, 12, 40);
+    txt('Nombre:', col2, y, 7, bold); addField('firmaCliente', col2+42, y-4, fw2-50, 12, 40);
+
+    // Pie
+    page.drawLine({ start:{x:0,y:22}, end:{x:width,y:22}, thickness:0.5, color:rgb(0.7,0.7,0.7) });
+    txt('Documento generado por FunnelOS · RMG Autos', 40, 8, 7, regular, rgb(0.5,0.5,0.5));
+
+    const pdfBytes = await doc.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="Acta_Entrega_Recepcion.pdf"');
+    res.end(Buffer.from(pdfBytes));
+  } catch(e) {
+    console.error('[ACTA-PDF]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+// ── FIN ACTA PDF ─────────────────────────────────────────────────────────────
+
 app.get('/api/leads',auth(),async(req,res)=>{
   try{
     const all=await applySlaRules(req.tenant);const{s,e}=parseDateRange(req.query.start,req.query.end);
@@ -1779,6 +1907,85 @@ app.post('/webhook',async(req,res)=>{
       source_type:referral.source_type||null,
       media_type:referral.media_type||null,
     }:null;
+
+    // --- PDF ENTREGA/RECEPCIÓN HANDLER ---
+    if (msg.type === 'document') {
+      try {
+        const docId = msg.document?.id;
+        const docName = msg.document?.filename || '';
+        const tenant = 'demo_automotora';
+
+        // Solo procesar PDFs con nombre que sugiera acta de entrega
+        const isPDF = (msg.document?.mime_type || '').includes('pdf') || docName.toLowerCase().endsWith('.pdf');
+        if (isPDF) {
+          // Descargar el PDF desde Meta
+          const metaUrlRes = await fetch(`https://graph.facebook.com/v19.0/${docId}`, {
+            headers: { Authorization: `Bearer ${(process.env.WA_TOKEN || '').trim()}` }
+          });
+          const metaUrlData = await metaUrlRes.json();
+          let patenteEncontrada = null;
+
+          if (metaUrlData.url) {
+            const pdfRes = await fetch(metaUrlData.url, {
+              headers: { Authorization: `Bearer ${(process.env.WA_TOKEN || '').trim()}` }
+            });
+            const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
+
+            // Intentar extraer texto del PDF con pdf-parse
+            try {
+              const pdfParse = require('pdf-parse');
+              const pdfData = await pdfParse(pdfBuffer);
+              const text = pdfData.text || '';
+              // Buscar patente chilena: 2-4 letras + 2-4 dígitos (o formato antiguo XX-NNNN)
+              const match = text.match(/\b([A-Z]{2,4}[-\s]?\d{2,4})\b/i);
+              if (match) patenteEncontrada = match[1].replace(/[-\s]/g,'').toUpperCase();
+              console.log('[PDF-ACTA] Texto extraído, patente detectada:', patenteEncontrada, '| chars:', text.length);
+            } catch (parseErr) {
+              // Intentar extraer patente del nombre del archivo como fallback
+              const matchName = docName.match(/Acta_([A-Z]{2,4}\d{2,4})_/i);
+              if (matchName) patenteEncontrada = matchName[1].toUpperCase();
+              console.log('[PDF-ACTA] pdf-parse falló, patente desde nombre:', patenteEncontrada, '|', parseErr.message);
+            }
+
+            // Buscar el lead por patente
+            if (patenteEncontrada) {
+              const ld = await read(F.leads);
+              if (!ld[tenant]) ld[tenant] = [];
+              const pClean = patenteEncontrada.replace(/\W/g,'').toUpperCase();
+              const idx = ld[tenant].findIndex(l => {
+                // Busca en patente de retoma (tradeIn.plate), luego patente principal del lead
+                const retomaPat = (l.tradeIn?.plate || '').replace(/\W/g,'').toUpperCase();
+                const mainPat = (l.plate || l.patente || l.interest || l.vehiculo || '').replace(/\W/g,'').toUpperCase();
+                const lp = retomaPat || mainPat;
+                return lp && lp.includes(pClean);
+              });
+
+              if (idx !== -1) {
+                if (!ld[tenant][idx].media) ld[tenant][idx].media = [];
+                ld[tenant][idx].media.push({ type: 'document', url: docId, text: `Acta PDF: ${docName}`, ts: Date.now() });
+                ld[tenant][idx].notes = ld[tenant][idx].notes || [];
+                ld[tenant][idx].notes.push({ text: `📄 Acta de entrega/recepción recibida (${docName})`, ts: Date.now(), user: 'bot' });
+                ld[tenant][idx].lastInteraction = new Date().toISOString();
+                await tWrite(F.leads, tenant, ld[tenant]);
+                await sendWA(from, `✅ Acta recibida para *${patenteEncontrada}* y asociada al lead de *${ld[tenant][idx].name || 'cliente'}*. Queda registrado en el CRM.`);
+                console.log('[PDF-ACTA] Acta asociada al lead:', ld[tenant][idx].name, '| patente:', patenteEncontrada);
+              } else {
+                await sendWA(from, `⚠️ Recibí el acta para patente *${patenteEncontrada}* pero no encontré un lead activo con esa patente. Verifica que el lead exista en FunnelOS.`);
+                console.log('[PDF-ACTA] No se encontró lead para patente:', patenteEncontrada);
+              }
+            } else {
+              await sendWA(from, `⚠️ Recibí el PDF pero no pude detectar la patente. Asegúrate de que el archivo se llame *Acta_PATENTE_fecha.pdf* o que el PDF tenga texto seleccionable.`);
+            }
+          }
+        } else {
+          // Documento no PDF — ignorar silenciosamente o loguear
+          console.log('[PDF-ACTA] Documento recibido no es PDF:', docName, msg.document?.mime_type);
+        }
+      } catch (docErr) {
+        console.error('[PDF-ACTA] Error procesando documento:', docErr.message);
+      }
+      return; // no continuar flujo principal
+    }
 
     // --- MULTIMEDIA HANDLER V4 ---
     if (msg.type === 'image' || msg.type === 'audio') {
