@@ -262,73 +262,19 @@ function dpCalidad(m){
   return 'Nula';
 }
 
-// ── Selector tipo "ticket" (chips) para Origen / Anuncio en Análisis Profundo ──
-window._dpMulti = window._dpMulti || {
-  origen:{options:['Meta Ads','MercadoLibre','Chileautos','WhatsApp','Yapo','Manual'],selected:[]},
-  anuncio:{options:[],selected:[]}
-};
-function dpEsc(s){return (s+'').replace(/'/g,"\\'");}
-function dpOptLabel(st,v){
-  for(var i=0;i<st.options.length;i++){var o=st.options[i];if((typeof o==='object'?o.value:o)===v)return typeof o==='object'?o.label:o;}
-  return v;
-}
-function dpMultiRenderChips(key){
-  var st=window._dpMulti[key];var box=document.getElementById('dpMBox_'+key);if(!box)return;
-  if(!st.selected.length){box.innerHTML='<span style="color:var(--tm)">Todos</span>';return;}
-  box.innerHTML=st.selected.map(function(v){
-    var full=dpOptLabel(st,v);
-    var lbl=(full.length>18?full.slice(0,18)+'…':full);
-    return '<span onclick="event.stopPropagation();dpMultiToggle(\''+key+'\',\''+dpEsc(v)+'\')" style="display:inline-flex;align-items:center;gap:4px;background:var(--ac);color:#fff;border-radius:20px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap">'+lbl+' <span style="font-size:12px;line-height:1">×</span></span>';
-  }).join('');
-}
-function dpMultiRenderPanel(key){
-  var st=window._dpMulti[key];var panel=document.getElementById('dpMPanel_'+key);if(!panel)return;
-  if(!st.options.length){panel.innerHTML='<div style="padding:8px;font-size:11px;color:var(--tm);text-align:center">Sin opciones</div>';return;}
-  panel.innerHTML=st.options.map(function(o){
-    var val=typeof o==='object'?o.value:o;var lbl=typeof o==='object'?o.label:o;
-    var checked=st.selected.indexOf(val)>-1;
-    return '<label style="display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:6px;cursor:pointer;font-size:11px;color:var(--ts)" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\'"><input type="checkbox" '+(checked?'checked':'')+' onchange="dpMultiToggle(\''+key+'\',\''+dpEsc(val)+'\')" style="cursor:pointer;flex-shrink:0"><span>'+lbl+'</span></label>';
-  }).join('');
-}
-function dpMultiToggle(key,val){
-  var st=window._dpMulti[key];
-  var i=st.selected.indexOf(val);
-  if(i>-1)st.selected.splice(i,1);else st.selected.push(val);
-  dpMultiRenderChips(key);dpMultiRenderPanel(key);
-  dpAplicarFiltros();
-}
-function dpMultiTogglePanel(key){
-  Object.keys(window._dpMulti).forEach(function(k){
-    var p=document.getElementById('dpMPanel_'+k);
-    if(p&&k!==key)p.style.display='none';
-  });
-  var panel=document.getElementById('dpMPanel_'+key);if(!panel)return;
-  var willOpen=panel.style.display==='none';
-  panel.style.display=willOpen?'block':'none';
-  if(willOpen)dpMultiRenderPanel(key);
-}
-document.addEventListener('click',function(e){
-  Object.keys(window._dpMulti).forEach(function(key){
-    var box=document.getElementById('dpMBox_'+key);var panel=document.getElementById('dpMPanel_'+key);
-    if(!box||!panel)return;
-    if(!box.contains(e.target)&&!panel.contains(e.target))panel.style.display='none';
-  });
-});
-function dpGetOrigenes(){return window._dpMulti.origen.selected.slice();}
-function dpGetAnuncios(){return window._dpMulti.anuncio.selected.slice();}
 function dpFiltrarLeads(leads){
-  var origenes=dpGetOrigenes();
+  var origen=((document.getElementById('dpFOrigen')||{}).value)||'';
   var vend=((document.getElementById('dpFiltroVendedor')||{}).value)||'';
   var cal=((document.getElementById('dpFCalidad')||{}).value)||'';
-  var anuncios=dpGetAnuncios();
+  var anuncio=((document.getElementById('dpFAnuncio')||{}).value)||'';
   var interac=((document.getElementById('dpFInterac')||{}).value)||'';
   var des=((document.getElementById('dpFiltroDes')||{}).value)||'';
   var has=((document.getElementById('dpFiltroHas')||{}).value)||'';
   return leads.filter(function(l){
-    if(origenes.length&&origenes.indexOf(l.source)===-1) return false;
+    if(origen&&l.source!==origen) return false;
     if(vend&&l.assignedTo!==vend) return false;
     if(cal&&(l._calidad||'')!==cal) return false;
-    if(anuncios.length&&anuncios.indexOf(l.interest||'')===-1) return false;
+    if(anuncio&&(l.interest||'')!==anuncio) return false;
     if(interac&&(l._interac||'')!==interac) return false;
     var cr=new Date(l.createdAt||l.lastInteraction||0);
     if(des&&cr<new Date(des)) return false;
@@ -338,14 +284,15 @@ function dpFiltrarLeads(leads){
 }
 
 function dpPopularAnuncios(leads){
+  var sel=document.getElementById('dpFAnuncio');if(!sel)return;
   var map={};
   leads.forEach(function(l){var a=(l.interest||'').trim();if(a)map[a]=(map[a]||0)+1;});
   var sorted=Object.keys(map).sort(function(a,b){return map[b]-map[a];});
-  window._dpMulti.anuncio.options=sorted.slice(0,30).map(function(a){
-    return {value:a,label:a.slice(0,30)+(a.length>30?'\u2026':'')+' ('+map[a]+')'};
+  sel.innerHTML='<option value="">Todos</option>';
+  sorted.slice(0,30).forEach(function(a){
+    var o=document.createElement('option');o.value=a;
+    o.textContent=a.slice(0,30)+(a.length>30?'\u2026':'')+' ('+map[a]+')';sel.appendChild(o);
   });
-  window._dpMulti.anuncio.selected=[];
-  dpMultiRenderChips('anuncio');dpMultiRenderPanel('anuncio');
 }
 
 function dpAplicarFiltros(){
@@ -583,12 +530,12 @@ async function ejecutarAnalisisProfundo(){
   var btn=document.getElementById('btnAnalisisProfundo');
   var res=document.getElementById('dpResultado');
   if(!btn)return;
-  var origenes=dpGetOrigenes();
+  var origen=((document.getElementById('dpFOrigen')||{}).value)||'';
   var vend=((document.getElementById('dpFiltroVendedor')||{}).value)||'';
   var des=((document.getElementById('dpFiltroDes')||{}).value)||'';
   var has=((document.getElementById('dpFiltroHas')||{}).value)||'';
   var leads=(S.leads||[]).filter(function(l){
-    if(origenes.length&&origenes.indexOf(l.source)===-1)return false;
+    if(origen&&l.source!==origen)return false;
     if(vend&&l.assignedTo!==vend)return false;
     var cr=new Date(l.createdAt||l.lastInteraction||0);
     if(des&&cr<new Date(des))return false;
@@ -614,7 +561,7 @@ async function ejecutarAnalisisProfundo(){
   // IA solo para diagnóstico textual
   try{
     var filtros={};
-    if(origenes.length)filtros.sources=origenes;if(vend)filtros.assignedTo=vend;
+    if(origen)filtros.source=origen;if(vend)filtros.assignedTo=vend;
     if(des)filtros.desde=des;if(has)filtros.hasta=has+'T23:59:59';
     var r=await fetch('/api/leads/clasificar-ia',{method:'POST',
       headers:{'Content-Type':'application/json','X-Auth-Token':S.token||''},
@@ -702,7 +649,7 @@ async function ejecutarAnalisisIA(){
 </div>
 </div>
 <div id="av" class="app" style="display:none">
-<aside class="sb"><h1 id="bizName">FunnelOS</h1><div class="who" id="uBadge">—</div><nav><button class="active" data-view="dashboard">📊 Operación</button><button data-view="leads">📋 Leads</button><button data-view="chileautos" id="navCA" style="background:#e8f5e9;color:#2e7d32;font-weight:700">🏷 Chileautos</button><button data-view="espera-general" id="navEG" style="background:#ede9fe;color:#6d28d9;font-weight:700;display:none">⏳ En Espera</button><button data-view="compras" id="navCompras" style="background:#fff7ed;color:#d97706;font-weight:700">🛍 Compras RMG</button><button data-view="rmgparts" id="navRmgParts" style="background:#fef3c7;color:#b45309;font-weight:700">🛢 RMG Parts</button>
+<aside class="sb"><h1 id="bizName">FunnelOS</h1><div class="who" id="uBadge">—</div><nav><button class="active" data-view="dashboard">📊 Operación</button><button data-view="leads">📋 Leads</button><button data-view="chileautos" id="navCA" style="background:#e8f5e9;color:#2e7d32;font-weight:700">🏷 Chileautos</button><button data-view="espera-general" id="navEG" style="background:#ede9fe;color:#6d28d9;font-weight:700;display:none">⏳ En Espera</button><button data-view="compras" id="navCompras" style="background:#fff7ed;color:#d97706;font-weight:700">🛍 Compras RMG</button>
 <button data-view="pipeline">🗂 Pipeline</button><button data-view="analytics" id="navA">📈 Analítica</button><button data-view="team" id="navT">👥 Equipo</button><button data-view="inventario" id="navInv">🚗 Inventario</button><button data-view="bi" id="navBI" style="background:linear-gradient(135deg,#1a1a2e,#16213e);color:#a78bfa;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🧠 BI</button><button data-view="analisis" id="navAnalisis" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🔍 Análisis IA</button><button data-view="auditoria" id="navAuditoria" style="background:linear-gradient(135deg,#0f766e,#0891b2);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🔍 Auditoría</button><button data-view="reporte" id="navReporte" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">📊 Reporte</button><button id="navEntrega" onclick="window.open('https://claude.ai/artifact/Sdz33CKVhK7HS3EeKQbMyF','_blank')" style="background:linear-gradient(135deg,#065f46,#047857);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">📋 Entrega/Recep.</button><button data-view="config" id="navC">⚙️ Config</button></nav><button onclick="syncInventario()" style="margin-top:6px;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:8px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" id="btnSyncInv">🔄 Sync RMG</button>
 <button id="btnInstallApp" onclick="installApp()" style="display:none;margin-top:8px;background:linear-gradient(135deg,#D4A843,#F2C955);color:#0f172a;border:none;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;align-items:center;gap:6px;letter-spacing:.04em">📲 Instalar App</button>
 <button class="lout" id="loutB">Cerrar sesión</button></aside>
@@ -710,35 +657,18 @@ async function ejecutarAnalisisIA(){
 <div class="tb" id="mainTb"><span class="lbl">Rango</span><div class="qk"><button data-q="all">Todo</button><button data-q="today">Hoy</button><button data-q="yesterday">Ayer</button><button data-q="7d">7d</button><button data-q="30d">30d</button><button data-q="month">📅 Mes</button></div><span class="lbl">Desde</span><input type="date" id="dS"><span class="lbl">Hasta</span><input type="date" id="dE"><button class="clr" id="dC">Limpiar</button><span class="lbl" id="lblS">Vendedor</span><select id="selF"><option value="">Todos</option></select><span class="ri" id="rI">Sin filtro</span></div>
 <section id="view-dashboard" class="view active">
 <div class="st">Dashboard Operativo</div>
-<div class="bt" style="margin-top:0;display:flex;align-items:center;gap:6px">🚦 SLA Primera Respuesta <span style="font-size:10px;font-weight:500;color:var(--tm);text-transform:none;letter-spacing:0">— leads Nuevos</span></div>
-<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
-<div class="sb2 fr" onclick="toggleSlaPanel('fresh')" style="padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px"><span style="font-size:16px;line-height:1">🟢</span><div style="min-width:0"><div style="font-size:17px;font-weight:800;line-height:1" id="scF">—</div><div style="font-size:9px;color:var(--tm);font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap">En Tiempo</div></div></div>
-<div class="sb2 ri" onclick="toggleSlaPanel('risk')" style="padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px"><span style="font-size:16px;line-height:1">🟡</span><div style="min-width:0"><div style="font-size:17px;font-weight:800;line-height:1" id="scR">—</div><div style="font-size:9px;color:var(--tm);font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap">En Riesgo</div></div></div>
-<div class="sb2 cr" onclick="toggleSlaPanel('crit')" style="padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px"><span style="font-size:16px;line-height:1">🔴</span><div style="min-width:0"><div style="font-size:17px;font-weight:800;line-height:1" id="scC">—</div><div style="font-size:9px;color:var(--tm);font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap">Crítico</div></div></div>
-<div class="sb2 rs" onclick="toggleSlaPanel('reassigned')" style="padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px"><span style="font-size:16px;line-height:1">🔁</span><div style="min-width:0"><div style="font-size:17px;font-weight:800;line-height:1" id="scRS">—</div><div style="font-size:9px;color:var(--tm);font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap">Reasignados</div></div></div>
+<div class="bt">① SLA Primera Respuesta — leads Nuevos</div>
+<div class="s3">
+<div class="sb2 fr" onclick="toggleSlaPanel('fresh')"><div class="si">🟢</div><div class="sl">En Tiempo</div><div class="sc" id="scF">—</div><div class="sh">Nuevos · &lt; 20 min (Verde)</div></div>
+<div class="sb2 ri" onclick="toggleSlaPanel('risk')"><div class="si">🟡</div><div class="sl">En Riesgo</div><div class="sc" id="scR">—</div><div class="sh">Nuevos · 20-30 min (Riesgo)</div></div>
+<div class="sb2 cr" onclick="toggleSlaPanel('crit')"><div class="si">🔴</div><div class="sl">Crítico</div><div class="sc" id="scC">—</div><div class="sh">Nuevos · +50 min</div></div>
+<div class="sb2 rs" onclick="toggleSlaPanel('reassigned')"><div class="si">🔁</div><div class="sl">Reasignados</div><div class="sc" id="scRS">—</div><div class="sh">&gt; 30 min (Reasignado)</div></div>
 </div>
 <div class="xe" id="slaX"><div class="xt" id="slaXT">—</div><div class="xs" id="slaXB"></div></div>
-<div class="bt">📊 Leads Nuevos en el Período</div>
-<div id="nuevosResumenBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px;margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:28px"></div>
-<div id="origenFunnelBox" style="display:none"></div>
-<div class="bt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">② Embudo de Ventas (General)<div style="display:flex;gap:6px" id="funModeToggle">
-  <button type="button" onclick="setFunMode('unicos')" id="funModeUnicos" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--ac);color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Gestión Únicos</button>
-  <button type="button" onclick="setFunMode('acciones')" id="funModeAcciones" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg);color:var(--ts);font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Acciones</button>
-</div></div>
-<div style="font-size:10.5px;color:var(--tm);margin:-4px 0 8px" id="funModeHint">Gestión Únicos: leads con actividad dentro del rango, contados una sola vez.</div>
-<div id="funTotalBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:12px 16px;margin-bottom:10px;display:flex;align-items:baseline;gap:10px"></div>
-<div class="fg" id="fG" style="grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:6px"></div>
+<div class="bt">② Embudo de Ventas</div>
+<div class="fg" id="fG"></div>
 <div class="xe" id="funX" style="margin-top:10px"><div class="xt" id="funXT">—</div><div class="xs" id="funXB"></div></div>
-<div class="bt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">③ Análisis de Calidad de Leads<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center" id="calidadModeToggle">
-  <button type="button" onclick="setCalidadMode('periodo')" id="calidadModePeriodo" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--ac);color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Leads en el Período</button>
-  <button type="button" onclick="setCalidadMode('creados')" id="calidadModeCreados" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg);color:var(--ts);font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">Leads Creados</button>
-  <button type="button" onclick="analizarCalidadIA()" id="calidadAnalizarBtn" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:#7c3aed;color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">🔄 Analizar con IA</button>
-</div></div>
-<div style="font-size:10.5px;color:var(--tm);margin:-4px 0 8px" id="calidadModeHint">Leads en el Período: actividad dentro del rango, sin importar cuándo se crearon. Independiente del estado actual del lead.</div>
-<div id="calidadResumenBox"></div>
-<div class="fg" id="calidadMatrizGrid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px"></div>
-<div class="xe" id="calidadX" style="margin-top:10px"><div class="xt" id="calidadXT">—</div><div class="xs" id="calidadXB"></div></div>
-<div class="bt">④ Tasaciones</div>
+<div class="bt">③ Tasaciones</div>
 <div class="s3" id="tasGrid" style="grid-template-columns:1fr 1fr">
 <div class="sb2" onclick="toggleTasPanel('pendientes')" id="tasPendCard" style="cursor:pointer">
   <div class="si">🔧</div>
@@ -768,7 +698,6 @@ async function ejecutarAnalisisIA(){
   <div class="st" style="margin-bottom:0">Leads</div>
   <button id="btnBulkDelete" onclick="bulkDelete()" style="display:none;background:var(--bd2);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">🗑 Borrar Seleccionados</button>
   <button id="btnMoveToCompras" onclick="moveToComprasRmg()" style="display:none;background:#d97706;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">🚗 Mover a Compras RMG</button>
-  <button id="btnMoveToRmgParts" onclick="moveToRmgParts()" style="display:none;background:#b45309;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">🛢 Trasladar a RMG Parts</button>
 <button id="btnExportChats" onclick="exportChatsCsv()" style="background:#10b981;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">📥 Exportar a CSV</button>
 <button id="btnExportLeadsXlsx" onclick="exportLeadsExcel()" style="background:#1d6f42;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;margin-right:10px">📊 Descargar Leads (Excel)</button>
 <button id="btnNuevoLead" onclick="openNuevoLeadModal()" style="background:var(--ac);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px">＋ Nuevo Lead</button>
@@ -883,8 +812,6 @@ async function ejecutarAnalisisIA(){
     <button class="mtab" style="color:var(--tm); padding:8px 4px; background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; font-weight:600; font-size:13px;" onclick="switchComprasTab('analitica', this)">📈 Analítica</button>
     <button onclick="openNuevoProspectoCompras()" style="margin-left:auto;margin-bottom:6px;background:#d97706;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer">+ Nuevo Prospecto</button>
 </div>
-<div id="comprasResumenBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px;margin-bottom:12px;display:flex;flex-wrap:wrap;align-items:center;gap:28px"></div>
-<div id="comprasFiltroBar"></div>
 <div id="compras-leads" style="display:block;">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
       <input id="comprasBuscar" oninput="renderComprasFull()" placeholder="🔍 Buscar nombre, teléfono, vehículo..." style="background:var(--p2);border:1px solid var(--bd);color:var(--tx);padding:6px 10px;border-radius:7px;font-family:inherit;font-size:12px;width:100%;max-width:280px">
@@ -909,17 +836,6 @@ async function ejecutarAnalisisIA(){
     <div id="compras-analitica-box"></div>
 </div>
 </section>
-<section id="view-rmgparts" class="view">
-<div class="st" style="color:#b45309;margin-bottom:4px">🛢 RMG Parts — Lubricantes, Baterías y Neumáticos</div>
-<div style="font-size:13px;color:var(--tm);margin-bottom:14px">Los mismos leads del funnel de RMG Autos, filtrados a las conversaciones donde Cata detectó una consulta de RMG Parts. Mismo pipeline, mismo login — esta es solo una vista rápida.</div>
-<div id="rmgpResumenBox" style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px;margin-bottom:12px;display:flex;flex-wrap:wrap;align-items:center;gap:28px"></div>
-<div id="rmgpFiltroBar"></div>
-<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-  <input id="rmgpSearch" oninput="renderRmgParts()" placeholder="🔍 Buscar nombre, teléfono, producto..." style="background:var(--p2);border:1px solid var(--bd);color:var(--tx);padding:6px 10px;border-radius:7px;font-family:inherit;font-size:12px;width:100%;max-width:280px">
-  <span id="rmgpCount" style="font-size:11px;color:var(--tm);margin-left:auto"></span>
-</div>
-<div class="tw" id="rmgpTbl"></div>
-</section>
 <section id="view-pipeline" class="view"><div class="st">Pipeline Kanban</div><div class="kb" id="kbn"></div><div class="cw"><div class="bt" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">Agenda de la Semana<div class="cal-nav" style="display:flex;align-items:center;gap:6px"><button id="calPrev" style="background:var(--p2);border:1px solid var(--bd);color:var(--ts);padding:5px 11px;border-radius:7px;font-size:12px;cursor:pointer;font-family:inherit">&laquo; Anterior</button><button id="calHoy" style="background:var(--ac);color:#fff;border:none;padding:5px 11px;border-radius:7px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">Hoy</button><button id="calNext" style="background:var(--p2);border:1px solid var(--bd);color:var(--ts);padding:5px 11px;border-radius:7px;font-size:12px;cursor:pointer;font-family:inherit">Siguiente &raquo;</button></div></div><div style="overflow-x:auto;width:100%"><div class="cg" id="calG" style="width:100%"></div></div></div></section>
 <section id="view-analytics" class="view"><div class="st">Analítica de Canales</div><div class="ct" id="chBx"></div></section>
 <section id="view-team" class="view"><div id="kpiDash"></div></section>
@@ -939,7 +855,7 @@ async function ejecutarAnalisisIA(){
 <div class="cfs"><h3>🏢 Empresa</h3><div class="cfg"><div><label class="cfl">Nombre del negocio</label><input class="cfi" id="cfgN" placeholder="RMG Autos"></div><div><label class="cfl">Color acento</label><input type="color" class="cfi" id="cfgC" value="#3b82f6" style="padding:4px;height:36px;cursor:pointer"></div></div><div style="margin-top:12px"><label class="cfl">Clave de acceso (modifica para cambiar contraseña global)</label><div style="display:flex;gap:8px;align-items:center"><input class="cfi" id="cfgClave" type="password" placeholder="Nueva clave (dejar vacío para no cambiar)" style="flex:1"><button type="button" onclick="toggleClave()" style="background:var(--p2);border:1px solid var(--bd);color:var(--tm);padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px">👁</button></div></div><div class="ca" style="margin-top:12px"><button class="bp" id="cfgSB">Guardar Empresa</button></div></div>
 <div class="cfs"><h3>📥 Asignación de Leads</h3><div class="cfg"><div><label class="cfl">Asignador único (recibe todos los leads normales)</label><select class="cfi" id="cfgDefaultAssignee"><option value="">— Ninguno (fallback: admin) —</option></select></div><div><label class="cfl">Asignados a Compras RMG (Ctrl/Cmd + click para múltiples)</label><select class="cfi" id="cfgComprasAssignees" multiple size="6" style="min-height:120px"></select></div></div><div style="margin-top:8px;font-size:11.5px;color:var(--tm);line-height:1.5">ℹ️ Los leads normales van al asignador único. Los leads del formulario "Compramos tu Auto" (Meta) rotan entre los asignados a Compras RMG.</div><div class="ca" style="margin-top:12px"><button class="bp" id="cfgRoutingSB">Guardar Asignación</button></div></div>
 <div class="cfs"><h3>👥 Equipo</h3><div style="overflow-x:auto"><table class="ut" id="uTbl"><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Teléfono WhatsApp</th><th>Nueva Contraseña</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="uTbd"></tbody></table></div><div class="ca"><button class="bp" id="addUB">+ Agregar</button></div></div>
-<div class="cfs" id="nuF" style="display:none"><h3>➕ Nuevo Usuario</h3><div class="cfg"><div><label class="cfl">Username</label><input class="cfi" id="nuU"></div><div><label class="cfl">Contraseña</label><input class="cfi" id="nuPw" value="demo"></div><div><label class="cfl">Nombre</label><input class="cfi" id="nuN"></div><div><label class="cfl">Rol</label><select class="cfi" id="nuR"><option value="vendedor">Vendedor</option><option value="tasador">Tasador (Compras)</option><option value="admin">Admin</option><option value="secretaria">Secretaria</option></select></div><div><label class="cfl">Teléfono WA</label><input class="cfi" id="nuPh"></div><div><label class="cfl">Estado</label><select class="cfi" id="nuSt"><option value="Activo">Activo</option><option value="Inactivo">Inactivo</option></select></div></div><div style="margin-top:16px;border-top:1px solid var(--bd);padding-top:14px"><label class="cfl" style="font-size:13px;font-weight:700;color:var(--tx)">🔐 Permisos por módulo</label><div style="overflow-x:auto;margin-top:8px"><table class="ut" id="nuPermsTbl" style="width:100%;font-size:12px"><thead><tr><th style="text-align:left">Módulo</th><th>Sin acceso</th><th>Lectura</th><th>Edición</th><th>Agregar/Eliminar</th></tr></thead><tbody id="nuPermsBody"></tbody></table></div><div style="margin-top:12px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="nuCanReassign" style="width:16px;height:16px;cursor:pointer"><label for="nuCanReassign" style="cursor:pointer;font-size:12.5px;color:var(--tx)">🔄 Puede reasignar leads a otros usuarios</label></div></div><div class="ca"><button class="bp" id="nuSv">Crear</button><button class="bs" id="nuCn">Cancelar</button></div></div>
+<div class="cfs" id="nuF" style="display:none"><h3>➕ Nuevo Usuario</h3><div class="cfg"><div><label class="cfl">Username</label><input class="cfi" id="nuU"></div><div><label class="cfl">Contraseña</label><input class="cfi" id="nuPw" value="demo"></div><div><label class="cfl">Nombre</label><input class="cfi" id="nuN"></div><div><label class="cfl">Rol</label><select class="cfi" id="nuR"><option value="vendedor">Vendedor</option><option value="admin">Admin</option><option value="secretaria">Secretaria</option></select></div><div><label class="cfl">Teléfono WA</label><input class="cfi" id="nuPh"></div><div><label class="cfl">Estado</label><select class="cfi" id="nuSt"><option value="Activo">Activo</option><option value="Inactivo">Inactivo</option></select></div></div><div style="margin-top:16px;border-top:1px solid var(--bd);padding-top:14px"><label class="cfl" style="font-size:13px;font-weight:700;color:var(--tx)">🔐 Permisos por módulo</label><div style="overflow-x:auto;margin-top:8px"><table class="ut" id="nuPermsTbl" style="width:100%;font-size:12px"><thead><tr><th style="text-align:left">Módulo</th><th>Sin acceso</th><th>Lectura</th><th>Edición</th><th>Agregar/Eliminar</th></tr></thead><tbody id="nuPermsBody"></tbody></table></div><div style="margin-top:12px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="nuCanReassign" style="width:16px;height:16px;cursor:pointer"><label for="nuCanReassign" style="cursor:pointer;font-size:12.5px;color:var(--tx)">🔄 Puede reasignar leads a otros usuarios</label></div></div><div class="ca"><button class="bp" id="nuSv">Crear</button><button class="bs" id="nuCn">Cancelar</button></div></div>
 <div class="cfs" id="cfgCanales"><h3>📡 Canales de Origen</h3><div id="cfgCanalesList" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div><div style="display:flex;gap:8px;margin-bottom:12px"><input class="cfi" id="cfgNuevoCanal" placeholder="Nuevo canal..." style="flex:1"><button class="bs" id="cfgAddCanal" style="white-space:nowrap">+ Agregar</button></div><div class="ca"><button class="bp" id="cfgSaveCanales">Guardar Canales</button></div></div>
 <div class="cfs" id="cfgBackups">
 <h3>💾 Respaldos del Sistema</h3>
@@ -981,8 +897,8 @@ async function ejecutarAnalisisIA(){
 <!-- ── SIDEBAR ── -->
 <div style="width:196px;flex-shrink:0;background:var(--p);border:1px solid var(--bd);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 16px rgba(0,0,0,.07)">
   <div style="font-size:13px;font-weight:800;color:var(--ts);letter-spacing:.01em;padding-bottom:8px;border-bottom:1px solid var(--bd)">🔍 Filtros</div>
-  <div style="position:relative"><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Origen</div><div id="dpMBox_origen" onclick="dpMultiTogglePanel('origen')" style="width:100%;min-height:32px;padding:5px 8px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit;cursor:pointer;display:flex;align-items:center;flex-wrap:wrap;gap:4px;box-sizing:border-box"><span style="color:var(--tm)">Todos</span></div><div id="dpMPanel_origen" class="dpMPanel" style="display:none;position:absolute;z-index:50;top:100%;left:0;right:0;margin-top:4px;background:var(--p);border:1px solid var(--bd);border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:220px;overflow-y:auto;padding:6px"></div></div>
-  <div style="position:relative"><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Anuncio</div><div id="dpMBox_anuncio" onclick="dpMultiTogglePanel('anuncio')" style="width:100%;min-height:32px;padding:5px 8px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit;cursor:pointer;display:flex;align-items:center;flex-wrap:wrap;gap:4px;box-sizing:border-box"><span style="color:var(--tm)">Todos</span></div><div id="dpMPanel_anuncio" class="dpMPanel" style="display:none;position:absolute;z-index:50;top:100%;left:0;right:0;margin-top:4px;background:var(--p);border:1px solid var(--bd);border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:220px;overflow-y:auto;padding:6px"></div></div>
+  <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Origen</div><select id="dpFOrigen" onchange="dpAplicarFiltros()" style="width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="">Todos</option><option value="Meta Ads">Meta Ads</option><option value="MercadoLibre">MercadoLibre</option><option value="Chileautos">Chileautos</option><option value="WhatsApp">WhatsApp</option><option value="Yapo">Yapo</option><option value="Manual">Manual</option></select></div>
+  <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Anuncio</div><select id="dpFAnuncio" onchange="dpAplicarFiltros()" style="width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="">Todos</option></select></div>
   <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Vendedor</div><select id="dpFiltroVendedor" onchange="dpAplicarFiltros()" style="width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="">Todos</option></select></div>
   <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Calidad</div><select id="dpFCalidad" onchange="dpAplicarFiltros()" style="width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="">Todas</option><option value="Alta">Alta</option><option value="Media">Media</option><option value="Baja">Baja</option><option value="Nula">Nula</option></select></div>
   <div><div style="font-size:9px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px">Interacción</div><select id="dpFInterac" onchange="dpAplicarFiltros()" style="width:100%;padding:7px 9px;border-radius:9px;border:1px solid var(--bd);background:var(--p2);color:var(--ts);font-size:11px;font-family:inherit"><option value="">Todas</option><option value="ia">🤖 IA dominante</option><option value="humano">👤 Humano activo</option><option value="mixto">⚡ Mixto</option></select></div>
@@ -1100,7 +1016,6 @@ async function ejecutarAnalisisIA(){
 <div class="ca2">
 <div><h4>Control IA</h4><div class="btw"><div class="btl"><span>🤖</span><span>Cata IA</span></div><div style="display:flex;align-items:center;gap:8px"><span class="bst" id="bTxt">ON</span><label class="bsw"><input type="checkbox" id="bChk" checked><span class="bsl"></span></label></div></div></div>
 <div><h4>Estado</h4><select id="mSt"></select></div>
-<div id="mAbandonBlock" style="display:none"><h4>Motivo de Abandono</h4><select id="mAbandonReason" style="width:100%;padding:8px 10px;background:var(--p2);border:1px solid var(--bd);color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
 <div id="mAssignBlock" style="display:none"><h4>Reasignar a <span style="font-size:10px;background:var(--as);color:var(--ac);padding:2px 6px;border-radius:4px;font-weight:700">ADMIN</span></h4><select id="mAssign" style="width:100%;padding:8px 10px;background:var(--p2);border:1px solid var(--bd);color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
 <div>
   <h4>Notas internas</h4>
@@ -1129,7 +1044,7 @@ async function ejecutarAnalisisIA(){
 <div class="toast" id="tst"></div>
 <script>
 var calWeekOffset=0;
-const S={token:localStorage.getItem('ft')||null,user:JSON.parse(localStorage.getItem('fu')||'null'),tenant:localStorage.getItem('ftn')||'demo_automotora',config:null,leads:[],team:[],channels:[],users:[],range:{start:null,end:null,quick:'all'},seller:'',funMode:'unicos',leadsGestion:[],calidadMode:'periodo',calidadOpen:null,acc:new Set(JSON.parse(localStorage.getItem('fa')||'[]')),pollTimer:null,mid:null,slaOpen:null,funOpen:null,view:'dashboard',filtrosCompras:{start:null,end:null,seller:''},filtrosRmgParts:{start:null,end:null,seller:''}};
+const S={token:localStorage.getItem('ft')||null,user:JSON.parse(localStorage.getItem('fu')||'null'),tenant:localStorage.getItem('ftn')||'demo_automotora',config:null,leads:[],team:[],channels:[],users:[],range:{start:null,end:null,quick:'all'},seller:'',acc:new Set(JSON.parse(localStorage.getItem('fa')||'[]')),pollTimer:null,mid:null,slaOpen:null,funOpen:null,view:'dashboard'};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fCLP=n=>'$'+(Number(n)||0).toLocaleString('es-CL');
@@ -1158,12 +1073,12 @@ async function login(){$('liE').textContent='';try{const d=await api('POST','/ap
 function logout(){if(S.pollTimer)clearInterval(S.pollTimer);S.token=null;S.user=null;localStorage.removeItem('ft');localStorage.removeItem('fu');$('av').style.display='none';$('lv').style.display='grid';}
 $('loutB').addEventListener('click',()=>{api('POST','/api/auth/logout').catch(()=>{});logout();});
 function applyMenuPermissions(){if(!S.user||!S.user.permissions)return;const MAP={'operacion':['navDashboard'],'leads':['navLeads'],'chileautos':['navCA'],'espera':['navEG'],'compras':['navCompras'],'pipeline':['navPipeline'],'analitica':['navA'],'equipo':['navT'],'inventario':['navInv'],'bi':['navBI'],'analisis':['navAnalisis'],'auditoria':['navAuditoria'],'reporte':['navReporte'],'config':['navC']};for(const[mod,ids]of Object.entries(MAP)){const level=(S.user.permissions[mod]||0);ids.forEach(id=>{const el=document.getElementById(id);if(el&&level===0)el.style.display='none';});}}
-async function enterApp(){$('lv').style.display='none';$('av').style.display='grid';requestNotifPermission();setTimeout(()=>initWebPush().catch(()=>{}),2000);try{const me=await api('GET','/api/me');if(me&&me.user){S.user=me.user;localStorage.setItem('fu',JSON.stringify(me.user));}}catch(e){}$('uBadge').textContent=(S.user?.name||'')+' · '+(S.user?.role||'');const isA=S.user?.role==='admin';const isAorSup=S.user?.role==='admin'||S.user?.role==='supervisor';['navA','navT','navC','lblS','selF','navReporte'].forEach(id=>{const el=$(id);if(el)el.style.display=isAorSup?'':'none';});applyMenuPermissions();try{S.config=await api('GET','/api/config');$('bizName').textContent=S.config.businessName||'FunnelOS';if(S.config.accentColor)document.documentElement.style.setProperty('--ac',S.config.accentColor);// Carga usuarios siempre (admin y vendedor) para que cUsr() resuelva nombres reales
+async function enterApp(){$('lv').style.display='none';$('av').style.display='grid';requestNotifPermission();setTimeout(()=>initWebPush().catch(()=>{}),2000);try{const me=await api('GET','/api/me');if(me&&me.user){S.user=me.user;localStorage.setItem('fu',JSON.stringify(me.user));}}catch(e){}$('uBadge').textContent=(S.user?.name||'')+' · '+(S.user?.role||'');const isA=S.user?.role==='admin';const isAorSup=isA||S.user?.role==='supervisor';['navA','navT','navC','navCompras','navReporte'].forEach(id=>{const el=$(id);if(el)el.style.display=isAorSup?'':'none';});['lblS','selF'].forEach(id=>{const el=$(id);if(el)el.style.display=isAorSup?'':'none';});applyMenuPermissions();try{S.config=await api('GET','/api/config');$('bizName').textContent=S.config.businessName||'FunnelOS';if(S.config.accentColor)document.documentElement.style.setProperty('--ac',S.config.accentColor);// Carga usuarios siempre (admin y vendedor) para que cUsr() resuelva nombres reales
   const users=await api('GET','/api/users').catch(()=>[]);S.users=users;
   const _cCfg=await api('GET','/api/config/canales').catch(()=>[]);if(_cCfg.length){S.canales=_cCfg;const _fc=$('filtCanal');if(_fc){const _prev=_fc.value;_fc.innerHTML='<option value="">Todos</option>'+_cCfg.map(c=>'<option value="'+c+'">'+c+'</option>').join('');_fc.value=_prev;}}
-  if(isA){const sel=$('selF');sel.innerHTML='<option value="">Todos</option>';users.filter(u=>u.role==='vendedor').forEach(u=>{const o=document.createElement('option');o.value=u.username;o.textContent=u.name;sel.appendChild(o);});}}catch(e){}// Iniciar con mes en curso por defecto
+  if(isAorSup){const sel=$('selF');sel.innerHTML='<option value="">Todos</option>';users.filter(u=>u.role==='vendedor'||u.role==='supervisor').forEach(u=>{const o=document.createElement('option');o.value=u.username;o.textContent=u.name;sel.appendChild(o);});}}catch(e){}// Iniciar con mes en curso por defecto
   {const t=new Date();t.setHours(0,0,0,0);const fmt=d=>d.toISOString().slice(0,10);const s=new Date(t.getFullYear(),t.getMonth(),1);S.range={start:fmt(s),end:fmt(t),quick:'month'};$('dS').value=S.range.start;$('dE').value=S.range.end;syncQ();updRI();}
-await refresh();if(S.pollTimer)clearInterval(S.pollTimer);S.pollTimer=setInterval(refresh,15000);}
+await refresh();if(S.pollTimer)clearInterval(S.pollTimer);S.pollTimer=setInterval(refresh,4000);}
 function setQ(q){S.range.quick=q;const t=new Date();t.setHours(0,0,0,0);const fmt=d=>d.toISOString().slice(0,10);if(q==='all'){S.range.start=null;S.range.end=null;}else if(q==='today'){S.range.start=fmt(t);S.range.end=fmt(t);}else if(q==='yesterday'){const y=new Date(t);y.setDate(y.getDate()-1);S.range.start=fmt(y);S.range.end=fmt(y);}else if(q==='7d'){const s=new Date(t);s.setDate(s.getDate()-6);S.range.start=fmt(s);S.range.end=fmt(t);}else if(q==='30d'){const s=new Date(t);s.setDate(s.getDate()-29);S.range.start=fmt(s);S.range.end=fmt(t);}else if(q==='month'){const s=new Date(t.getFullYear(),t.getMonth(),1);S.range.start=fmt(s);S.range.end=fmt(t);}$('dS').value=S.range.start||'';$('dE').value=S.range.end||'';syncQ();updRI();refresh();}
 function syncQ(){document.querySelectorAll('.qk button').forEach(b=>b.classList.toggle('active',b.dataset.q===S.range.quick));}
 function updRI(){$('rI').textContent=(S.range.start||S.range.end)?'Filtrando: '+(S.range.start||'—')+' → '+(S.range.end||'—'):'Sin filtro';}
@@ -1188,7 +1103,7 @@ if(btnFF) {
   });
 }
 
-async function refresh(){if(!S.token)return;const q=qstr(),isA=S.user?.role==='admin';try{const gq=q?(q+'&mode=gestion'):'?mode=gestion';const[leads,team,channels,vendKpi,leadsGestion]=await Promise.all([api('GET','/api/leads'+q),isA?api('GET','/api/dashboard/team'+q):Promise.resolve([]),isA?api('GET','/api/analytics/channels'+q):Promise.resolve([]),!isA?api('GET','/api/dashboard/vendedor'+q):Promise.resolve(null),api('GET','/api/leads'+gq)]);S.leads=leads;S.team=team||[];S.channels=channels||[];S.vendKpi=vendKpi||null;if(leadsGestion)S.leadsGestion=leadsGestion;renderAll();}catch(e){console.error('refresh:',e.message);}}
+async function refresh(){if(!S.token)return;const q=qstr(),isA=S.user?.role==='admin';try{const[leads,team,channels,vendKpi]=await Promise.all([api('GET','/api/leads'+q),isA?api('GET','/api/dashboard/team'+q):Promise.resolve([]),isA?api('GET','/api/analytics/channels'+q):Promise.resolve([]),!isA?api('GET','/api/dashboard/vendedor'+q):Promise.resolve(null)]);S.leads=leads;S.team=team||[];S.channels=channels||[];S.vendKpi=vendKpi||null;renderAll();}catch(e){console.error('refresh:',e.message);}}
 
 function renderChileautos(){
   const leads=(S.leads||[]).filter(l=>l.status==='esperando_respuesta_chileautos');
@@ -1366,108 +1281,10 @@ async function requestNotifPermission(){
 }
 // ═══════════════════════════════════════════════════
 
-function renderDashVendedor(){if(!S.vendKpi)return;const k=S.vendKpi;const scF=$('scF'),scR=$('scR'),scC=$('scC'),scRS=$('scRS');if(scF)scF.textContent=k.sla?.fresh??'—';if(scR)scR.textContent=k.sla?.risk??'—';if(scC)scC.textContent=k.sla?.critical??'—';if(scRS)scRS.textContent=k.sla?.reassigned??'—';renderNuevosResumen();renderFunnel();}
-function isAdminOrSup(){return S.user?.role==='admin'||S.user?.role==='supervisor';}
-function renderAll(){const isA=S.user?.role==='admin';const isAorSup2=isA||S.user?.role==='supervisor';if(isA)renderDash();else renderDashVendedor();renderLeads();renderRmgParts();renderChileautos();renderEsperaGeneral();renderKanban(); if(typeof renderComprasFull === "function") renderComprasFull();renderCalendar();if(isAorSup2){renderAnalytics();renderTeam();}if(S.mid&&$('mbg').classList.contains('show'))refreshModalSilent();if(S.slaOpen)renderSlaPanel(S.slaOpen);if(S.funOpen)renderFunPanel(S.funOpen);try{checkNotifications();}catch(e){}}
+function renderDashVendedor(){if(!S.vendKpi)return;const k=S.vendKpi;const scF=$('scF'),scR=$('scR'),scC=$('scC'),scRS=$('scRS');if(scF)scF.textContent=k.sla?.fresh??'—';if(scR)scR.textContent=k.sla?.risk??'—';if(scC)scC.textContent=k.sla?.critical??'—';if(scRS)scRS.textContent=k.sla?.reassigned??'—';renderFunnel();}
+function renderAll(){const isA=S.user?.role==='admin';if(isA)renderDash();else renderDashVendedor();renderLeads();renderChileautos();renderEsperaGeneral();renderKanban(); if(typeof renderComprasFull === "function") renderComprasFull();renderCalendar();if(isA||S.user?.role==='supervisor'){renderAnalytics();renderTeam();}if(S.mid&&$('mbg').classList.contains('show'))refreshModalSilent();if(S.slaOpen)renderSlaPanel(S.slaOpen);if(S.funOpen)renderFunPanel(S.funOpen);try{checkNotifications();}catch(e){}}
 
-function normLeads(){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(S.leads||[]).filter(l=>l.isCompraRmg!==true&&l.isRmgParts!==true&&!FC.includes((l.source||'').trim()));}
-function _excluirComprasYParts(arr){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(arr||[]).filter(l=>l.isCompraRmg!==true&&l.isRmgParts!==true&&!FC.includes((l.source||'').trim()));}
-function funLeads(){return _excluirComprasYParts(S.leadsGestion);}
-// Solo cuenta notas escritas por un vendedor/humano real, no las que graba el sistema o la IA
-// (p.ej. "Sistema", "Bot", "Resumen IA" — mismo criterio usado en el resto de la app, ver notasVendedor).
-function _esNotaVendedor(n){return n.author!=='Sistema'&&n.author!=='Bot'&&n.author!=='Resumen IA';}
-// Nombre para mostrar de un username (según S.users), usado para comparar contra el autor de la nota.
-function _vendedorNombre(username){const u=(S.users||[]).find(x=>x.username===username);return u?(u.name||u.username):username;}
-// "Acción" válida = nota de bitácora escrita por el VENDEDOR ASIGNADO al lead (no por el sistema/IA,
-// ni por otro vendedor, ni por un tasador u otro usuario que haya tocado el lead sin ser el asignado).
-function _esNotaDelVendedorAsignado(n,l){
-  if(!_esNotaVendedor(n))return false;
-  if(!l.assignedTo)return false;
-  const nombreAsignado=_vendedorNombre(l.assignedTo);
-  return n.author===nombreAsignado||n.author===l.assignedTo;
-}
-function _accionesEnRango(l){
-  const sMs=S.range.start?new Date(S.range.start+'T00:00:00').getTime():null;
-  const eMs=S.range.end?new Date(S.range.end+'T23:59:59').getTime():null;
-  return (l.notes||[]).filter(n=>{if(!_esNotaDelVendedorAsignado(n,l))return false;const t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;}).length;
-}
-// ── Motivo de Abandono (Análisis de Calidad de Leads) ──
-const ABANDON_REASONS=[
-  {key:'sin_respuesta',label:'Sin respuesta del cliente'},
-  {key:'presupuesto',label:'Presupuesto insuficiente'},
-  {key:'sin_stock',label:'No teníamos el vehículo/producto que buscaba'},
-  {key:'otra_marca',label:'Prefirió otra marca o concesionario'},
-  {key:'compro_otro_lado',label:'Ya compró en otro lado'},
-  {key:'no_calificaba',label:'No calificaba (intención débil o nula)'},
-  {key:'otro',label:'Otro'}
-];
-function _abandonReasonLabel(key){const r=ABANDON_REASONS.find(x=>x.key===key);return r?r.label:(key?esc(key):'Sin motivo registrado');}
-// Muestra/oculta y llena el selector de Motivo de Abandono en la ficha del lead, según el estado elegido en #mSt.
-function renderAbandonReasonBlock(l){
-  const st=$('mSt')?.value;
-  const block=$('mAbandonBlock'),sel=$('mAbandonReason');
-  if(!block||!sel)return;
-  if(st==='Abandonado'){
-    block.style.display='block';
-    sel.innerHTML='<option value="">— Selecciona un motivo —</option>'+ABANDON_REASONS.map(r=>`<option value="${r.key}" ${l.abandonReason===r.key?'selected':''}>${esc(r.label)}</option>`).join('');
-  }else{
-    block.style.display='none';
-  }
-}
-function setFunMode(mode){
-  if(S.funMode===mode)return;
-  S.funMode=mode;
-  const bU=$('funModeUnicos'),bA=$('funModeAcciones'),hint=$('funModeHint');
-  if(bU)bU.style.background=mode==='unicos'?'var(--ac)':'var(--bg)';
-  if(bU)bU.style.color=mode==='unicos'?'#fff':'var(--ts)';
-  if(bA)bA.style.background=mode==='acciones'?'var(--ac)':'var(--bg)';
-  if(bA)bA.style.color=mode==='acciones'?'#fff':'var(--ts)';
-  if(hint)hint.textContent=mode==='unicos'?'Gestión Únicos: leads con actividad dentro del rango, contados una sola vez.':'Acciones: total de acciones de bitácora (notas) registradas dentro del rango, para los leads con actividad.';
-  S.funOpen=null;const funX=$('funX');if(funX)funX.classList.remove('open');
-  renderFunnel();
-}
-
-/* ── filtro de fecha/vendedor independiente por pestaña (Compras RMG, RMG Parts, etc.) ── */
-function _filtroBarHTML(idPrefix, state){
-  var vopts=(S.users||[]).filter(function(u){return u.role==='vendedor'||u.role==='supervisor'||u.role==='tasador';}).map(function(u){
-    return '<option value="'+esc(u.username)+'"'+(state.seller===u.username?' selected':'')+'>'+esc(u.name)+'</option>';
-  }).join('');
-  return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--p2);border:1px solid var(--bd);border-radius:10px;padding:8px 12px;margin-bottom:10px">'
-    +'<span style="font-size:9.5px;font-weight:800;color:var(--tm);text-transform:uppercase;letter-spacing:.07em">Período</span>'
-    +'<span style="font-size:11px;color:var(--tm)">Desde</span>'
-    +'<input id="'+idPrefix+'Desde" type="date" value="'+(state.start||'')+'" style="background:var(--p);border:1px solid var(--bd);color:var(--tx);font-size:11.5px;border-radius:7px;padding:4px 8px;font-family:inherit">'
-    +'<span style="font-size:11px;color:var(--tm)">Hasta</span>'
-    +'<input id="'+idPrefix+'Hasta" type="date" value="'+(state.end||'')+'" style="background:var(--p);border:1px solid var(--bd);color:var(--tx);font-size:11.5px;border-radius:7px;padding:4px 8px;font-family:inherit">'
-    +'<span style="font-size:11px;color:var(--tm)">Vendedor</span>'
-    +'<select id="'+idPrefix+'Vendedor" style="background:var(--p);border:1px solid var(--bd);color:var(--tx);font-size:11.5px;border-radius:7px;padding:4px 8px;font-family:inherit"><option value="">Todos</option>'+vopts+'</select>'
-    +'<button id="'+idPrefix+'Clear" style="margin-left:auto;background:transparent;border:1px solid var(--bd);color:var(--tm);font-size:11.5px;border-radius:7px;padding:4px 10px;cursor:pointer;font-family:inherit">Limpiar</button>'
-    +'</div>';
-}
-function _wireFiltroBar(idPrefix, state, cb){
-  var ds=document.getElementById(idPrefix+'Desde');
-  if(ds) ds.onchange=function(){state.start=this.value||null;cb();};
-  var de=document.getElementById(idPrefix+'Hasta');
-  if(de) de.onchange=function(){state.end=this.value||null;cb();};
-  var sel=document.getElementById(idPrefix+'Vendedor');
-  if(sel) sel.onchange=function(){state.seller=this.value||'';cb();};
-  var clr=document.getElementById(idPrefix+'Clear');
-  if(clr) clr.onclick=function(){state.start=null;state.end=null;state.seller='';cb();};
-}
-function _filtrarPorFechaVendedor(leads, state){
-  var arr=leads||[];
-  if(state.start){
-    var s=new Date(state.start+'T00:00:00').getTime();
-    arr=arr.filter(function(l){var t=new Date(l.createdAt||l.id).getTime();return !isNaN(t)&&t>=s;});
-  }
-  if(state.end){
-    var e=new Date(state.end+'T23:59:59').getTime();
-    arr=arr.filter(function(l){var t=new Date(l.createdAt||l.id).getTime();return !isNaN(t)&&t<=e;});
-  }
-  if(state.seller){
-    arr=arr.filter(function(l){return l.assignedTo===state.seller;});
-  }
-  return arr;
-}
+function normLeads(){const FC=['Compra Directa','Compramos tu Auto','Compramos tu auto','Compra Directa '];return(S.leads||[]).filter(l=>l.isCompraRmg!==true&&!FC.includes((l.source||'').trim()));}
 
 function renderSlaCards(){
   const nv=normLeads().filter(l=>l.status==='Nuevo');
@@ -1481,534 +1298,17 @@ function toggleSlaPanel(type){const cards=document.querySelectorAll('.sb2');if(S
 
 function renderSlaPanel(type){const lm={fresh:'fresh',risk:'risk',crit:'critical'};const lb={fresh:'🟢 En Tiempo — < 20 min (Verde)',risk:'🟡 En Riesgo — 20-30 min',crit:'🔴 Alerta — > 60 min (Crítico)',reassigned:'🔁 Reasignados — > 30 min sin atención'};let items;if(type==='reassigned'){items=normLeads().filter(l=>l.status==='Nuevo'&&l.reassigned===true).sort((a,b)=>{const ra=a.reassignedAt||a.lastInteraction;const rb=b.reassignedAt||b.lastInteraction;return new Date(ra)-new Date(rb);});}else{items=normLeads().filter(l=>l.status==='Nuevo'&&l.alertLevel===lm[type]).sort((a,b)=>mAgo(a.lastClientTs||a.lastInteraction)-mAgo(b.lastClientTs||b.lastInteraction));}$('slaXT').textContent=lb[type]+' ('+items.length+')';$('slaXB').innerHTML=renderXRows(items,l=>type==='reassigned'?(l.reassignedAt?fDT(l.reassignedAt):'—'):fMin(mAgo(l.lastClientTs||l.lastInteraction)));bindXRows($('slaXB'));}
 
-// 11 cajitas de estado (Nivel 2), idénticas en Nuevos / Gestión / Embudo General.
-// "En Espera" agrupa los leads que aún están en la sala de espera (Chileautos / General),
-// para que la suma de las cajitas siempre cuadre con el total de "Leads Nuevos".
-const DASH_BUCKETS=[
-  {key:'espera',label:'En Espera',icon:'⏳',color:'#7c3aed',sts:['esperando_respuesta_chileautos','esperando_respuesta_general']},
-  {key:'Nuevo',label:'Nuevo',icon:'🆕',color:'#3b82f6',sts:['Nuevo']},
-  {key:'En Proceso',label:'En Proceso',icon:'🔄',color:'#f59e0b',sts:['En Proceso']},
-  {key:'Contactado',label:'Contactado',icon:'💬',color:'#6366f1',sts:['Contactado']},
-  {key:'Calificado',label:'Calificado',icon:'⭐',color:'#ec4899',sts:['Calificado']},
-  {key:'Negociación',label:'Negociación',icon:'🤝',color:'#8b5cf6',sts:['Negociación']},
-  {key:'Agendado',label:'Agendado',icon:'📅',color:'#8b5cf6',sts:['Agendado']},
-  {key:'Reservado',label:'Reservado',icon:'🔒',color:'#f97316',sts:['Reservado']},
-  {key:'Seguimiento',label:'Seguimiento',icon:'🔁',color:'#0891b2',sts:['Seguimiento']},
-  {key:'Cerrado',label:'Cerrado',icon:'✅',color:'#10b981',sts:['Cerrado']},
-  {key:'Abandonado',label:'Abandonado',icon:'❌',color:'#6b7280',sts:['Abandonado','Perdido']}
-];
-function renderFunnel(){
-  var leads=funLeads(),acciones=S.funMode==='acciones';
-  var vals={},tot=0;
-  DASH_BUCKETS.forEach(function(b){
-    var arr=leads.filter(function(l){return b.sts.indexOf(l.status)!==-1;});
-    var n=acciones?arr.reduce(function(s,l){return s+_accionesEnRango(l);},0):arr.length;
-    vals[b.key]=n;tot+=n;
-  });
-  var ftb=$('funTotalBox');
-  if(ftb)ftb.innerHTML='<div style="font-size:28px;font-weight:900;color:var(--tx);letter-spacing:-.02em;line-height:1">'+tot+'</div><div style="font-size:11px;color:var(--tm);font-weight:600">'+(acciones?'TOTAL ACCIONES EN BITÁCORA (Acciones)':'TOTAL LEADS ÚNICOS EN GESTIÓN')+'</div>';
-  $('fG').innerHTML=dashBucketCards(leads,'general',acciones);
-}
-function toggleFunPanel(key){
-  if(S.slaOpen){S.slaOpen=null;$('slaX').classList.remove('open');document.querySelectorAll('.sb2').forEach(function(c){c.classList.remove('as');});}
-  if(S.funOpen===key){S.funOpen=null;$('funX').classList.remove('open');renderFunnel();return;}
-  S.funOpen=key;$('funX').classList.add('open');renderFunnel();renderFunPanel(key);
-  setTimeout(function(){$('funX').scrollIntoView({behavior:'smooth',block:'nearest'});},100);
-}
-function renderFunPanel(key){
-  var bucket=_dashBucketFind(key);if(!bucket)return;
-  var arr=window._dashCardData['general_'+key]||[];
-  var tabla=dashDetalleTabla(arr);
-  $('funXT').textContent=bucket.icon+' '+bucket.label+' ('+tabla.count+' lead'+(tabla.count!==1?'s':'')+' · '+tabla.totalAcciones+' acci'+(tabla.totalAcciones!==1?'ones':'ón')+' en bitácora)';
-  $('funXB').innerHTML=tabla.html;
-}
+const FM={espera_ca:{sts:['esperando_respuesta_chileautos'],label:'🏷 Espera CA',color:'#92400e'},espera_gral:{sts:['esperando_respuesta_general'],label:'⏳ Espera Gral',color:'#6d28d9'},nuevos:{sts:['Nuevo'],label:'🆕 Nuevos',color:'var(--tx)'},contactados:{sts:['Contactado'],label:'💬 Contactados',color:'var(--ac)'},proceso:{sts:['En Proceso'],label:'🔄 En Proceso',color:'#f59e0b'},reservado:{sts:['Reservado'],label:'🔒 Reservados',color:'#ea580c'},cerrado:{sts:['Cerrado'],label:'✅ Cerrados',color:'var(--ok)'},perdido:{sts:['Abandonado','Perdido'],label:'❌ Perdidos',color:'var(--bd2)'}};
+function renderFunnel(){const leads=normLeads(),tot=leads.length||1;const cnts={};for(const[k,c]of Object.entries(FM))cnts[k]=leads.filter(l=>c.sts.includes(l.status));const ic={espera_ca:'🏷',espera_gral:'⏳',nuevos:'🆕',contactados:'💬',proceso:'🔄',reservado:'🔒',cerrado:'✅',perdido:'❌'};const lb={espera_ca:'Espera CA',espera_gral:'Espera Gral',nuevos:'Nuevos',contactados:'Contactados',proceso:'En Proceso',reservado:'Reservados',cerrado:'Cerrados',perdido:'Perdidos'};const pv={espera_ca:tot,espera_gral:tot,nuevos:tot,contactados:cnts.nuevos.length,proceso:cnts.contactados.length,reservado:cnts.proceso.length,cerrado:cnts.reservado.length,perdido:tot};const pct=(n,d)=>d?((n/d)*100).toFixed(0)+'%':'—';const ac=S.funOpen;$('fG').innerHTML=Object.keys(FM).map(k=>{const arr=cnts[k],n=arr.length,col=FM[k].color;const fr=arr.filter(l=>l.alertLevel==='fresh').length,ri=arr.filter(l=>l.alertLevel==='risk').length,cr=arr.filter(l=>l.alertLevel==='critical').length;const ms=(fr>0||ri>0||cr>0)?`<div class="fs"><span style="color:var(--ok)">🟢 ${fr}</span><span style="color:var(--wn)">🟡 ${ri}</span><span style="color:var(--bd2)">🔴 ${cr}</span></div>`:'<div style="height:22px;margin-top:8px"></div>';return`<div class="fc ${ac===k?'af':''}" onclick="toggleFunPanel('${k}')" style="border-color:${ac===k?'var(--ac)':col+'22'}"><div class="fi">${ic[k]}</div><div class="fv" style="color:${col}">${n}</div><div class="fl">${lb[k]}</div><div class="fp">${pct(n,pv[k])} de anterior</div>${ms}<div class="fh">👆 Ver detalle</div></div>`;}).join('');}
+function toggleFunPanel(type){if(S.slaOpen){S.slaOpen=null;$('slaX').classList.remove('open');document.querySelectorAll('.sb2').forEach(c=>c.classList.remove('as'));}if(S.funOpen===type){S.funOpen=null;$('funX').classList.remove('open');renderFunnel();return;}S.funOpen=type;$('funX').classList.add('open');renderFunnel();renderFunPanel(type);setTimeout(()=>$('funX').scrollIntoView({behavior:'smooth',block:'nearest'}),100);}
+function renderFunPanel(type){const cfg=FM[type];if(!cfg)return;const all=normLeads().filter(l=>cfg.sts.includes(l.status));const items=[...all.filter(l=>l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0)),...all.filter(l=>!l.unread).sort((a,b)=>new Date(b.lastClientTs||0)-new Date(a.lastClientTs||0))];$('funXT').textContent=cfg.label+' ('+items.length+') — sin responder primero';$('funXB').innerHTML=renderXRows(items,l=>fDT(l.lastClientTs||l.lastInteraction));bindXRows($('funXB'));}
 function renderPerfTable(){}
-// Helper generico: pinta una cajita de "total + chips por origen, con % del total" y la deja
-// clickeable para abrir el detalle. Usado por el dashboard (Leads Nuevos), Compras RMG y RMG Parts.
-function renderLeadsResumenBox(boxId, storageKey, leads, totalLabel){
-  const box=$(boxId);
-  if(!box)return;
-  S[storageKey]=leads;
-  const total=leads.length;
-  const bySrc={};
-  leads.forEach(l=>{const s=l.source||'Sin origen';bySrc[s]=(bySrc[s]||0)+1;});
-  const pct=n=>total?((n/total)*100).toFixed(0)+'%':'—';
-  const chips=Object.keys(bySrc).sort((a,b)=>bySrc[b]-bySrc[a]).map(s=>{
-    return '<div onclick="showLeadsDetalleModal(S.'+storageKey+',\''+esc(s).replace(/'/g,"\\'")+'\')" style="cursor:pointer;background:var(--p2);border:1px solid var(--bd);border-radius:8px;padding:8px 14px;text-align:center;min-width:96px" title="Ver los '+bySrc[s]+' leads de '+esc(s)+'">'
-      +'<div style="font-size:20px;font-weight:800;color:var(--ac)">'+bySrc[s]+'</div>'
-      +'<div style="font-size:10.5px;color:var(--tm);margin-top:2px;font-weight:600">'+esc(s)+'</div>'
-      +'<div style="font-size:9.5px;color:var(--tm);margin-top:1px">'+pct(bySrc[s])+' del total</div>'
-      +'</div>';
-  }).join('');
-  box.innerHTML=
-    '<div onclick="showLeadsDetalleModal(S.'+storageKey+')" style="cursor:pointer;text-align:center;padding-right:24px;border-right:1px solid var(--bd)" title="Ver el detalle de los '+total+' leads">'
-    +'<div style="font-size:44px;font-weight:900;color:var(--tx);letter-spacing:-.03em;line-height:1">'+total+'</div>'
-    +'<div style="font-size:11px;color:var(--tm);margin-top:4px;font-weight:600">'+totalLabel+'</div>'
-    +'<div style="font-size:9.5px;color:var(--ac);margin-top:3px;font-weight:600">👆 Ver detalle</div>'
-    +'</div>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:10px;flex:1">'+(chips||'<div style="font-size:12px;color:var(--tm)">Sin leads en este rango.</div>')+'</div>';
-}
-function showLeadsDetalleModal(allLeads,filtroSource){
-  const all=allLeads||[];
-  const leads=filtroSource?all.filter(l=>(l.source||'Sin origen')===filtroSource):all;
-  const sorted=[...leads].sort((a,b)=>new Date(b.createdAt||b.id||0)-new Date(a.createdAt||a.id||0));
-  const ex=document.getElementById('modalLeadsDetalle');if(ex)ex.remove();
-  const rows=sorted.map(l=>{
-    return '<tr onclick="document.getElementById(\'modalLeadsDetalle\').remove();openModal(\''+l.id+'\')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
-      +'<td style="padding:7px 10px;font-size:12.5px;color:var(--tx)">'+esc(l.name||'Sin nombre')+'</td>'
-      +'<td style="padding:7px 10px;font-size:12.5px;color:var(--tm)">'+esc(l.source||'—')+'</td>'
-      +'<td style="padding:7px 10px;font-size:12.5px;color:var(--tm)">'+esc(l.assignedTo||'—')+'</td>'
-      +'<td style="padding:7px 10px;font-size:12.5px;color:var(--tm)">'+fDT(l.createdAt||l.id)+'</td>'
-      +'<td style="padding:7px 10px;font-size:12.5px;color:var(--tm)">'+esc(l.status||'—')+'</td>'
-      +'</tr>';
-  }).join('');
-  const m=document.createElement('div');
-  m.id='modalLeadsDetalle';
-  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
-  m.innerHTML='<div style="background:var(--p2);border:1px solid var(--bd);border-radius:12px;padding:20px;width:min(720px,92vw);max-height:80vh;display:flex;flex-direction:column;gap:12px">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center">'
-    +'<div style="font-weight:700;font-size:15px;color:var(--tx)">'+sorted.length+' leads'+(filtroSource?' · '+esc(filtroSource):'')+'</div>'
-    +'<button id="btnCerrarLeadsDetalle" class="bs" style="padding:5px 12px">Cerrar</button>'
-    +'</div>'
-    +'<div style="overflow-y:auto;flex:1">'
-    +'<table style="width:100%;border-collapse:collapse">'
-    +'<thead><tr style="border-bottom:2px solid var(--bd)"><th style="text-align:left;padding:7px 10px;font-size:11px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:7px 10px;font-size:11px;color:var(--tm)">Origen</th><th style="text-align:left;padding:7px 10px;font-size:11px;color:var(--tm)">Vendedor</th><th style="text-align:left;padding:7px 10px;font-size:11px;color:var(--tm)">Creación</th><th style="text-align:left;padding:7px 10px;font-size:11px;color:var(--tm)">Estado</th></tr></thead>'
-    +'<tbody>'+(rows||'<tr><td colspan="5" style="padding:14px;text-align:center;color:var(--tm);font-size:12px">Sin leads.</td></tr>')+'</tbody>'
-    +'</table>'
-    +'</div>'
-    +'</div>';
-  document.body.appendChild(m);
-  document.getElementById('btnCerrarLeadsDetalle').onclick=()=>m.remove();
-  m.addEventListener('click',e=>{if(e.target===m)m.remove();});
-}
-// ── Dashboard: "Leads Nuevos" con embudo de estados por origen (nuevos + gestión) ──
-window._dashCardData=window._dashCardData||{};
-function dashEsc(s){return (s+'').replace(/'/g,"\\'");}
-function _dashBucketFind(key){return DASH_BUCKETS.find(function(b){return b.key===key;});}
-function _dashBucketOf(l){for(var i=0;i<DASH_BUCKETS.length;i++){if(DASH_BUCKETS[i].sts.indexOf(l.status)!==-1)return DASH_BUCKETS[i].key;}return null;}
-// Grid de 11 cajitas (Nivel 2), compacto, reutilizado por Nuevos / Gestión / Embudo General.
-// leads: ya filtrados por origen/rango. kind: 'nuevo'|'gestion'|'general'. acciones: cuantifica acciones en bitácora en vez de leads (solo General).
-function dashBucketCards(leads,kind,acciones){
-  leads=leads||[];
-  var byKey={};DASH_BUCKETS.forEach(function(b){byKey[b.key]=[];});
-  leads.forEach(function(l){var k=_dashBucketOf(l);if(k)byKey[k].push(l);});
-  var vals={},tot=0;
-  DASH_BUCKETS.forEach(function(b){
-    window._dashCardData[kind+'_'+b.key]=byKey[b.key];
-    var n=acciones?byKey[b.key].reduce(function(s,l){return s+_accionesEnRango(l);},0):byKey[b.key].length;
-    vals[b.key]=n;tot+=n;
-  });
-  var pct=function(n){return tot?((n/tot)*100).toFixed(0)+'%':'—';};
-  var openKey=kind==='nuevo'?S.dashNuevosStatusOpen:(kind==='gestion'?S.dashGestionStatusOpen:S.funOpen);
-  return DASH_BUCKETS.map(function(b){
-    var n=vals[b.key];
-    var isOpen=openKey===b.key;
-    var clickFn="dashToggleDetalle('"+kind+"','"+dashEsc(b.key)+"')";
-    return '<div class="fc'+(isOpen?' af':'')+'" data-bucket="'+esc(b.key)+'" onclick="'+clickFn+'" style="padding:8px 6px;border-color:'+(isOpen?'var(--ac)':b.color+'22')+'">'
-      +'<div class="fi" style="font-size:15px;margin-bottom:3px">'+b.icon+'</div>'
-      +'<div class="fv" style="color:'+b.color+';font-size:17px">'+n+'</div>'
-      +'<div class="fl" style="font-size:9.5px;margin-top:2px">'+esc(b.label)+'</div>'
-      +'<div class="fp" style="font-size:8.5px;margin-top:2px">'+pct(n)+' del total</div>'
-      +'</div>';
-  }).join('');
-}
-// Tabla de detalle (Nivel 3) unificada: misma estructura de columnas en Nuevos, Gestión y Embudo General.
-// Agrupada/ordenada por Vendedor y luego Fecha de creación; fila de totales al final.
-function dashDetalleTabla(leads){
-  var sMs=S.range.start?new Date(S.range.start+'T00:00:00').getTime():null;
-  var eMs=S.range.end?new Date(S.range.end+'T23:59:59').getTime():null;
-  var rows=(leads||[]).map(function(l){
-    var notas=(l.notes||[]).filter(function(n){if(!_esNotaDelVendedorAsignado(n,l))return false;var t=n.ts||0;if(sMs!==null&&t<sMs)return false;if(eMs!==null&&t>eMs)return false;return true;});
-    var last=notas.length?notas[notas.length-1]:null;
-    return {lead:l,count:notas.length,last:last};
-  });
-  rows.sort(function(a,b){
-    var va=a.lead.assignedTo||'zzz',vb=b.lead.assignedTo||'zzz';
-    if(va!==vb)return va<vb?-1:1;
-    return new Date(b.lead.createdAt||b.lead.id||0)-new Date(a.lead.createdAt||a.lead.id||0);
-  });
-  var totalAcciones=rows.reduce(function(s,r){return s+r.count;},0);
-  var body=rows.length?rows.map(function(r){
-    var l=r.lead;
-    return '<tr onclick="openModal('+l.id+')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
-      +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx)">'+esc(l.name||'Sin nombre')+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(l.phone||'—')+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(l.source||'—')+'</td>'
-      +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tm)">'+esc(l.assignedTo||'—')+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+fDT(l.createdAt||l.id)+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(l.interest||'—')+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+(r.last?fDT(r.last.ts):'—')+'</td>'
-      +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx);text-align:center;font-weight:700">'+r.count+'</td>'
-      +'</tr>';
-  }).join(''):'<tr><td colspan="8" style="padding:12px;text-align:center;color:var(--tm);font-size:12px">Sin leads en este estado.</td></tr>';
-  var totalsRow=rows.length?('<tr style="border-top:2px solid var(--bd);font-weight:800"><td colspan="7" style="padding:7px 8px;font-size:11.5px;color:var(--tx);text-align:right">Total: '+rows.length+' lead'+(rows.length!==1?'s':'')+'</td><td style="padding:7px 8px;font-size:11.5px;color:var(--tx);text-align:center">'+totalAcciones+'</td></tr>'):'';
-  var head='<thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Teléfono</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Origen</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Vendedor</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Creación</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Interés/Resumen</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Última acción</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)"># Acciones</th></tr></thead>';
-  return {html:'<table style="width:100%;border-collapse:collapse">'+head+'<tbody>'+body+totalsRow+'</tbody></table>',count:rows.length,totalAcciones:totalAcciones};
-}
-const DASH_CTX={
-  nuevo:{gridId:'origenNuevosGrid',detalleId:'origenNuevosDetalle',prop:'dashNuevosStatusOpen',title:'📋 Nuevos'},
-  gestion:{gridId:'origenGestionGrid',detalleId:'origenGestionDetalle',prop:'dashGestionStatusOpen',title:'🛠 Gestión'}
-};
-// Abre/cierra el detalle (Nivel 3) para cualquiera de los 3 contextos, reusando la misma tabla.
-function dashToggleDetalle(kind,key){
-  if(kind==='general'){toggleFunPanel(key);return;}
-  var ctx=DASH_CTX[kind];if(!ctx)return;
-  var grid=$(ctx.gridId);
-  if(S[ctx.prop]===key){
-    S[ctx.prop]=null;
-    var det0=$(ctx.detalleId);if(det0){det0.style.display='none';det0.innerHTML='';}
-    if(grid)grid.querySelectorAll('.fc').forEach(function(c){c.classList.remove('af');});
-    return;
-  }
-  S[ctx.prop]=key;
-  if(grid)grid.querySelectorAll('.fc').forEach(function(c){c.classList.toggle('af',c.dataset.bucket===key);});
-  var arr=window._dashCardData[kind+'_'+key]||[];
-  var bucket=_dashBucketFind(key);
-  var tabla=dashDetalleTabla(arr);
-  var det=$(ctx.detalleId);if(!det)return;
-  det.style.display='block';
-  det.innerHTML='<div style="background:var(--p2);border:1px solid var(--bd);border-radius:10px;padding:12px 14px">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'
-    +'<div style="font-size:12px;font-weight:700;color:var(--ts)">'+ctx.title+' — '+esc(bucket?bucket.label:key)+' ('+tabla.count+' lead'+(tabla.count!==1?'s':'')+' · '+tabla.totalAcciones+' acci'+(tabla.totalAcciones!==1?'ones':'ón')+' en bitácora)</div>'
-    +'<button onclick="document.getElementById(\''+ctx.detalleId+'\').style.display=\'none\'" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:7px;padding:3px 9px;font-size:10.5px;cursor:pointer;font-family:inherit">✕</button>'
-    +'</div>'
-    +'<div style="max-height:340px;overflow-y:auto">'+tabla.html+'</div>'
-    +'</div>';
-  det.scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-const DASH_ALL='__todos__'; // sentinel de origen para "Todos los orígenes" (no puede ser '' porque eso es falsy)
-function _dashLeadsPorOrigen(leads,origen){
-  if(origen===DASH_ALL)return leads||[];
-  return (leads||[]).filter(function(l){return (l.source||'Sin origen')===origen;});
-}
-// Total + % de abandono + % de efectividad de un conjunto de leads.
-// Efectividad = leads que llegaron a Reservado o Cerrado (venta concretada o asegurada) sobre el total.
-function _dashResumenStats(leads){
-  leads=leads||[];
-  var total=leads.length;
-  var abandonados=leads.filter(function(l){return l.status==='Abandonado'||l.status==='Perdido';}).length;
-  var efectivos=leads.filter(function(l){return l.status==='Reservado'||l.status==='Cerrado';}).length;
-  return{
-    total:total,
-    pctAband:total?((abandonados/total)*100).toFixed(0)+'%':'—',
-    pctEfect:total?((efectivos/total)*100).toFixed(0)+'%':'—'
-  };
-}
-function _dashResumenHTML(leads){
-  var st=_dashResumenStats(leads);
-  return '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--bd);font-size:11.5px">'
-    +'<div style="color:var(--tx);font-weight:800">Total: '+st.total+'</div>'
-    +'<div style="color:var(--bd2);font-weight:700">❌ % Abandono: '+st.pctAband+'</div>'
-    +'<div style="color:var(--ok);font-weight:700">🎯 % Efectividad: '+st.pctEfect+'</div>'
-    +'</div>';
-}
-function loadOrigenGestion(origen){
-  S._dashGestionQ=qstr()+'|'+(S.seller||'');
-  var q=qstr();var gq=q?(q+'&mode=gestion'):'?mode=gestion';
-  api('GET','/api/leads'+gq).then(function(all){
-    if(S.dashOrigenSel!==origen)return;
-    var gestLeads=_dashLeadsPorOrigen(_excluirComprasYParts(all||[]),origen);
-    S._dashGestionLeads=gestLeads;
-    var grid=$('origenGestionGrid');if(!grid)return;
-    grid.innerHTML=dashBucketCards(gestLeads,'gestion',false);
-    var res=$('origenGestionResumen');if(res)res.innerHTML=_dashResumenHTML(gestLeads);
-  }).catch(function(e){
-    var grid=$('origenGestionGrid');if(grid)grid.innerHTML='<div style="grid-column:1/-1;font-size:12px;color:#dc2626;text-align:center;padding:10px">Error cargando gestión: '+esc(e.message)+'</div>';
-  });
-}
-function renderOrigenFunnelBox(origen){
-  var box=$('origenFunnelBox');if(!box)return;
-  if(!origen){box.style.display='none';box.innerHTML='';return;}
-  box.style.display='block';
-  S.dashGestionStatusOpen=null;S.dashNuevosStatusOpen=null;
-  var nuevos=_dashLeadsPorOrigen(S._nuevosResumenLeads,origen);
-  var etiqueta=origen===DASH_ALL?'Todos los orígenes':origen;
-  var gridStyle='grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:6px';
-  box.innerHTML='<div style="background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:16px;margin-bottom:16px">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
-    +'<div style="font-size:12.5px;font-weight:700;color:var(--ts)">📥 Nuevos por Estado — '+esc(etiqueta)+'</div>'
-    +'<button onclick="toggleOrigenFunnel(\''+dashEsc(origen)+'\')" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:7px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:inherit">✕ Cerrar</button>'
-    +'</div>'
-    +'<div id="origenNuevosResumen">'+_dashResumenHTML(nuevos)+'</div>'
-    +'<div class="fg" id="origenNuevosGrid" style="'+gridStyle+'">'+dashBucketCards(nuevos,'nuevo',false)+'</div>'
-    +'<div id="origenNuevosDetalle" style="display:none;margin-top:12px"></div>'
-    +'<div style="font-size:12.5px;font-weight:700;color:var(--ts);margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--bd);display:flex;align-items:center;gap:8px">🛠 Gestión en el Período por Estado — '+esc(etiqueta)+'<button onclick="loadOrigenGestion(\''+dashEsc(origen)+'\')" title="Actualizar gestión" style="background:transparent;border:1px solid var(--bd);color:var(--tm);border-radius:6px;padding:2px 7px;font-size:10.5px;cursor:pointer;font-family:inherit">🔄</button></div>'
-    +'<div id="origenGestionResumen"></div>'
-    +'<div id="origenGestionGrid" class="fg" style="'+gridStyle+'"><div style="grid-column:1/-1;font-size:12px;color:var(--tm);text-align:center;padding:10px">⏳ Cargando gestión…</div></div>'
-    +'<div id="origenGestionDetalle" style="display:none;margin-top:12px"></div>'
-    +'</div>';
-  loadOrigenGestion(origen);
-}
-function refreshOrigenFunnelNuevos(){
-  var origen=S.dashOrigenSel;if(!origen)return;
-  var grid=$('origenNuevosGrid');if(!grid)return;
-  var nuevos=_dashLeadsPorOrigen(S._nuevosResumenLeads,origen);
-  grid.innerHTML=dashBucketCards(nuevos,'nuevo',false);
-  var res=$('origenNuevosResumen');if(res)res.innerHTML=_dashResumenHTML(nuevos);
-}
-function toggleOrigenFunnel(origen){
-  if(S.dashOrigenSel===origen){
-    S.dashOrigenSel=null;S._dashGestionQ=null;S.dashGestionStatusOpen=null;
-    var box=$('origenFunnelBox');if(box){box.style.display='none';box.innerHTML='';}
-    renderDashLeadsNuevos();
-    return;
-  }
-  S.dashOrigenSel=origen;S._dashGestionQ=null;
-  renderDashLeadsNuevos();
-  renderOrigenFunnelBox(origen);
-}
-function renderDashLeadsNuevos(){
-  var box=$('nuevosResumenBox');if(!box)return;
-  var leads=normLeads();
-  S._nuevosResumenLeads=leads;
-  var total=leads.length;
-  var bySrc={};
-  leads.forEach(function(l){var s=l.source||'Sin origen';bySrc[s]=(bySrc[s]||0)+1;});
-  var pct=function(n){return total?((n/total)*100).toFixed(0)+'%':'—';};
-  var selOrigen=S.dashOrigenSel;
-  var activeTodos=selOrigen===DASH_ALL;
-  var chipTodos='<div onclick="toggleOrigenFunnel(\''+DASH_ALL+'\')" style="cursor:pointer;background:'+(activeTodos?'var(--ac)':'var(--p2)')+';border:1px solid '+(activeTodos?'var(--ac)':'var(--bd)')+';border-radius:8px;padding:8px 14px;text-align:center;min-width:96px" title="Ver el embudo de estados de los '+total+' leads (todos los orígenes)">'
-    +'<div style="font-size:20px;font-weight:800;color:'+(activeTodos?'#fff':'var(--ac)')+'">'+total+'</div>'
-    +'<div style="font-size:10.5px;color:'+(activeTodos?'#fff':'var(--tm)')+';margin-top:2px;font-weight:700">🌐 TODOS</div>'
-    +'<div style="font-size:9.5px;color:'+(activeTodos?'rgba(255,255,255,.85)':'var(--tm)')+';margin-top:1px">100% del total</div>'
-    +'</div>';
-  var chips=Object.keys(bySrc).sort(function(a,b){return bySrc[b]-bySrc[a];}).map(function(s){
-    var active=selOrigen===s;
-    return '<div onclick="toggleOrigenFunnel(\''+dashEsc(s)+'\')" style="cursor:pointer;background:'+(active?'var(--ac)':'var(--p2)')+';border:1px solid '+(active?'var(--ac)':'var(--bd)')+';border-radius:8px;padding:8px 14px;text-align:center;min-width:96px" title="Ver el embudo de estados de '+bySrc[s]+' leads de '+esc(s)+'">'
-      +'<div style="font-size:20px;font-weight:800;color:'+(active?'#fff':'var(--ac)')+'">'+bySrc[s]+'</div>'
-      +'<div style="font-size:10.5px;color:'+(active?'#fff':'var(--tm)')+';margin-top:2px;font-weight:600">'+esc(s)+'</div>'
-      +'<div style="font-size:9.5px;color:'+(active?'rgba(255,255,255,.85)':'var(--tm)')+';margin-top:1px">'+pct(bySrc[s])+' del total</div>'
-      +'</div>';
-  }).join('');
-  box.innerHTML='<div onclick="toggleOrigenFunnel(\''+DASH_ALL+'\')" style="cursor:pointer;text-align:center;padding-right:24px;border-right:1px solid var(--bd)" title="Ver el embudo de estados de los '+total+' leads">'
-    +'<div style="font-size:44px;font-weight:900;color:var(--tx);letter-spacing:-.03em;line-height:1">'+total+'</div>'
-    +'<div style="font-size:11px;color:var(--tm);margin-top:4px;font-weight:600">LEADS NUEVOS EN EL PERÍODO</div>'
-    +'<div style="font-size:9.5px;color:var(--ac);margin-top:3px;font-weight:600">👆 Ver detalle por estado</div>'
-    +'</div>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:10px;flex:1">'+(total?chipTodos+chips:'<div style="font-size:12px;color:var(--tm)">Sin leads en este rango.</div>')+'</div>';
-}
-function _dashOrigenTick(){
-  if(!S.dashOrigenSel)return;
-  var curQ=qstr()+'|'+(S.seller||'');
-  if(S._dashGestionQ!==curQ){renderOrigenFunnelBox(S.dashOrigenSel);}
-  else{refreshOrigenFunnelNuevos();}
-}
-function renderNuevosResumen(){renderDashLeadsNuevos();_dashOrigenTick();}
-// ── Análisis de Calidad de Leads: organizado por Nivel de Interés (funnel real), con Gestión como diagnóstico dentro de cada nivel ──
-const NIVEL_INTERES_META={
-  Alto:{label:'Interés Alto',icon:'🔥',color:'#dc2626'},
-  Medio:{label:'Interés Medio',icon:'🌤️',color:'#f59e0b'},
-  Bajo:{label:'Interés Bajo',icon:'❄️',color:'#6b7280'},
-  SinAnalizar:{label:'Sin analizar',icon:'❔',color:'#94a3b8'}
-};
-const DIAG_META={
-  oportunidad_perdida:{label:'⚠️ Oportunidad perdida',color:'#dc2626'},
-  bien_gestionado:{label:'✅ Bien gestionado',color:'#10b981'},
-  a_validar:{label:'🔎 A validar / seguimiento',color:'#f59e0b'},
-  baja_calidad:{label:'🧊 Baja calidad',color:'#6b7280'}
-};
-// El cliente siguió respondiendo hasta cerca del cierre del caso (no se "enfrió" solo mucho antes).
-function _clienteActivoHastaElFinal(l){
-  const msgs=(l.chatHistory||[]).filter(m=>m.role==='user');
-  if(!msgs.length)return false;
-  const lastClientTs=new Date(l.lastClientTs||msgs[msgs.length-1].ts||0).getTime();
-  const refTs=new Date(l.lastInteraction||Date.now()).getTime();
-  if(!lastClientTs||!refTs)return false;
-  return (refTs-lastClientTs)/3600000<=72;
-}
-// El lead quedó "colgado": el cliente escribió y no hay evidencia de que se le haya respondido después.
-function _leadQuedoColgado(l){
-  if(!l.unread)return false;
-  const lastClientTs=new Date(l.lastClientTs||0).getTime();
-  if(!lastClientTs)return false;
-  return (Date.now()-lastClientTs)/3600000>48;
-}
-function _nivelDe(score){return score>=70?'Alto':score>=40?'Medio':'Bajo';}
-// 6.1 — Score de interés del lead (cliente), templado por el estado final del lead.
-function _leadInteresScore(l){
-  let score=0;
-  if(l.intentSignal==='BLUE')score+=40;
-  const clientMsgs=(l.chatHistory||[]).filter(m=>m.role==='user').length;
-  score+=clientMsgs>=6?30:clientMsgs>=3?20:clientMsgs>=1?10:0;
-  if(l.nextAction&&l.nextAction.date)score+=15;
-  if(l.abandonReason==='sin_stock')score+=15;
-  score=Math.min(score,100);
-  const esGanado=l.status==='Cerrado'||l.status==='Reservado';
-  const esAbandonado=l.status==='Abandonado'||l.status==='Perdido';
-  if(esGanado){
-    score=Math.max(score,90);
-  }else if(esAbandonado){
-    if(!_clienteActivoHastaElFinal(l)&&l.abandonReason!=='sin_stock')score=Math.max(0,score-25);
-  }
-  return Math.max(0,Math.min(100,score));
-}
-// 6.2 — Score de gestión del vendedor asignado.
-function _leadGestionScore(l){
-  let score=0;
-  const slaMap={fresh:35,risk:15,critical:0};
-  score+=(l.alertLevel in slaMap)?slaMap[l.alertLevel]:20;
-  const notas=(l.notes||[]).filter(n=>_esNotaDelVendedorAsignado(n,l));
-  score+=notas.length>=6?35:notas.length>=3?25:notas.length>=1?15:0;
-  if(!_leadQuedoColgado(l))score+=15;
-  if(l.abandonReason==='sin_stock'){
-    const ofrecioAlternativa=notas.some(n=>/alternativ|otro modelo|otra opci[oó]n|le ofrec/i.test(n.content||''));
-    if(ofrecioAlternativa)score+=15;
-  }else{
-    score+=15;
-  }
-  return Math.max(0,Math.min(100,score));
-}
-function _leadVeredicto(l){
-  const si=_leadInteresScore(l),sg=_leadGestionScore(l);
-  const interes=_nivelDe(si),gestion=_nivelDe(sg);
-  return{interesScore:si,gestionScore:sg,interes:interes,gestion:gestion};
-}
-// Diagnóstico (Gestión) DENTRO de cada nivel de interés: el interés manda la clasificación primaria (las cajas),
-// la gestión explica el "por qué" dentro de cada caja. Interés Bajo = probable lead de baja calidad,
-// sin importar la gestión (no es responsabilidad del vendedor si la intención nunca existió).
-function _leadDiagnostico(l){
-  const ev=_leadVeredicto(l);
-  let diag;
-  if(ev.interes==='Bajo')diag='baja_calidad';
-  else if(ev.interes==='Medio')diag='a_validar';
-  else if(ev.gestion==='Bajo')diag='oportunidad_perdida';
-  else diag='bien_gestionado';
-  return Object.assign({},ev,{diag:diag});
-}
-function _calidadLeads(){return S.calidadMode==='creados'?normLeads():funLeads();}
-function setCalidadMode(mode){
-  if(S.calidadMode===mode)return;
-  S.calidadMode=mode;
-  const pBtn=$('calidadModePeriodo'),cBtn=$('calidadModeCreados'),hint=$('calidadModeHint');
-  if(pBtn&&cBtn){
-    pBtn.style.background=mode==='periodo'?'var(--ac)':'var(--bg)';pBtn.style.color=mode==='periodo'?'#fff':'var(--ts)';
-    cBtn.style.background=mode==='creados'?'var(--ac)':'var(--bg)';cBtn.style.color=mode==='creados'?'#fff':'var(--ts)';
-  }
-  if(hint)hint.textContent=mode==='periodo'?'Leads en el Período: actividad dentro del rango, sin importar cuándo se crearon. Independiente del estado actual del lead.':'Leads Creados: nacieron dentro del rango seleccionado. Independiente del estado actual del lead.';
-  S.calidadOpen=null;
-  const x=$('calidadX');if(x)x.classList.remove('open');
-  renderCalidad();
-}
-// Orden de prioridad para ordenar el detalle: lo más accionable primero (oportunidades perdidas arriba).
-const DIAG_ORDER={oportunidad_perdida:0,a_validar:1,baja_calidad:2,bien_gestionado:3};
-function calidadDetalleTabla(leads){
-  const rows=(leads||[]).map(l=>({lead:l,ia:l.calidadIA||null}));
-  rows.sort((a,b)=>{
-    const oa=a.ia?(DIAG_ORDER[a.ia.diagnostico]??9):9,ob=b.ia?(DIAG_ORDER[b.ia.diagnostico]??9):9;
-    if(oa!==ob)return oa-ob;
-    const va=a.lead.assignedTo||'zzz',vb=b.lead.assignedTo||'zzz';
-    if(va!==vb)return va<vb?-1:1;
-    return new Date(b.lead.createdAt||b.lead.id||0)-new Date(a.lead.createdAt||a.lead.id||0);
-  });
-  const body=rows.length?rows.map(r=>{
-    const l=r.lead,ia=r.ia,dm=ia?DIAG_META[ia.diagnostico]:null;
-    const diagCell=dm?('<span style="font-weight:700;color:'+dm.color+'">'+dm.label+'</span>'):'<span style="color:var(--tm)">— sin analizar</span>';
-    const razon=ia?esc(ia.razon||''):'Pendiente de análisis IA.';
-    return '<tr onclick="openModal('+l.id+')" style="cursor:pointer;border-bottom:1px solid var(--bd)">'
-      +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tx)">'+esc(l.name||'Sin nombre')+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(l.source||'—')+'</td>'
-      +'<td style="padding:6px 8px;font-size:11.5px;color:var(--tm)">'+esc(l.assignedTo||'—')+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(l.status||'—')+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm)">'+esc(_abandonReasonLabel(l.abandonReason))+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;text-align:center">'+diagCell+'</td>'
-      +'<td style="padding:6px 8px;font-size:11px;color:var(--tm);max-width:260px">'+razon+'</td>'
-      +'</tr>';
-  }).join(''):'<tr><td colspan="7" style="padding:12px;text-align:center;color:var(--tm);font-size:12px">Sin leads en esta categoría.</td></tr>';
-  const head='<thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Nombre</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Origen</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Vendedor</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Estado</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Motivo Abandono</th><th style="text-align:center;padding:6px 8px;font-size:10px;color:var(--tm)">Diagnóstico</th><th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--tm)">Razón (IA)</th></tr></thead>';
-  return{html:'<table style="width:100%;border-collapse:collapse">'+head+'<tbody>'+body+'</tbody></table>',count:rows.length};
-}
-function calidadToggleDetalle(nivel){
-  if(S.calidadOpen===nivel){
-    S.calidadOpen=null;
-    const x=$('calidadX');if(x)x.classList.remove('open');
-    renderCalidad();
-    return;
-  }
-  S.calidadOpen=nivel;
-  const x=$('calidadX');if(x)x.classList.add('open');
-  renderCalidad();
-  const arr=window._dashCardData['calidad_'+nivel]||[];
-  const meta=NIVEL_INTERES_META[nivel];
-  const tabla=calidadDetalleTabla(arr);
-  $('calidadXT').textContent=meta.icon+' '+meta.label+' ('+tabla.count+' lead'+(tabla.count!==1?'s':'')+')'+(nivel==='SinAnalizar'?'':' — oportunidades perdidas primero');
-  $('calidadXB').innerHTML=tabla.html;
-  setTimeout(()=>x&&x.scrollIntoView({behavior:'smooth',block:'nearest'}),100);
-}
-// Las cajas se organizan por Nivel de Interés según la IA (Alto/Medio/Bajo/Sin analizar) — siempre suman el 100% del total.
-// La Gestión (diagnóstico) viene directo del análisis de IA (lee chat + bitácora), no de un puntaje de reglas.
-function renderCalidad(){
-  const grid=$('calidadMatrizGrid');if(!grid)return;
-  const leads=_calidadLeads();
-  const tot=leads.length;
-  const pct=n=>tot?((n/tot)*100).toFixed(0)+'%':'—';
-  const res=$('calidadResumenBox');if(res)res.innerHTML=_dashResumenHTML(leads);
-  window._dashCardData=window._dashCardData||{};
-  const order=['Alto','Medio','Bajo','SinAnalizar'];
-  grid.innerHTML=order.map(nivel=>{
-    const arr=leads.filter(l=>nivel==='SinAnalizar'?!l.calidadIA:(l.calidadIA&&l.calidadIA.nivelInteres===nivel));
-    window._dashCardData['calidad_'+nivel]=arr;
-    const meta=NIVEL_INTERES_META[nivel];
-    const n=arr.length;
-    const isOpen=S.calidadOpen===nivel;
-    let sub;
-    if(nivel==='Alto'){
-      const bien=arr.filter(l=>l.calidadIA.diagnostico==='bien_gestionado').length;
-      const perdidos=arr.filter(l=>l.calidadIA.diagnostico==='oportunidad_perdida').length;
-      sub='<div class="fs" style="font-size:10px;margin-top:6px"><span style="color:var(--ok);font-weight:700">✅ '+bien+'</span> <span style="color:var(--bd2);font-weight:700">⚠️ '+perdidos+'</span></div>';
-    }else if(nivel==='Bajo'){
-      sub='<div class="fs" style="font-size:10px;margin-top:6px;color:var(--tm)">probable baja calidad</div>';
-    }else if(nivel==='Medio'){
-      sub='<div class="fs" style="font-size:10px;margin-top:6px;color:var(--tm)">a validar / seguimiento</div>';
-    }else{
-      sub='<div class="fs" style="font-size:10px;margin-top:6px;color:var(--tm)">presiona "Analizar con IA"</div>';
-    }
-    return '<div class="fc'+(isOpen?' af':'')+'" onclick="calidadToggleDetalle(\''+nivel+'\')" style="border-color:'+(isOpen?'var(--ac)':meta.color+'22')+'">'
-      +'<div class="fi">'+meta.icon+'</div>'
-      +'<div class="fv" style="color:'+meta.color+'">'+n+'</div>'
-      +'<div class="fl" style="font-size:10.5px">'+esc(meta.label)+'</div>'
-      +'<div class="fp">'+pct(n)+' del total</div>'
-      +sub
-      +'</div>';
-  }).join('');
-}
-async function analizarCalidadIA(){
-  const leads=_calidadLeads();
-  const pendientes=leads.filter(l=>!l.calidadIA);
-  if(!pendientes.length){toast('Todos los leads de esta vista ya fueron analizados.');return;}
-  const btn=$('calidadAnalizarBtn');
-  const CHUNK=15;
-  let hechos=0;
-  if(btn){btn.disabled=true;btn.style.opacity='.6';btn.textContent='Analizando… 0/'+pendientes.length;}
-  try{
-    for(let i=0;i<pendientes.length;i+=CHUNK){
-      const chunk=pendientes.slice(i,i+CHUNK);
-      const d=await api('POST','/api/leads/calidad-ia',{leadIds:chunk.map(l=>l.id)});
-      (d.resultados||[]).forEach(r=>{
-        const id=String(r.id),ia={nivelInteres:r.nivelInteres,diagnostico:r.diagnostico,razon:r.razon,analizadoEn:new Date().toISOString()};
-        [S.leads,S.leadsGestion].forEach(arr=>{
-          if(!arr)return;
-          const l=arr.find(x=>String(x.id)===id);
-          if(l)l.calidadIA=ia;
-        });
-      });
-      hechos+=chunk.length;
-      if(btn)btn.textContent='Analizando… '+Math.min(hechos,pendientes.length)+'/'+pendientes.length;
-      renderCalidad();
-    }
-    toast('Análisis IA completo: '+pendientes.length+' lead'+(pendientes.length!==1?'s':'')+' clasificado'+(pendientes.length!==1?'s':'')+'.');
-  }catch(e){
-    toast(e.message||'Error analizando con IA',true);
-  }finally{
-    if(btn){btn.disabled=false;btn.style.opacity='';btn.textContent='🔄 Analizar con IA';}
-    renderCalidad();
-  }
-}
-function renderDash(){renderNuevosResumen();renderSlaCards();renderFunnel();renderCalidad();renderPerfTable();renderTasaciones();}
+function renderDash(){renderSlaCards();renderFunnel();renderPerfTable();renderTasaciones();}
 function renderXRows(items,timeFn){if(!items.length)return'<div class="xe2">Sin leads.</div>';const gc='grid-template-columns:10px 1fr 1fr 1fr 1fr auto';const hd=`<div class="xlr" style="${gc};cursor:default;background:var(--p2)"><div></div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Nombre</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Canal</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Vendedor</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Estado</div><div style="font-size:10px;font-weight:700;color:var(--tm);text-transform:uppercase">Última</div></div>`;return hd+items.map(l=>`<div class="xlr" data-id="${l.id}" style="${gc}">${adot(l.alertLevel)}<div><div class="lrn">${esc(l.name)}</div><div class="lrs">${l.unread?'● Sin resp · ':''}${esc(l.phone||'')}</div></div><div>${cSrc(l.source)}</div><div>${cUsr(l.assignedTo)}</div><div>${stpl(l.status)}</div><div class="lrt" style="color:var(--tm)">${timeFn(l)}</div></div>`).join('');}
 function bindXRows(c){c.querySelectorAll('.xlr[data-id]').forEach(el=>el.addEventListener('click',()=>openModal(+el.dataset.id)));}
 function renderLeads(){
-  const gc='grid-template-columns:22px 14px 1.3fr .85fr 1fr .8fr .8fr 1.1fr .7fr .78fr';
-  const hd=`<div class="tr2 hd" style="${gc}"><div></div><div></div><div>Nombre</div><div>Tel.</div><div>Interés</div><div>Canal</div><div>Asignado</div><div>Estado</div><div>Última</div><div>Creación</div></div>`;
+  const gc='grid-template-columns:22px 14px 1.4fr .9fr 1.1fr .85fr .85fr 1.2fr .75fr';
+  const hd=`<div class="tr2 hd" style="${gc}"><div></div><div></div><div>Nombre</div><div>Tel.</div><div>Interés</div><div>Canal</div><div>Asignado</div><div>Estado</div><div>Última</div></div>`;
   const filtCanal = document.getElementById('filtCanal')?.value || '';
   const filtEstado = document.getElementById('filtEstado')?.value || '';
   const filtSearch = document.getElementById('filtSearch')?.value.toLowerCase().trim() || '';
@@ -2044,55 +1344,11 @@ function renderLeads(){
       <div>${cUsr(l.assignedTo)}</div>
       <div>${stpl(l.status)}</div>
       <div style="font-size:11px;color:var(--tm);font-weight:${l.unread?'700':'400'}">${fDT(l.lastClientTs||l.lastInteraction)}</div>
-      <div style="font-size:11px;color:var(--tm)">${fDT(l.createdAt||l.id)}</div>
     </div>`;
   }).join('') : '<div class="ke" style="padding:16px">Sin leads para este filtro.</div>';
 
   $('lTbl').innerHTML=hd+rows;
   $('lTbl').querySelectorAll('.tr2[data-id]').forEach(el=>el.addEventListener('click',()=>openModal(+el.dataset.id)));
-}
-
-function renderRmgParts(){
-  const tbl=document.getElementById('rmgpTbl');
-  if(!tbl)return;
-  const fb=document.getElementById('rmgpFiltroBar');
-  if(fb){fb.innerHTML=_filtroBarHTML('rmgp',S.filtrosRmgParts);_wireFiltroBar('rmgp',S.filtrosRmgParts,renderRmgParts);}
-  const gc='grid-template-columns:22px 14px 1.4fr .9fr 1.1fr .85fr .85fr 1.2fr .75fr';
-  const hd=`<div class="tr2 hd" style="${gc}"><div></div><div></div><div>Nombre</div><div>Tel.</div><div>Producto</div><div>Canal</div><div>Asignado</div><div>Estado</div><div>Última</div></div>`;
-  const filtSearch=document.getElementById('rmgpSearch')?.value.toLowerCase().trim()||'';
-  let leads=(S.leads||[]).filter(l=>l.isRmgParts===true);
-  leads=_filtrarPorFechaVendedor(leads,S.filtrosRmgParts);
-  renderLeadsResumenBox('rmgpResumenBox','_rmgPartsResumenLeads',leads,'LEADS RMG PARTS EN EL PERÍODO');
-  if(filtSearch) leads=leads.filter(l=>(l.name||'').toLowerCase().includes(filtSearch)||(l.phone||'').includes(filtSearch)||(l.interest||'').toLowerCase().includes(filtSearch));
-
-  leads.sort((a,b)=>{
-    if(a.unread&&!b.unread)return -1;
-    if(!a.unread&&b.unread)return 1;
-    return new Date(b.lastClientTs||b.lastInteraction||0)-new Date(a.lastClientTs||a.lastInteraction||0);
-  });
-
-  const countEl=document.getElementById('rmgpCount');
-  if(countEl)countEl.textContent=`${leads.length} lead${leads.length!==1?'s':''}`;
-
-  const rows=leads.length?leads.map(l=>{
-    const unreadDot=l.unread?'<div class="ud" style="width:12px;height:12px;background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,0.8);animation:pl 1.2s infinite;margin:auto"></div>':'<div></div>';
-    const nameStyle=l.unread?'color:var(--tx);font-weight:800;font-size:13px':'color:var(--ts);font-weight:600';
-    const unreadTag=l.unread?'<span style="background:#fef2f2;color:#ef4444;border:1px solid #fca5a5;font-size:9px;padding:2px 6px;border-radius:10px;margin-left:6px;font-weight:800;letter-spacing:0.05em">NUEVO</span>':'';
-    const rowBg=l.unread?'background:rgba(239,68,68,0.04)':'';
-    return `<div class="tr2" style="${gc};${rowBg};cursor:pointer" data-id="${l.id}">
-      <div></div>${unreadDot}
-      <div style="display:flex;align-items:center;overflow:hidden"><strong style="${nameStyle};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.name)}</strong>${unreadTag}</div>
-      <div style="font-size:11.5px;color:var(--tm)">${esc(l.phone||'—')}</div>
-      <div style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.interest||'—')}</div>
-      <div>${cSrc(l.source)}</div>
-      <div>${cUsr(l.assignedTo)}</div>
-      <div>${stpl(l.status)}</div>
-      <div style="font-size:11px;color:var(--tm);font-weight:${l.unread?'700':'400'}">${fDT(l.lastClientTs||l.lastInteraction)}</div>
-    </div>`;
-  }).join(''):'<div class="ke" style="padding:16px">Sin leads de RMG Parts todavía.</div>';
-
-  tbl.innerHTML=hd+rows;
-  tbl.querySelectorAll('.tr2[data-id]').forEach(el=>el.addEventListener('click',()=>openModal(+el.dataset.id)));
 }
 
 function renderKanban(){const stages=['Nuevo','esperando_respuesta_chileautos','esperando_respuesta_general','Contactado','En Proceso','Reservado','Cerrado','Perdido'];const grp={};stages.forEach(s=>grp[s]=[]);normLeads().forEach(l=>{if(!grp[l.status])grp[l.status]=[];grp[l.status].push(l);});$('kbn').innerHTML=stages.map(st=>{const items=grp[st]||[];const isQ=st==='Calificado'; const stMap={'Nuevo':'Nuevos','esperando_respuesta_chileautos':'En sala de CA','esperando_respuesta_general':'En sala Gral','Contactado':'Contactados','En Proceso':'En proceso','Perdido':'Perdidos'}; const dispSt=stMap[st]||st;const isR=st==='Reservado';return`<div class="kbc ${isQ?'ql':''}${isR?' rs-col':''}"><div class="kbh" style="${isR?'color:var(--wn)':''}">${isQ?'⭐ Calificado':isR?'🔒 Reservado':esc(dispSt)}<span class="cnt">${items.length}</span>${isR&&items.some(l=>l.alertLevel==='critical')?'<span style="color:var(--bd2);font-size:11px;margin-left:6px">⚠️ vencidos</span>':''}</div><div class="kbs">${items.length?items.map(l=>`<div class="kc ${l.alertLevel||''}" data-id="${l.id}">${l.isMulticotizante?'<span style="background:#fee2e2;color:#991b1b;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;float:right">🔥 Multicotizante</span>':''}${l.unread?'<div class="ud"></div>':''}<div style="flex:1;min-width:0"><div class="kn">${esc(l.name)}</div><div class="kt">${l.status==='Reservado'?'🔒 '+fMin(l.reservadoAt||l.lastInteraction):fMin(mAgo(l.lastClientTs||l.lastInteraction))}</div>${l.nextAction&&l.nextAction.date?'<div style="font-size:11px;color:#f59e0b;font-weight:bold;margin-top:4px">⏰ '+new Date(l.nextAction.date).toLocaleString('es-CL',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+'</div>':''}</div></div>`).join(''):'<div class="ke">Vacío</div>'}</div></div>`;}).join('');$('kbn').querySelectorAll('.kc[data-id]').forEach(el=>el.addEventListener('click',()=>openModal(+el.dataset.id)));}
@@ -2216,6 +1472,7 @@ function renderAnalytics() {
 }
 const FG=[{label:'🆕 Nuevos',sts:['Nuevo']},{label:'💬 Contacto',sts:['En Proceso','Contactado']},{label:'⭐ Calificados',sts:['Calificado']},{label:'📅 Agendados',sts:['Agendado']},{label:'🤝 Negociación',sts:['Negociación']},{label:'🔄 Seguimiento',sts:['Seguimiento','Atendido']},{label:'✅ Cerrados',sts:['Cerrado']},{label:'❌ Abandonados',sts:['Abandonado','Perdido']}];
 
+
 function renderTeam(){
   var team=S.team||[], leads=S.leads||[], cont=$('kpiDash');
   if(!cont) return;
@@ -2294,7 +1551,7 @@ function renderTeam(){
   if(!alerts.length) alerts.push({c:'#059669',bg:'#f0fdf4',ico:'✅',txt:'Equipo en verde. Contactabilidad '+gTContact+'% · Conversión '+gTConv+'% · SLA '+avgResp+' min.'});
 
   /* ── filtros ── */
-  var vopts=(S.users||[]).filter(function(u){return u.role==='vendedor'||u.role==='supervisor';}).map(function(u){
+  var vopts=(S.users||[]).filter(function(u){return u.role==='vendedor';}).map(function(u){
     return'<option value="'+e(u.username)+'"'+(S.seller===u.username?' selected':'')+'>'+e(u.name)+'</option>';
   }).join('');
 
@@ -2436,16 +1693,16 @@ async function renderInventario(){
     var rb=$('invRefresh');if(rb)rb.onclick=renderInventario;
   }catch(e){grid.innerHTML='<div class="ke" style="grid-column:1/-1;padding:20px;color:var(--bd2)">Error: '+esc(e.message)+'</div>';}
 }
-async function loadConfig(){try{const cfg=await api('GET','/api/config');$('cfgN').value=cfg.businessName||'';$('cfgC').value=cfg.accentColor||'#3b82f6';}catch(e){toast('Error config',true);}try{const users=await api('GET','/api/users');const routing=await api('GET','/api/config/routing');const da=$('cfgDefaultAssignee');const ca=$('cfgComprasAssignees');if(da&&ca){da.innerHTML='<option value="">— Ninguno (fallback: admin) —</option>';users.filter(u=>u.role!=='tasador').forEach(u=>{const o=document.createElement('option');o.value=u.username;o.textContent=u.name+' ('+u.username+')';if(routing.defaultAssignee===u.username)o.selected=true;da.appendChild(o);});ca.innerHTML='';users.filter(u2=>u2.role!=='tasador').forEach(u2=>{const o2=document.createElement('option');o2.value=u2.username;o2.textContent=u2.name+' ('+u2.username+')';if((routing.comprasAssignees||[]).includes(u2.username))o2.selected=true;ca.appendChild(o2);});};}catch(e){console.warn('[loadConfig routing]',e.message);}try{const canales=await api('GET','/api/config/canales');S.canales=[...canales];S.canalesEdit=[...canales];renderCfgCanales(canales);}catch(e){console.warn('[loadConfig canales]',e.message);}}
+async function loadConfig(){try{const cfg=await api('GET','/api/config');$('cfgN').value=cfg.businessName||'';$('cfgC').value=cfg.accentColor||'#3b82f6';}catch(e){toast('Error config',true);}try{const users=await api('GET','/api/users');const routing=await api('GET','/api/config/routing');const da=$('cfgDefaultAssignee');const ca=$('cfgComprasAssignees');if(da&&ca){da.innerHTML='<option value="">— Ninguno (fallback: admin) —</option>';users.forEach(u=>{const o=document.createElement('option');o.value=u.username;o.textContent=u.name+' ('+u.username+')';if(routing.defaultAssignee===u.username)o.selected=true;da.appendChild(o);});ca.innerHTML='';users.forEach(u2=>{const o2=document.createElement('option');o2.value=u2.username;o2.textContent=u2.name+' ('+u2.username+')';if((routing.comprasAssignees||[]).includes(u2.username))o2.selected=true;ca.appendChild(o2);});};}catch(e){console.warn('[loadConfig routing]',e.message);}try{const canales=await api('GET','/api/config/canales');S.canales=[...canales];S.canalesEdit=[...canales];renderCfgCanales(canales);}catch(e){console.warn('[loadConfig canales]',e.message);}}
 async function loadUsers(){try{const users=await api('GET','/api/users');S.users=users;renderUserTable(users);}catch(e){toast('Error usuarios',true);}}
 function renderCfgCanales(canales){const list=$('cfgCanalesList');if(!list)return;list.innerHTML=(canales||[]).map((c,i)=>'<div style="display:flex;align-items:center;gap:4px;background:var(--p3);border:1px solid var(--bd);border-radius:6px;padding:4px 10px;font-size:12.5px;color:var(--tx)">'+esc(c)+'<button onclick="window._removeCanal('+i+')" style="background:none;border:none;color:var(--tm);cursor:pointer;font-size:16px;line-height:1;padding:0 0 0 6px" title="Eliminar">×</button></div>').join('');}
 window._removeCanal=function(i){if(!S.canalesEdit||S.canalesEdit.length<=1)return toast('Debe quedar al menos un canal',true);S.canalesEdit.splice(i,1);renderCfgCanales(S.canalesEdit);};
 document.addEventListener('click',async(e)=>{if(e.target&&e.target.id==='cfgAddCanal'){const input=$('cfgNuevoCanal');const v=(input.value||'').trim();if(!v)return toast('Escribe el nombre del canal',true);if((S.canalesEdit||[]).includes(v))return toast('Ya existe ese canal',true);if(!S.canalesEdit)S.canalesEdit=[];S.canalesEdit.push(v);input.value='';renderCfgCanales(S.canalesEdit);}});
 document.addEventListener('click',async(e)=>{if(e.target&&e.target.id==='cfgSaveCanales'){const btn=e.target;btn.disabled=true;btn.textContent='…';try{await api('PUT','/api/config/canales',{canales:S.canalesEdit});S.canales=[...S.canalesEdit];toast('Canales guardados ✓');}catch(err){toast(err.message,true);}finally{btn.disabled=false;btn.textContent='Guardar Canales';}}});
 function renderUserTable(users){const tbody=$('uTbd');tbody.innerHTML=users.map(u=>`<tr data-un="${esc(u.username)}">
-  <td><strong>${esc(u.username)}</strong><div style="font-size:10px;color:var(--tm);margin-top:2px">${u.role==='admin'?'👔 Gerencia':u.role==='supervisor'?'👁 Supervisor':u.role==='vendedor'?'💼 Vendedor':u.role==='tasador'?'🔧 Tasador':'📋 Secretaria'}</div></td>
+  <td><strong>${esc(u.username)}</strong><div style="font-size:10px;color:var(--tm);margin-top:2px">${u.role==='admin'?'👔 Gerencia':u.role==='vendedor'?'💼 Vendedor':'📋 Secretaria'}</div></td>
   <td><input class="un" value="${esc(u.name)}" placeholder="Nombre completo"></td>
-  <td><select class="ur"><option value="admin" ${u.role==='admin'?'selected':''}>Admin / Gerencia</option><option value="vendedor" ${u.role==='vendedor'?'selected':''}>Vendedor</option><option value="tasador" ${u.role==='tasador'?'selected':''}>Tasador (Compras)</option><option value="supervisor" ${u.role==='supervisor'?'selected':''}>Supervisor</option><option value="secretaria" ${u.role==='secretaria'?'selected':''}>Secretaria</option></select></td>
+  <td><select class="ur"><option value="admin" ${u.role==='admin'?'selected':''}>Admin / Gerencia</option><option value="vendedor" ${u.role==='vendedor'?'selected':''}>Vendedor</option><option value="secretaria" ${u.role==='secretaria'?'selected':''}>Secretaria</option></select></td>
   <td><input class="up" value="${esc(u.phone||'')}" placeholder="+56912345678"></td>
   <td>
     <div style="display:flex;gap:4px;align-items:center">
@@ -2464,14 +1721,7 @@ function openPermsModal(username){const user=(S.users||[]).find(u=>u.username===
 function toggleClave(){const i=$('cfgClave');i.type=i.type==='password'?'text':'password';}
 document.addEventListener('click',async(e)=>{if(e.target&&e.target.id==='cfgRoutingSB'){const btn=e.target;btn.disabled=true;btn.textContent='…';try{const defaultAssignee=$('cfgDefaultAssignee')?.value||null;const comprasAssignees=Array.from($('cfgComprasAssignees')?.selectedOptions||[]).map(o=>o.value);await api('PUT','/api/config/routing',{defaultAssignee,comprasAssignees});toast('Asignación guardada ✓');}catch(err){toast(err.message,true);}finally{btn.disabled=false;btn.textContent='Guardar Asignación';}}});
 $('cfgSB').addEventListener('click',async()=>{const btn=$('cfgSB');btn.disabled=true;btn.textContent='…';try{const n=$('cfgN').value.trim(),ac=$('cfgC').value,clave=$('cfgClave')?.value?.trim();const payload={businessName:n,accentColor:ac};if(clave){payload.newPassword=clave;}await api('PUT','/api/config',payload);if(clave&&payload.newPassword){await api('PUT','/api/config/password',{newPassword:clave}).catch(()=>{});}$('bizName').textContent=n||'RMG Autos';document.documentElement.style.setProperty('--ac',ac);if($('cfgClave'))$('cfgClave').value='';toast('Configuración guardada ✓');}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='Guardar Empresa';}});
-const MODULE_LABELS_NU={operacion:'📊 Operación',leads:'📋 Leads',chileautos:'🚗 Chileautos',espera:'⏳ En Espera',compras:'🛒 Compras RMG',pipeline:'📌 Pipeline',analitica:'📈 Analítica',equipo:'👥 Equipo',inventario:'🚙 Inventario',bi:'🧠 BI',analisis:'🔍 Análisis IA',auditoria:'🔎 Auditoría',config:'⚙️ Config'};
-function _defaultPermsForRoleNU(role){
-  if(role==='tasador')return{operacion:0,leads:0,chileautos:0,espera:0,compras:3,pipeline:0,analitica:1,equipo:0,inventario:1,bi:0,analisis:0,auditoria:0,config:0};
-  return{operacion:2,leads:2,chileautos:1,espera:1,compras:0,pipeline:2,analitica:1,equipo:1,inventario:1,bi:0,analisis:0,auditoria:0,config:0};
-}
-function populatePermsTable(){const body=$('nuPermsBody');if(!body)return;const defaultPerms=_defaultPermsForRoleNU($('nuR')?.value);body.innerHTML=Object.entries(MODULE_LABELS_NU).map(([mod,label])=>{const def=defaultPerms[mod]||0;return`<tr><td style="font-size:11.5px;font-weight:600;padding:4px 6px">${label}</td>${[0,1,2,3].map(v=>`<td style="text-align:center;padding:4px"><input type="radio" name="perm_${mod}" value="${v}" ${def===v?'checked':''}></td>`).join('')}</tr>`;}).join('');}
-$('addUB').addEventListener('click',()=>{$('nuF').style.display='block';$('addUB').style.display='none';$('nuU').focus();populatePermsTable();});
-$('nuR')&&$('nuR').addEventListener('change',populatePermsTable);
+$('addUB').addEventListener('click',()=>{$('nuF').style.display='block';$('addUB').style.display='none';$('nuU').focus();(function populatePermsTable(){const body=$('nuPermsBody');if(!body)return;const MODULE_LABELS={operacion:'📊 Operación',leads:'📋 Leads',chileautos:'🚗 Chileautos',espera:'⏳ En Espera',compras:'🛒 Compras RMG',pipeline:'📌 Pipeline',analitica:'📈 Analítica',equipo:'👥 Equipo',inventario:'🚙 Inventario',bi:'🧠 BI',analisis:'🔍 Análisis IA',auditoria:'🔎 Auditoría',config:'⚙️ Config'};const defaultPerms={operacion:2,leads:2,chileautos:1,espera:1,compras:0,pipeline:2,analitica:1,equipo:1,inventario:1,bi:0,analisis:0,auditoria:0,config:0};body.innerHTML=Object.entries(MODULE_LABELS).map(([mod,label])=>{const def=defaultPerms[mod]||0;return`<tr><td style="font-size:11.5px;font-weight:600;padding:4px 6px">${label}</td>${[0,1,2,3].map(v=>`<td style="text-align:center;padding:4px"><input type="radio" name="perm_${mod}" value="${v}" ${def===v?'checked':''}></td>`).join('')}</tr>`;}).join('');})();});
 $('nuCn').addEventListener('click',()=>{$('nuF').style.display='none';$('addUB').style.display='';});
 $('nuSv').addEventListener('click',async()=>{const btn=$('nuSv');btn.disabled=true;btn.textContent='…';try{const u=$('nuU').value.trim(),pw=$('nuPw').value.trim()||'demo',n=$('nuN').value.trim(),r=$('nuR').value,ph=$('nuPh').value.trim(),st=$('nuSt').value;if(!u||!n)throw new Error('Username y nombre requeridos');const perms={};['operacion','leads','chileautos','espera','compras','pipeline','analitica','equipo','inventario','bi','analisis','auditoria','config'].forEach(mod=>{const sel=document.querySelector('input[name="perm_'+mod+'"]:checked');perms[mod]=sel?parseInt(sel.value):0;});const canReassign=$('nuCanReassign')?.checked||false;await api('POST','/api/users',{username:u,password:pw,name:n,role:r,phone:ph,status:st,permissions:perms,canReassign});toast(u+' creado ✓');[$('nuU'),$('nuPw'),$('nuN'),$('nuPh')].forEach(i=>i.value='');if($('nuCanReassign'))$('nuCanReassign').checked=false;$('nuF').style.display='none';$('addUB').style.display='';await loadUsers();}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='Crear';}});
 const ALL_ST=['esperando_respuesta_chileautos','esperando_respuesta_general','Nuevo','En Proceso','Contactado','Calificado','Negociación','Agendado','Reservado','Seguimiento','Cerrado','Abandonado','Peritaje','Negociando Compra','Oferta Lanzada','Comprado','Descartado'];
@@ -2528,13 +1778,146 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
     html+=ST_VENTA.map(s=>`<option value="${esc(s)}" ${s===l.status?'selected':''}>${esc(s)}</option>`).join('');
   }
   $('mSt').innerHTML=html;
-  renderAbandonReasonBlock(l);
-  $('mSt').onchange=function(){renderAbandonReasonBlock(l);};
 })();const bOn=l.botActive!==false;$('bChk').checked=bOn;$('bTxt').textContent=bOn?'ON':'OFF';$('bTxt').className='bst '+(bOn?'on':'of');$('aMsg').value=''; const isW=(l.status==='esperando_respuesta_chileautos'||l.status==='esperando_respuesta_general'); const cR=isW&&l.chatHistory?.some(m=>m.role==='user'); const blk=isW&&!cR; $('aMsg').disabled=blk; $('aSnd').disabled=blk; $('aMsg').placeholder=blk?'⏳ Bloqueado: Esperando respuesta...':'Escribe un mensaje...';
   renderAgendaDetails(l);
   renderModalCtx(l);renderModalChat(l);renderModalNotes(l);
-  renderModalHistory(l);var _ab=$("mAssignBlock"),_ms=$("mAssign");if(_ab&&S.user&&S.user.role==="admin"){_ab.style.display="block";_ms.innerHTML=(S.users||[]).filter(function(u){return u.role==="vendedor"||u.role==="tasador";}).map(function(u){return'<option value="'+esc(u.username)+'"'+(u.username===l.assignedTo?' selected':'')+'>'+esc(u.name)+'</option>';}).join("");}else if(_ab){_ab.style.display="none";}
-  (function injectReassignBtn(){const existing=document.getElementById('btnReasignar');if(existing)existing.remove();if(S.user&&S.user.canReassign){const bar=document.getElementById('mMainPane');if(!bar)return;const btn=document.createElement('button');btn.id='btnReasignar';btn.className='bs';btn.style.cssText='margin-top:8px;width:100%';btn.textContent='🔄 Reasignar Lead';btn.onclick=async function(){let usersDisp=S.users||[];if(!usersDisp.length){try{const r=await api('GET','/api/users');usersDisp=r||[];}catch(e){usersDisp=[];}}const users=usersDisp.filter(u=>(u.role==='vendedor'||u.role==='admin'||u.role==='tasador')&&u.status!=='Inactivo'&&u.username!==S.user?.username);if(!users.length)return toast('No hay usuarios disponibles',true);const ex=document.getElementById('modalReasignar');if(ex)ex.remove();const m=document.createElement('div');m.id='modalReasignar';m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';m.innerHTML=`<div style="background:var(--p2);border:1px solid var(--bd);border-radius:12px;padding:24px;width:300px;display:flex;flex-direction:column;gap:12px"><div style="font-weight:700;font-size:15px;color:var(--tx)">🔄 Reasignar Lead</div><select id="selectReasignar" style="width:100%;padding:8px 10px;background:var(--p3);border:1px solid var(--bd);color:var(--tx);border-radius:7px;font-size:13px"><option value="">— Selecciona un usuario —</option>${users.map(u=>`<option value="${u.username}">${u.name} (${u.username})</option>`).join('')}</select><div style="display:flex;gap:8px"><button id="btnConfirmarReasignar" class="bp" style="flex:1">Confirmar</button><button id="btnCancelarReasignar" class="bs" style="flex:1">Cancelar</button></div></div>`;document.body.appendChild(m);document.getElementById('btnCancelarReasignar').onclick=()=>m.remove();document.getElementById('btnConfirmarReasignar').onclick=async()=>{const username=document.getElementById('selectReasignar').value;if(!username)return toast('Selecciona un usuario',true);m.remove();try{await api('POST','/api/leads/'+S.mid+'/reassign',{to:username});toast('Lead reasignado ✓');refreshModalSilent();await refresh();}catch(e){toast(e.message,true);};};};const anchor=document.getElementById('mSv');if(anchor&&anchor.parentNode)anchor.parentNode.insertBefore(btn,anchor);else bar.appendChild(btn);}})();
+  renderModalHistory(l);var _ab=$("mAssignBlock"),_ms=$("mAssign");if(_ab&&S.user&&S.user.role==="admin"){_ab.style.display="block";_ms.innerHTML=(S.users||[]).filter(function(u){return u.role==="vendedor";}).map(function(u){return'<option value="'+esc(u.username)+'"'+(u.username===l.assignedTo?' selected':'')+'>'+esc(u.name)+'</option>';}).join("");}else if(_ab){_ab.style.display="none";}
+  (function injectReassignBtn(){const existing=document.getElementById('btnReasignar');if(existing)existing.remove();if(S.user&&S.user.canReassign){const bar=document.getElementById('mMainPane');if(!bar)return;const btn=document.createElement('button');btn.id='btnReasignar';btn.className='bs';btn.style.cssText='margin-top:8px;width:100%';btn.textContent='🔄 Reasignar Lead';btn.onclick=async function(){let usersDisp=S.users||[];if(!usersDisp.length){try{const r=await api('GET','/api/users');usersDisp=r||[];}catch(e){usersDisp=[];}}const users=usersDisp.filter(u=>(u.role==='vendedor'||u.role==='admin')&&u.status!=='Inactivo'&&u.username!==S.user?.username);if(!users.length)return toast('No hay usuarios disponibles',true);const ex=document.getElementById('modalReasignar');if(ex)ex.remove();const m=document.createElement('div');m.id='modalReasignar';m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';m.innerHTML=`<div style="background:var(--p2);border:1px solid var(--bd);border-radius:12px;padding:24px;width:300px;display:flex;flex-direction:column;gap:12px"><div style="font-weight:700;font-size:15px;color:var(--tx)">🔄 Reasignar Lead</div><select id="selectReasignar" style="width:100%;padding:8px 10px;background:var(--p3);border:1px solid var(--bd);color:var(--tx);border-radius:7px;font-size:13px"><option value="">— Selecciona un usuario —</option>${users.map(u=>`<option value="${u.username}">${u.name} (${u.username})</option>`).join('')}</select><div style="display:flex;gap:8px"><button id="btnConfirmarReasignar" class="bp" style="flex:1">Confirmar</button><button id="btnCancelarReasignar" class="bs" style="flex:1">Cancelar</button></div></div>`;document.body.appendChild(m);document.getElementById('btnCancelarReasignar').onclick=()=>m.remove();document.getElementById('btnConfirmarReasignar').onclick=async()=>{const username=document.getElementById('selectReasignar').value;if(!username)return toast('Selecciona un usuario',true);m.remove();try{await api('POST','/api/leads/'+S.mid+'/reassign',{to:username});toast('Lead reasignado ✓');refreshModalSilent();await refresh();}catch(e){toast(e.message,true);};};};const anchor=document.getElementById('mSv');if(anchor&&anchor.parentNode)anchor.parentNode.insertBefore(btn,anchor);else bar.appendChild(btn);}})();
+    // ── SPRINT 4: Sección Retoma / Tasación ──────────────────────────────────
+    (function injectTradeInSection() {
+      const modalId = typeof id !== 'undefined' ? id : null; const lead = typeof l !== 'undefined' ? l : S.leads.find(x => x.id == modalId); if(!lead) return; const ti = lead.tradeIn || {};
+      const isAdmin = S.user && S.user.role === 'admin';
+      const statusColor = ti.status === 'Evaluado' ? '#22c55e' : '#f59e0b';
+      const offerFmt = ti.offer
+        ? new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(ti.offer)
+        : '—';
+
+      const html = `
+        <div id="tradein-section" style="margin-top:18px;border:1px solid #334155;border-radius:10px;padding:14px;background:#0f172a;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span style="font-size:18px;">🔄</span>
+            <strong style="color:#e2e8f0;font-size:14px;">Detalles de Retoma</strong>
+            <span style="margin-left:auto;font-size:11px;color:${statusColor};background:${statusColor}22;padding:2px 8px;border-radius:20px;">${ti.status || 'Pendiente'}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+            <label style="color:#94a3b8;font-size:12px;">Marca<br>
+              <input id="ti-make" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:5px 8px;font-size:13px;" value="${ti.make||''}">
+            </label>
+            <label style="color:#94a3b8;font-size:12px;">Modelo<br>
+              <input id="ti-model" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:5px 8px;font-size:13px;" value="${ti.model||''}">
+            <input id="ti-km" placeholder="Kilometraje (ej: 45.000 km)" value="" style="width:100%; padding:6px; background:var(--p3); border:1px solid var(--bd); border-radius:4px; font-size:11.5px; color:var(--tx);" oninput="document.getElementById('ti-km').setAttribute('data-val',this.value)">
+            <input id="ti-version" placeholder="Versión/Equipamiento (ej: 4x4 Full)" value="" style="width:100%; padding:6px; background:var(--p3); border:1px solid var(--bd); border-radius:4px; font-size:11.5px; color:var(--tx);" oninput="document.getElementById('ti-version').setAttribute('data-val',this.value)">
+            </label>
+            <label style="color:#94a3b8;font-size:12px;">Año<br>
+              <input id="ti-year" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:5px 8px;font-size:13px;" value="${ti.year||''}">
+            </label>
+            <label style="color:#94a3b8;font-size:12px;">Color<br>
+              <input id="ti-color" style="width:100%;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:5px 8px;font-size:13px;" value="${ti.color||''}">
+            </label>
+          </div>
+          <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <button onclick="enviarPlantillaRetoma('seguimiento_compra')" style="width:32px;height:32px;border-radius:50%;background:#2563eb;color:#fff;border:none;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Enviar seguimiento_compra">S</button>
+            <button onclick="enviarPlantillaRetoma('recupera_compra')" style="width:32px;height:32px;border-radius:50%;background:#d97706;color:#fff;border:none;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Enviar recupera_compra">R</button>
+            <span style="font-size:11px;color:var(--tm);align-self:center">Plantillas WA</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button onclick="saveTiFields('${lead.id}')" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;">💾 Guardar Datos</button>
+            <button onclick="solicitarTasacion('${lead.id}')" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;">🔧 Solicitar Tasación a Taller</button>
+            ${isAdmin ? `
+            <span style="color:#64748b;font-size:11px;margin-left:4px;">Oferta actual: <strong style="color:#22c55e;">${offerFmt}</strong></span>
+            ` : ''}
+          </div>
+          ${isAdmin ? `
+          <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid #1e293b;padding-top:10px;">
+            <span style="color:#94a3b8;font-size:12px;">Registrar Oferta Taller ($)</span>
+            <select id="offerInput" style="flex:1; padding:6px; background:var(--p3); border:1px solid var(--bd); border-radius:4px; font-size:11.5px; color:var(--tx);">
+              <option value="">Seleccionar oferta...</option>
+              <option value="0" style="color:#ef4444;font-weight:700">🚫 $0 — Fuera de parámetros</option>
+              <option value="500000">$500.000</option>
+              <option value="1000000">$1.000.000</option>
+              <option value="1500000">$1.500.000</option>
+              <option value="2000000">$2.000.000</option>
+              <option value="2500000">$2.500.000</option>
+              <option value="3000000">$3.000.000</option>
+              <option value="3500000">$3.500.000</option>
+              <option value="4000000">$4.000.000</option>
+              <option value="4500000">$4.500.000</option>
+              <option value="5000000">$5.000.000</option>
+              <option value="5500000">$5.500.000</option>
+              <option value="6000000">$6.000.000</option>
+              <option value="6500000">$6.500.000</option>
+              <option value="7000000">$7.000.000</option>
+              <option value="7500000">$7.500.000</option>
+              <option value="8000000">$8.000.000</option>
+              <option value="8500000">$8.500.000</option>
+              <option value="9000000">$9.000.000</option>
+              <option value="9500000">$9.500.000</option>
+              <option value="10000000">$10.000.000</option>
+              <option value="10500000">$10.500.000</option>
+              <option value="11000000">$11.000.000</option>
+              <option value="11500000">$11.500.000</option>
+              <option value="12000000">$12.000.000</option>
+              <option value="12500000">$12.500.000</option>
+              <option value="13000000">$13.000.000</option>
+              <option value="13500000">$13.500.000</option>
+              <option value="14000000">$14.000.000</option>
+              <option value="14500000">$14.500.000</option>
+              <option value="15000000">$15.000.000</option>
+              <option value="15500000">$15.500.000</option>
+              <option value="16000000">$16.000.000</option>
+              <option value="16500000">$16.500.000</option>
+              <option value="17000000">$17.000.000</option>
+              <option value="17500000">$17.500.000</option>
+              <option value="18000000">$18.000.000</option>
+              <option value="18500000">$18.500.000</option>
+              <option value="19000000">$19.000.000</option>
+              <option value="19500000">$19.500.000</option>
+              <option value="20000000">$20.000.000</option>
+              <option value="20500000">$20.500.000</option>
+              <option value="21000000">$21.000.000</option>
+              <option value="21500000">$21.500.000</option>
+              <option value="22000000">$22.000.000</option>
+              <option value="22500000">$22.500.000</option>
+              <option value="23000000">$23.000.000</option>
+              <option value="23500000">$23.500.000</option>
+              <option value="24000000">$24.000.000</option>
+              <option value="24500000">$24.500.000</option>
+              <option value="25000000">$25.000.000</option>
+              <option value="25500000">$25.500.000</option>
+              <option value="26000000">$26.000.000</option>
+              <option value="26500000">$26.500.000</option>
+              <option value="27000000">$27.000.000</option>
+              <option value="27500000">$27.500.000</option>
+              <option value="28000000">$28.000.000</option>
+              <option value="28500000">$28.500.000</option>
+              <option value="29000000">$29.000.000</option>
+              <option value="29500000">$29.500.000</option>
+              <option value="30000000">$30.000.000</option>
+            </select>
+            <button onclick="registrarOferta('${lead.id}')" style="background:#22c55e;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;">✅ Registrar Oferta ($)</button>
+          </div>
+          ` : ''}
+        </div>
+      `;
+
+      // Inject into modal — find the notes or actions section as anchor
+      const anchor = document.getElementById('modal-notes') || document.getElementById('modal-actions') || document.querySelector('.modal-body');
+      if (anchor) {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        anchor.parentNode && anchor.parentNode.insertBefore(div.firstElementChild, anchor.nextSibling);
+      }
+      // Pre-seleccionar rango guardado
+      setTimeout(function(){
+        var sel=document.getElementById('offerInput');
+        if(!sel)return;
+        var ld=(S.leads||[]).find(function(x){return x.id==S.mid;});
+        var rng=ld&&ld.tradeIn&&ld.tradeIn.rangoPrecio;
+        if(rng){for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===rng){sel.selectedIndex=i;break;}}}
+      }, 200);
+    })();
+    // ── Fin Sprint 4 tradeIn UI ───────────────────────────────────────────────
+
 
     // ── SPRINT 4: UI de Tasación (Inyectada de forma segura) ─────────────────
     (function renderTradeIn() {
@@ -2547,7 +1930,7 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
       const lead = S.leads.find(x => x.id === S.mid);
       if (!lead) return;
       const ti = lead.tradeIn || {};
-      const isAdmin = S.user && (S.user.role === 'admin' || S.user.role === 'supervisor');
+      const isAdmin = S.user && S.user.role === 'admin';
       const statusColor = ti.status === 'Evaluado' ? '#059669' : '#d97706';
       const offerFmt = ti.offer ? new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(ti.offer) : '—';
 
@@ -2578,12 +1961,6 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
           ${ti.offer ? `
           <div style="margin-top:8px;padding:8px 10px;background:#dc262622;border:1px solid #dc2626;border-radius:6px;">
             <span style="color:#dc2626;font-size:12px;font-weight:bold;">💰 Precio de Toma: ${offerFmt}</span>
-          </div>
-          ` : ''}
-          ${ti.suggestedPrice ? `
-          <div style="margin-top:8px;padding:8px 10px;background:#05966922;border:1px solid #059669;border-radius:6px;">
-            <span style="color:#059669;font-size:12px;font-weight:bold;">🤖 Precio Sugerido (Chileautos): ${new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(ti.suggestedPrice)}</span>
-            <div style="font-size:10px;color:var(--tm);margin-top:2px;">Mediana de ${ti.marketComparables ? ti.marketComparables.length : 6} comparables: ${ti.marketMedian ? new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0}).format(ti.marketMedian) : '—'} menos 25%</div>
           </div>
           ` : ''}
           ${isAdmin ? `
@@ -2701,6 +2078,7 @@ function renderModalChat(l){
 }
 function renderModalNotes(l){const n=Array.isArray(l.notes)?l.notes:[];$('mNts').innerHTML=n.length?n.slice().reverse().map(x=>`<div class="ni">${esc(x.content)}<div class="nm">${esc(x.author||'—')} · ${fDT(x.ts)}</div></div>`).join(''):'<div class="nn">Sin notas.</div>';}
 
+
 function renderModalHistory(l){
   var pane=document.getElementById('mHistPane');if(!pane)return;
   var hist=Array.isArray(l.history)?l.history:[];
@@ -2740,8 +2118,7 @@ $('btnResumen').addEventListener('click',async()=>{
   finally{btn.disabled=false;btn.textContent='🧠 Generar Resumen IA';}
 });
 
-const ST_COMPRA_LIBRE=['Evaluando','Peritaje','Negociando Compra','Oferta Lanzada','Comprado','Descartado'];
-$('mSv').addEventListener('click',async()=>{if(!S.mid)return;const btn=$('mSv');btn.disabled=true;btn.textContent='…';try{const l=findLead(S.mid);const st=$('mSt').value;const note=$('mNt').value.trim();const payload={}; if(st&&st!==l?.status) { const esCambioPipelineCompras=ST_COMPRA_LIBRE.includes(st); if(!esCambioPipelineCompras){ if(!note){toast('⚠️ OBLIGATORIO: Escribe una leyenda en la bitácora', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} const aT=$('agendaText').value.trim(), aD=$('agendaDate').value; if(!aT || !aD){toast('⚠️ OBLIGATORIO: Agenda una tarea (fecha/hora)', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} } if(st==='Abandonado'){const ar=$('mAbandonReason').value; if(!ar){toast('⚠️ OBLIGATORIO: Selecciona el Motivo de Abandono', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} payload.abandonReason=ar;} payload.status=st; }if(S.user&&(S.user.role==='admin'||S.user.role==='supervisor')){var _a=$('mAssign');if(_a&&_a.value&&_a.value!==l?.assignedTo)payload.assignedTo=_a.value;}if(note)payload.note=note;if(!Object.keys(payload).length){toast('Sin cambios');btn.disabled=false;btn.textContent='Guardar cambios';return;}await api('PATCH','/api/leads/'+S.mid,payload);$('mNt').value='';toast('Lead actualizado ✓');await refresh();renderModal();}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='Guardar cambios';}});
+$('mSv').addEventListener('click',async()=>{if(!S.mid)return;const btn=$('mSv');btn.disabled=true;btn.textContent='…';try{const l=findLead(S.mid);const st=$('mSt').value;const note=$('mNt').value.trim();const payload={}; if(st&&st!==l?.status) { if(!note){toast('⚠️ OBLIGATORIO: Escribe una leyenda en la bitácora', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} const aT=$('agendaText').value.trim(), aD=$('agendaDate').value; if(!aT || !aD){toast('⚠️ OBLIGATORIO: Agenda una tarea (fecha/hora)', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} payload.status=st; }if(S.user&&S.user.role==="admin"){var _a=$("mAssign");if(_a&&_a.value&&_a.value!==l?.assignedTo)payload.assignedTo=_a.value;}if(note)payload.note=note;if(!Object.keys(payload).length){toast('Sin cambios');btn.disabled=false;btn.textContent='Guardar cambios';return;}await api('PATCH','/api/leads/'+S.mid,payload);$('mNt').value='';toast('Lead actualizado ✓');await refresh();renderModal();}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='Guardar cambios';}});
 function loadBI(t){const f=document.getElementById('biFr');const b1=document.getElementById('biT1');const b2=document.getElementById('biT2');if(!f)return;if(t==='mapa'){f.src='/mapa_zonas_v4.html';if(b1){b1.style.color='#6d28d9';b1.style.borderBottomColor='#6d28d9';}if(b2){b2.style.color='#888';b2.style.borderBottomColor='transparent';}}else{f.src='/agente_precios.html';if(b2){b2.style.color='#6d28d9';b2.style.borderBottomColor='#6d28d9';}if(b1){b1.style.color='#888';b1.style.borderBottomColor='transparent';}}}
 document.querySelectorAll('.sb nav button').forEach(btn=>{btn.addEventListener('click',async()=>{const view=btn.dataset.view;document.querySelectorAll('.sb nav button').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));btn.classList.add('active');$('view-'+view).classList.add('active');S.view=view;$('mainTb').style.display=view==='config'?'none':'';if(view==='bi'){loadBI('mapa');}else if(view==='analisis'){initAnalisisIA();}else if(view==='auditoria'){initAuditoria();}else if(view==='reporte'){initReporte();}else if(view==='config'){await loadConfig();await loadUsers();loadBackups();}else if(view==='inventario'){await renderInventario();}});});
 // ── REPORTE DE LEADS ─────────────────────────────────────────────────────
@@ -3114,6 +2491,7 @@ registrarOferta = async function(leadId) {
 };
 </script>
 
+
 <script>
 
 function downloadMedia(url) {
@@ -3218,7 +2596,7 @@ function openNuevoLeadModal(){
   const _nlC=document.getElementById('nlCanal');const _cL=S.canales&&S.canales.length?S.canales:['WhatsApp','Chileautos','Yapo','MercadoLibre','Meta Ads','Referido','Llamada','Duty','Otro'];_nlC.innerHTML=_cL.map(c=>'<option value="'+c+'">'+c+'</option>').join('');_nlC.value='WhatsApp';
   const sel = document.getElementById('nlAsignado');
   sel.innerHTML = '';
-  (S.users||[]).filter(u=>u.role==='vendedor'||u.role==='supervisor'||u.role==='tasador').forEach(u=>{
+  (S.users||[]).filter(u=>u.role==='vendedor').forEach(u=>{
     const o = document.createElement('option');
     o.value = u.username; o.textContent = u.name||u.username;
     sel.appendChild(o);
@@ -3341,6 +2719,10 @@ document.getElementById('nlBg')?.addEventListener('click', function(e){
 });
 </script>
 
+
+
+
+
 <style id="zara-corporate-theme">
   /* Redefinición de variables base */
   :root {
@@ -3422,6 +2804,7 @@ document.getElementById('nlBg')?.addEventListener('click', function(e){
   .cbx { background: #f8fafc !important; border-color: #e2e8f0 !important; }
 </style>
 
+
 <script>
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
@@ -3468,25 +2851,12 @@ async function moveToComprasRmg() {
     refresh();
   } catch(e) { toast('Error: ' + e.message, true); }
 }
-async function moveToRmgParts() {
-  const checks = document.querySelectorAll('.blk-chk:checked');
-  const ids = Array.from(checks).map(c => Number(c.value));
-  if(!ids.length) return toast('Selecciona al menos un lead', true);
-  try {
-    await Promise.all(ids.map(id => api('PATCH', '/api/leads/' + id, {isRmgParts: true, source: 'RMG Parts'})));
-    toast('🛢 ' + ids.length + ' lead' + (ids.length !== 1 ? 's trasladados' : ' trasladado') + ' a RMG Parts ✓');
-    if(window.selBulk) window.selBulk.clear();
-    refresh();
-  } catch(e) { toast('Error: ' + e.message, true); }
-}
 setInterval(()=>{
   const isAdmin = S.user && S.user.role === 'admin';
   const btn = document.getElementById('btnBulkDelete');
   if(btn) btn.style.display = isAdmin ? 'inline-flex' : 'none';
   const btnMC = document.getElementById('btnMoveToCompras');
   if(btnMC) btnMC.style.display = isAdmin ? 'inline-flex' : 'none';
-  const btnMRP = document.getElementById('btnMoveToRmgParts');
-  if(btnMRP) btnMRP.style.display = isAdmin ? 'inline-flex' : 'none';
 }, 1000);
 </script>
 <script>
@@ -3521,6 +2891,7 @@ function clearBadgeIfAllRead(){
   }
 }
 // ══ fin WEB PUSH ══════════════════════════════════════════════════
+
 
 window.renderAgendaDetails = function(l) {
   const info = document.getElementById('agendaInfo');
@@ -3580,6 +2951,7 @@ window.completeCurrentTask = async function(id) {
   }
 };
 
+
     window.prevUnreadIds = new Set();
     setInterval(() => {
         if(!window.S || !window.S.leads) return;
@@ -3623,6 +2995,7 @@ window.completeCurrentTask = async function(id) {
 .agenda-venc .ag-st{color:#dc2626;font-weight:600;font-size:10px}
 </style>
 
+
 <script>
 window.renderAgendaDetails = function(l) {
   const info = document.getElementById('agendaInfo');
@@ -3665,6 +3038,7 @@ window.renderAgendaDetails = function(l) {
   }
 };
 </script>
+
 
 <!-- WA SEQUENCE: Botón manual contacto_4 -->
 <button id="btnContacto4" onclick="sendContacto4()" style="
@@ -3732,6 +3106,7 @@ async function sendContacto4() {
   }
 }
 </script>
+
 
 <script>
 window.editLeadName = async function(id) {
@@ -3935,17 +3310,14 @@ function _comprasStageGlobal(status) {
 }
 
 async function renderComprasFull() {
-    const fbC = document.getElementById('comprasFiltroBar');
-    if(fbC){fbC.innerHTML=_filtroBarHTML('compras',S.filtrosCompras);_wireFiltroBar('compras',S.filtrosCompras,renderComprasFull);}
     const FUENTES_COMPRA_RMG = ['Compra Directa', 'Compramos tu Auto', 'Compramos tu auto'];
-    // Llamada directa: la restricción global de fecha/vendedor de Operación NO aplica aquí; se usa el filtro propio S.filtrosCompras
+    // Llamada directa sin filtros de fecha/vendedor para siempre ver todos los leads de compra
     let allLeads = S.leads || [];
     try {
       const fresh = await api('GET', '/api/leads');
       if (Array.isArray(fresh)) allLeads = fresh;
     } catch(e) { /* usar S.leads como fallback */ }
-    const leads = _filtrarPorFechaVendedor(allLeads.filter(l => l.isCompraRmg === true || FUENTES_COMPRA_RMG.includes((l.source||'').trim())), S.filtrosCompras);
-    renderLeadsResumenBox('comprasResumenBox','_comprasResumenLeads',leads,'LEADS COMPRAS RMG EN EL PERÍODO');
+    const leads = allLeads.filter(l => l.isCompraRmg === true || FUENTES_COMPRA_RMG.includes((l.source||'').trim()));
 
     const cl = document.getElementById('compras-leads-tbl');
     if(cl) {
@@ -4000,7 +3372,7 @@ async function renderComprasFull() {
     }
     const ca = document.getElementById('compras-analitica-box');
     if(ca) {
-         const comprasLeads = _filtrarPorFechaVendedor((S.leads||[]).filter(l => l.isCompraRmg || l.source === 'Compramos tu Auto' || l.source === 'Compra Directa' || l.source === 'Compramos tu auto'), S.filtrosCompras);
+         const comprasLeads = (S.leads||[]).filter(l => l.isCompraRmg || l.source === 'Compramos tu Auto' || l.source === 'Compra Directa' || l.source === 'Compramos tu auto');
          const total = comprasLeads.length;
          const evaluando = comprasLeads.filter(l => !['nuevo','cerrado','abandonado','perdido','reservado'].includes((l.status||'').toLowerCase().trim())).length;
          const ofertados = comprasLeads.filter(l => (l.status||'').toLowerCase().trim() === 'reservado').length;
@@ -4013,6 +3385,7 @@ async function renderComprasFull() {
          </div>`;
     }
 }
+
 
 function openNuevoProspectoCompras() {
     const overlay = document.createElement('div');
@@ -4095,6 +3468,18 @@ function enviarPlantillaSaludo3() {
 }
 </script>
 
+
+
+
+
+
+
+
+
+
+
+
+
 <script>
 function dispararDescargaJC() {
     const token = localStorage.getItem("token") || sessionStorage.getItem("token") || "";
@@ -4119,6 +3504,7 @@ setInterval(() => {
     } catch(e) {}
 }, 500);
 </script>
+
 
 <script>
 function exportarRespaldoMasterJSON() {
@@ -4238,6 +3624,7 @@ function toggleTasPanel(tipo){
   }
 }
 
+
 async function loadBackups(){
   var list = $('backupList');
   var status = $('backupStatus');
@@ -4274,6 +3661,7 @@ async function loadBackups(){
     status.textContent = 'Error: ' + e.message;
   }
 }
+
 
 function renderTasaciones(){
   var leads=S.leads||[];
@@ -4321,6 +3709,7 @@ async function loadBackups(){
     });
   }catch(e){status.textContent='Error: '+e.message;}
 }
+
 
 function openGalleryLightbox(idx,urls){
   var lb=document.getElementById('rmgLightbox');
@@ -4623,4 +4012,8 @@ function closeAuditPanel(){
 
 </body>
 </html>
+
+
+
+
 
