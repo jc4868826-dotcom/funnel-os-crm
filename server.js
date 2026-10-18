@@ -2739,6 +2739,73 @@ app.put('/api/config/routing',auth('admin'),async(req,res)=>{
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+// ── INSPECCIONES DE VEHÍCULOS ────────────────────────────────────────────
+// Insertar ANTES de: app.use(express.static(path.join(__dirname,'public')));
+// ─────────────────────────────────────────────────────────────────────────
+
+const inspDir = path.join(__dirname,'public','uploads','inspecciones');
+if(!fsSync.existsSync(inspDir)) fsSync.mkdirSync(inspDir,{recursive:true});
+const uploadInsp = multer({
+  dest: inspDir,
+  limits:{fileSize:10*1024*1024},
+  fileFilter:(_req,file,cb)=>{ if(/^image\//i.test(file.mimetype))cb(null,true); else cb(new Error('Solo imágenes')); }
+});
+F.inspecciones = path.join(DATA,'inspecciones.json');
+
+// GET /api/inspecciones  — lista todas para el tenant (filtro ?patente=XX opcional)
+app.get('/api/inspecciones',auth('admin','vendedor','tasador','supervisor'),async(req,res)=>{
+  try{
+    const all=await tRead(F.inspecciones,req.tenant,{});
+    let list=Object.values(all);
+    if(req.query.patente){
+      const p=req.query.patente.toUpperCase().replace(/\s/g,'');
+      list=list.filter(r=>r.patente===p);
+    }
+    res.json(list);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+// GET /api/inspecciones/:patente  — ficha completa de un vehículo
+app.get('/api/inspecciones/:patente',auth('admin','vendedor','tasador','supervisor'),async(req,res)=>{
+  try{
+    const pat=req.params.patente.toUpperCase().replace(/\s/g,'');
+    const all=await tRead(F.inspecciones,req.tenant,{});
+    const rec=all[pat];
+    if(!rec)return res.status(404).json({error:'No encontrado',patente:pat});
+    res.json(rec);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+// PUT /api/inspecciones/:patente  — crear o actualizar INGRESO o SALIDA
+app.put('/api/inspecciones/:patente',auth('admin','vendedor','tasador','supervisor'),async(req,res)=>{
+  try{
+    const pat=req.params.patente.toUpperCase().replace(/\s/g,'');
+    const{modo,...campos}=req.body||{};
+    if(!modo||!['ingreso','salida'].includes(modo))return res.status(400).json({error:'modo debe ser ingreso o salida'});
+    const all=await tRead(F.inspecciones,req.tenant,{});
+    if(!all[pat])all[pat]={patente:pat,creadoEn:new Date().toISOString(),creadoPor:req.user};
+    all[pat][modo]={...campos,guardadoEn:new Date().toISOString(),guardadoPor:req.user};
+    all[pat].updatedAt=new Date().toISOString();
+    await tWrite(F.inspecciones,req.tenant,all);
+    res.json({ok:true,record:all[pat]});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+// POST /api/inspecciones/upload  — sube foto(s), devuelve URL(s)
+app.post('/api/inspecciones/upload',auth('admin','vendedor','tasador','supervisor'),uploadInsp.array('fotos',10),async(req,res)=>{
+  try{
+    const urls=(req.files||[]).map(f=>{
+      const ext=(f.originalname||'img').split('.').pop().toLowerCase()||'jpg';
+      const newName=f.filename+'.'+ext;
+      fsSync.renameSync(f.path,path.join(inspDir,newName));
+      return '/uploads/inspecciones/'+newName;
+    });
+    res.json({ok:true,urls});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+// ── fin INSPECCIONES ──────────────────────────────────────────────────────
+
+
 app.use(express.static(path.join(__dirname,'public')));
 app.get('/tmp-media/:name', (req, res) => {
   const fp = require('path').join('/tmp', req.params.name);

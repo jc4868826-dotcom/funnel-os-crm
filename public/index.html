@@ -1100,7 +1100,7 @@ async function ejecutarAnalisisIA(){
 <div class="ca2">
 <div><h4>Control IA</h4><div class="btw"><div class="btl"><span>🤖</span><span>Cata IA</span></div><div style="display:flex;align-items:center;gap:8px"><span class="bst" id="bTxt">ON</span><label class="bsw"><input type="checkbox" id="bChk" checked><span class="bsl"></span></label></div></div></div>
 <div><h4>Estado</h4><select id="mSt"></select></div>
-<div id="mAbandonBlock" style="display:none"><h4>Motivo de Abandono</h4><select id="mAbandonReason" style="width:100%;padding:8px 10px;background:var(--p2);border:1px solid var(--bd);color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
+<div id="mAbandonBlock" style="display:none;background:#fef2f2;border:2px solid #ef4444;border-radius:9px;padding:10px 12px"><h4 style="color:#dc2626;margin-bottom:6px">⚠️ Motivo de Abandono <span style="font-size:11px;font-weight:400">(obligatorio)</span></h4><select id="mAbandonReason" style="width:100%;padding:8px 10px;background:#fff;border:1.5px solid #ef4444;color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
 <div id="mAssignBlock" style="display:none"><h4>Reasignar a <span style="font-size:10px;background:var(--as);color:var(--ac);padding:2px 6px;border-radius:4px;font-weight:700">ADMIN</span></h4><select id="mAssign" style="width:100%;padding:8px 10px;background:var(--p2);border:1px solid var(--bd);color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
 <div>
   <h4>Notas internas</h4>
@@ -1403,13 +1403,14 @@ const ABANDON_REASONS=[
 ];
 function _abandonReasonLabel(key){const r=ABANDON_REASONS.find(x=>x.key===key);return r?r.label:(key?esc(key):'Sin motivo registrado');}
 // Muestra/oculta y llena el selector de Motivo de Abandono en la ficha del lead, según el estado elegido en #mSt.
-function renderAbandonReasonBlock(l){
+function renderAbandonReasonBlock(l,autoScroll){
   const st=$('mSt')?.value;
   const block=$('mAbandonBlock'),sel=$('mAbandonReason');
   if(!block||!sel)return;
   if(st==='Abandonado'){
     block.style.display='block';
     sel.innerHTML='<option value="">— Selecciona un motivo —</option>'+ABANDON_REASONS.map(r=>`<option value="${r.key}" ${l.abandonReason===r.key?'selected':''}>${esc(r.label)}</option>`).join('');
+    if(autoScroll){setTimeout(()=>{block.scrollIntoView({behavior:'smooth',block:'nearest'});sel.focus();},80);}
   }else{
     block.style.display='none';
   }
@@ -2529,7 +2530,7 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
   }
   $('mSt').innerHTML=html;
   renderAbandonReasonBlock(l);
-  $('mSt').onchange=function(){renderAbandonReasonBlock(l);};
+  $('mSt').onchange=function(){renderAbandonReasonBlock(l,true);};
 })();const bOn=l.botActive!==false;$('bChk').checked=bOn;$('bTxt').textContent=bOn?'ON':'OFF';$('bTxt').className='bst '+(bOn?'on':'of');$('aMsg').value=''; const isW=(l.status==='esperando_respuesta_chileautos'||l.status==='esperando_respuesta_general'); const cR=isW&&l.chatHistory?.some(m=>m.role==='user'); const blk=isW&&!cR; $('aMsg').disabled=blk; $('aSnd').disabled=blk; $('aMsg').placeholder=blk?'⏳ Bloqueado: Esperando respuesta...':'Escribe un mensaje...';
   renderAgendaDetails(l);
   renderModalCtx(l);renderModalChat(l);renderModalNotes(l);
