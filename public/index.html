@@ -703,7 +703,7 @@ async function ejecutarAnalisisIA(){
 </div>
 <div id="av" class="app" style="display:none">
 <aside class="sb"><h1 id="bizName">FunnelOS</h1><div class="who" id="uBadge">—</div><nav><button class="active" data-view="dashboard">📊 Operación</button><button data-view="leads">📋 Leads</button><button data-view="chileautos" id="navCA" style="background:#e8f5e9;color:#2e7d32;font-weight:700">🏷 Chileautos</button><button data-view="espera-general" id="navEG" style="background:#ede9fe;color:#6d28d9;font-weight:700;display:none">⏳ En Espera</button><button data-view="compras" id="navCompras" style="background:#fff7ed;color:#d97706;font-weight:700">🛍 Compras RMG</button><button data-view="rmgparts" id="navRmgParts" style="background:#fef3c7;color:#b45309;font-weight:700">🛢 RMG Parts</button>
-<button data-view="pipeline">🗂 Pipeline</button><button data-view="analytics" id="navA">📈 Analítica</button><button data-view="team" id="navT">👥 Equipo</button><button data-view="inventario" id="navInv">🚗 Inventario</button><button data-view="bi" id="navBI" style="background:linear-gradient(135deg,#1a1a2e,#16213e);color:#a78bfa;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🧠 BI</button><button data-view="analisis" id="navAnalisis" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🔍 Análisis IA</button><button data-view="auditoria" id="navAuditoria" style="background:linear-gradient(135deg,#0f766e,#0891b2);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🔍 Auditoría</button><button data-view="reporte" id="navReporte" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">📊 Reporte</button><button id="navEntrega" onclick="window.open('https://claude.ai/artifact/Sdz33CKVhK7HS3EeKQbMyF','_blank')" style="background:linear-gradient(135deg,#065f46,#047857);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">📋 Entrega/Recep.</button><button data-view="config" id="navC">⚙️ Config</button></nav><button onclick="syncInventario()" style="margin-top:6px;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:8px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" id="btnSyncInv">🔄 Sync RMG</button>
+<button data-view="pipeline">🗂 Pipeline</button><button data-view="analytics" id="navA">📈 Analítica</button><button data-view="team" id="navT">👥 Equipo</button><button data-view="inventario" id="navInv">🚗 Inventario</button><button data-view="bi" id="navBI" style="background:linear-gradient(135deg,#1a1a2e,#16213e);color:#a78bfa;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🧠 BI</button><button data-view="analisis" id="navAnalisis" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🔍 Análisis IA</button><button data-view="auditoria" id="navAuditoria" style="background:linear-gradient(135deg,#0f766e,#0891b2);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🔍 Auditoría</button><button data-view="reporte" id="navReporte" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">📊 Reporte</button><button id="navEntrega" onclick="window.open('https://claude.ai/artifact/Sdz33CKVhK7HS3EeKQbMyF','_blank')" style="background:linear-gradient(135deg,#065f46,#047857);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">📋 Entrega/Recep.</button><button data-view="inspeccion" id="navInspeccion" style="background:linear-gradient(135deg,#0369a1,#0284c7);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🚗 Inspección</button><button data-view="config" id="navC">⚙️ Config</button></nav><button onclick="syncInventario()" style="margin-top:6px;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:8px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" id="btnSyncInv">🔄 Sync RMG</button>
 <button id="btnInstallApp" onclick="installApp()" style="display:none;margin-top:8px;background:linear-gradient(135deg,#D4A843,#F2C955);color:#0f172a;border:none;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;align-items:center;gap:6px;letter-spacing:.04em">📲 Instalar App</button>
 <button class="lout" id="loutB">Cerrar sesión</button></aside>
 <main class="mn">
@@ -934,6 +934,563 @@ async function ejecutarAnalisisIA(){
 </div>
 <div class="inv-grid" id="invGrid"><div class="ke" style="padding:20px;grid-column:1/-1">Cargando...</div></div>
 </section>
+<!-- ═══════════════════════════════════════════════════════════════════════
+     PESTAÑA INSPECCIÓN DE VEHÍCULOS
+     Insertar ANTES de: <section id="view-config" class="view">
+     ═══════════════════════════════════════════════════════════════════════ -->
+<section id="view-inspeccion" class="view">
+<div class="st">🚗 Inspección de Vehículos</div>
+
+<!-- Barra búsqueda patente -->
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+  <input id="inspPatente" type="text" placeholder="Patente ej: AAAA11" maxlength="8"
+    style="flex:1;max-width:180px;padding:10px 14px;background:var(--p2);border:1.5px solid var(--bd);color:var(--tx);border-radius:9px;font-family:inherit;font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:.06em"
+    oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')buscarInspeccion()">
+  <button onclick="buscarInspeccion()" style="background:var(--ac);color:#fff;border:none;border-radius:9px;padding:10px 18px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit">🔍 Buscar</button>
+  <button onclick="nuevaInspeccion()" style="background:#16a34a;color:#fff;border:none;border-radius:9px;padding:10px 18px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit">+ Nueva</button>
+</div>
+
+<!-- Estado / mensaje -->
+<div id="inspMsg" style="display:none;padding:10px 14px;border-radius:9px;font-size:13px;margin-bottom:10px"></div>
+
+<!-- Lista de inspecciones recientes (visible cuando no hay patente activa) -->
+<div id="inspLista" style="margin-bottom:12px"></div>
+
+<!-- Formulario ficha -->
+<div id="inspForm" style="display:none">
+  <!-- Header patente + toggle modo -->
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="inspFichaPat" style="font-size:22px;font-weight:800;letter-spacing:.08em;color:var(--ac)">—</span>
+      <div id="inspEstados" style="display:flex;gap:6px;font-size:11px"></div>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button id="btnModoIngreso" onclick="setInspModo('ingreso')"
+        style="padding:8px 16px;border-radius:8px;border:2px solid var(--ac);background:var(--ac);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">
+        📥 INGRESO</button>
+      <button id="btnModoSalida" onclick="setInspModo('salida')"
+        style="padding:8px 16px;border-radius:8px;border:2px solid var(--bd);background:var(--bg);color:var(--ts);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">
+        📤 SALIDA</button>
+    </div>
+  </div>
+  <div id="inspModoLabel" style="font-size:11px;color:var(--tm);margin-bottom:12px"></div>
+
+  <!-- ── SECCIÓN: DATOS BÁSICOS ── -->
+  <details class="insp-sec" open>
+    <summary>📋 Datos Básicos</summary>
+    <div class="insp-grid">
+      <label>Marca<input type="text" id="iMarca" class="insp-input" placeholder="Toyota"></label>
+      <label>Modelo<input type="text" id="iModelo" class="insp-input" placeholder="Yaris"></label>
+      <label>Año<input type="number" id="iAnio" class="insp-input" placeholder="2020" min="1990" max="2030"></label>
+      <label>Color<input type="text" id="iColor" class="insp-input" placeholder="Blanco"></label>
+      <label>Km actual<input type="number" id="iKm" class="insp-input" placeholder="45000"></label>
+      <label>Motor / VIN<input type="text" id="iVin" class="insp-input" placeholder="N° motor o VIN"></label>
+      <label>Tipo ingreso
+        <select id="iTipoIngreso" class="insp-input">
+          <option value="">— seleccionar —</option>
+          <option>Compra directa</option>
+          <option>Consignación</option>
+          <option>APP / Tasación</option>
+          <option>Entrega a cliente</option>
+          <option>Devolución</option>
+        </select>
+      </label>
+      <label>Fecha / hora<input type="datetime-local" id="iFecha" class="insp-input"></label>
+    </div>
+  </details>
+
+  <!-- ── SECCIÓN: DOCUMENTOS ── -->
+  <details class="insp-sec">
+    <summary>📄 Documentos</summary>
+    <div class="insp-checks">
+      <label class="insp-chk"><input type="checkbox" id="dPermiso">Permiso de Circulación</label>
+      <label class="insp-chk"><input type="checkbox" id="dRevision">Revisión Técnica</label>
+      <label class="insp-chk"><input type="checkbox" id="dSoat">SOAP</label>
+      <label class="insp-chk"><input type="checkbox" id="dPadron">Padrón del vehículo</label>
+      <label class="insp-chk"><input type="checkbox" id="dFactura">Factura / Inscripción</label>
+      <label class="insp-chk"><input type="checkbox" id="dLlaves">Llaves (nº: <input type="number" id="dLlavesN" class="insp-inline" min="0" max="5" value="1" style="width:40px">)</label>
+      <label class="insp-chk"><input type="checkbox" id="dManual">Manual del auto</label>
+      <label class="insp-chk"><input type="checkbox" id="dRadio">Control de radio</label>
+    </div>
+  </details>
+
+  <!-- ── SECCIÓN: NIVELES ── -->
+  <details class="insp-sec">
+    <summary>🛢 Niveles y Gasolina</summary>
+    <div class="insp-checks">
+      <label class="insp-chk"><input type="checkbox" id="nAceite">Aceite OK</label>
+      <label class="insp-chk"><input type="checkbox" id="nRefri">Refrigerante OK</label>
+      <label class="insp-chk"><input type="checkbox" id="nFreno">Líquido de frenos OK</label>
+      <label class="insp-chk"><input type="checkbox" id="nAgua">Agua limpia parabrisas OK</label>
+      <label class="insp-chk"><input type="checkbox" id="nBateria">Batería OK</label>
+    </div>
+    <!-- Gauge gasolina -->
+    <div style="margin-top:12px">
+      <div style="font-size:12.5px;font-weight:600;color:var(--ts);margin-bottom:8px">⛽ Nivel de gasolina</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="inspGaugeRow">
+        <button class="gas-btn" data-val="0"   onclick="setGas(0)"   title="E (vacío)">E</button>
+        <button class="gas-btn" data-val="12"  onclick="setGas(12)"  title="1/8">⅛</button>
+        <button class="gas-btn" data-val="25"  onclick="setGas(25)"  title="1/4">¼</button>
+        <button class="gas-btn" data-val="37"  onclick="setGas(37)"  title="3/8">⅜</button>
+        <button class="gas-btn" data-val="50"  onclick="setGas(50)"  title="1/2">½</button>
+        <button class="gas-btn" data-val="62"  onclick="setGas(62)"  title="5/8">⅝</button>
+        <button class="gas-btn" data-val="75"  onclick="setGas(75)"  title="3/4">¾</button>
+        <button class="gas-btn" data-val="100" onclick="setGas(100)" title="Lleno">F</button>
+      </div>
+      <input type="hidden" id="iGasolina" value="">
+    </div>
+  </details>
+
+  <!-- ── SECCIÓN: MALETERO ── -->
+  <details class="insp-sec">
+    <summary>🧳 Maletero</summary>
+    <div class="insp-checks">
+      <label class="insp-chk"><input type="checkbox" id="mRuedaRep">Rueda de repuesto</label>
+      <label class="insp-chk"><input type="checkbox" id="mGato">Gato + llave de ruedas</label>
+      <label class="insp-chk"><input type="checkbox" id="mTriangulo">Triángulo / Chaleco</label>
+      <label class="insp-chk"><input type="checkbox" id="mExtintor">Extintor</label>
+      <label class="insp-chk"><input type="checkbox" id="mBotiquin">Botiquín</label>
+    </div>
+  </details>
+
+  <!-- ── SECCIÓN: INTERIOR ── -->
+  <details class="insp-sec">
+    <summary>🪑 Interior</summary>
+    <div class="insp-checks">
+      <label class="insp-chk"><input type="checkbox" id="intAsientos">Asientos OK (sin roturas)</label>
+      <label class="insp-chk"><input type="checkbox" id="intVolante">Volante OK</label>
+      <label class="insp-chk"><input type="checkbox" id="intCinturones">Cinturones OK</label>
+      <label class="insp-chk"><input type="checkbox" id="intAirbags">Airbags — testigo apagado</label>
+      <label class="insp-chk"><input type="checkbox" id="intAC">Aire acondicionado funciona</label>
+      <label class="insp-chk"><input type="checkbox" id="intRadio">Radio/pantalla funciona</label>
+      <label class="insp-chk"><input type="checkbox" id="intAlfombras">Alfombras presentes</label>
+      <label class="insp-chk"><input type="checkbox" id="intCalefaccion">Calefacción funciona</label>
+    </div>
+  </details>
+
+  <!-- ── SECCIÓN: EXTERIOR ── -->
+  <details class="insp-sec">
+    <summary>🚘 Exterior</summary>
+    <div class="insp-checks">
+      <label class="insp-chk"><input type="checkbox" id="extLuces">Luces delanteras OK</label>
+      <label class="insp-chk"><input type="checkbox" id="extLucesT">Luces traseras OK</label>
+      <label class="insp-chk"><input type="checkbox" id="extParabrisas">Parabrisas sin grietas</label>
+      <label class="insp-chk"><input type="checkbox" id="extEspejos">Espejos completos</label>
+      <label class="insp-chk"><input type="checkbox" id="extNeumaticos">Neumáticos OK</label>
+      <label class="insp-chk"><input type="checkbox" id="extRallones">Sin rallones graves</label>
+      <label class="insp-chk"><input type="checkbox" id="extGolpes">Sin golpes graves</label>
+      <label class="insp-chk"><input type="checkbox" id="extLimpiabrisas">Limpiaparabrisas OK</label>
+    </div>
+  </details>
+
+  <!-- ── SECCIÓN: FOTOS ── -->
+  <details class="insp-sec">
+    <summary>📸 Fotos</summary>
+    <div style="margin-bottom:8px">
+      <label style="display:inline-block;padding:10px 18px;background:var(--ac);color:#fff;border-radius:9px;cursor:pointer;font-size:13.5px;font-weight:700">
+        📷 Tomar / Adjuntar Foto
+        <input type="file" accept="image/*" capture="environment" multiple id="inspFotoInput" style="display:none" onchange="agregarFotos(this)">
+      </label>
+      <span style="font-size:11px;color:var(--tm);margin-left:10px">Máx. 10 fotos</span>
+    </div>
+    <div id="inspFotoGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+  </details>
+
+  <!-- ── SECCIÓN: OBSERVACIONES ── -->
+  <details class="insp-sec">
+    <summary>📝 Observaciones</summary>
+    <textarea id="iObs" rows="4" placeholder="Notas de daños, condiciones especiales, acuerdos..."
+      style="width:100%;box-sizing:border-box;padding:10px 12px;background:var(--p2);border:1.5px solid var(--bd);color:var(--tx);border-radius:9px;font-family:inherit;font-size:13px;resize:vertical"></textarea>
+  </details>
+
+  <!-- ── SECCIÓN: FIRMA ── -->
+  <details class="insp-sec">
+    <summary>✍️ Firma (opcional)</summary>
+    <div style="margin-bottom:6px;font-size:12px;color:var(--tm)">Firme en el recuadro con el dedo o mouse</div>
+    <canvas id="inspCanvas" width="340" height="130"
+      style="border:1.5px solid var(--bd);border-radius:9px;background:#fff;touch-action:none;cursor:crosshair;max-width:100%"></canvas>
+    <br>
+    <button onclick="limpiarFirma()" style="margin-top:6px;padding:7px 14px;background:var(--p2);border:1px solid var(--bd);color:var(--ts);border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit">🗑 Borrar firma</button>
+    <input type="hidden" id="iFirma">
+  </details>
+
+  <!-- Guardado -->
+  <div id="inspSaveBar" style="position:sticky;bottom:0;background:var(--bg);padding:12px 0 8px;z-index:50;border-top:1px solid var(--bd);margin-top:16px;display:flex;align-items:center;gap:10px">
+    <button onclick="guardarInspeccion()" id="btnGuardarInsp"
+      style="flex:1;max-width:260px;padding:12px 0;background:#16a34a;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">
+      💾 Guardar Inspección</button>
+    <span id="inspSaveMsg" style="font-size:12px;color:var(--ts)"></span>
+  </div>
+</div><!-- /inspForm -->
+</section>
+<!-- ═══════════════════════════════════════════════ FIN INSPECCIÓN ═══ -->
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     ESTILOS Y SCRIPT INSPECCIÓN
+     Insertar JUSTO DESPUÉS del </section> de inspección (aquí arriba)
+     ════════════════════════════════════════════════════════════════ -->
+<style>
+/* ── Inspección ── */
+.insp-sec{
+  background:var(--p);border:1px solid var(--bd);border-radius:12px;
+  margin-bottom:10px;overflow:hidden;
+}
+.insp-sec summary{
+  list-style:none;padding:12px 16px;font-size:13.5px;font-weight:700;
+  color:var(--ts);cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;
+}
+.insp-sec summary::marker,.insp-sec summary::-webkit-details-marker{display:none;}
+.insp-sec summary::after{content:"▾";margin-left:auto;font-size:11px;color:var(--tm);}
+.insp-sec[open] summary::after{content:"▴";}
+.insp-sec > *:not(summary){padding:10px 16px 14px;}
+.insp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+@media(max-width:480px){.insp-grid{grid-template-columns:1fr;}}
+.insp-grid label{display:flex;flex-direction:column;font-size:11px;font-weight:600;color:var(--tm);gap:4px;}
+.insp-input{
+  padding:9px 11px;background:var(--p2);border:1.5px solid var(--bd);color:var(--tx);
+  border-radius:8px;font-family:inherit;font-size:13px;width:100%;box-sizing:border-box;
+}
+.insp-inline{
+  padding:4px 6px;background:var(--p2);border:1px solid var(--bd);color:var(--tx);
+  border-radius:6px;font-family:inherit;font-size:12px;
+}
+.insp-checks{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+@media(max-width:400px){.insp-checks{grid-template-columns:1fr;}}
+.insp-chk{
+  display:flex;align-items:center;gap:8px;padding:8px 10px;
+  background:var(--p2);border:1px solid var(--bd);border-radius:8px;
+  font-size:12.5px;cursor:pointer;user-select:none;
+}
+.insp-chk input[type=checkbox]{width:20px;height:20px;accent-color:var(--ac);cursor:pointer;}
+.insp-chk:has(input:checked){background:#f0fdf4;border-color:#22c55e;}
+.gas-btn{
+  min-width:44px;min-height:44px;border-radius:8px;border:2px solid var(--bd);
+  background:var(--p2);color:var(--ts);font-size:14px;font-weight:700;cursor:pointer;
+  font-family:inherit;transition:all .15s;
+}
+.gas-btn.selected{background:var(--ac);color:#fff;border-color:var(--ac);}
+.insp-photo-thumb{
+  width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--bd);
+}
+.insp-photo-wrap{position:relative;display:inline-block;}
+.insp-photo-del{
+  position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;
+  background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:11px;
+  display:flex;align-items:center;justify-content:center;
+}
+</style>
+
+<script>
+// ════════════════════════════════════════════════════
+//  INSPECCIÓN DE VEHÍCULOS
+// ════════════════════════════════════════════════════
+(function(){
+  const _inspState={
+    patente:'',
+    modo:'ingreso',      // 'ingreso' | 'salida'
+    record:null,         // registro completo desde API
+    fotos:[],            // URLs ya subidas
+    fotosNew:[],         // Files pendientes de subir
+    canvasDrawing:false
+  };
+
+  // ── Navegación a la pestaña ──
+  window.abrirInspeccionConPatente=function(patente){
+    const btn=document.querySelector('.sb nav button[data-view="inspeccion"]');
+    if(btn) btn.click();
+    if(patente){
+      const inp=document.getElementById('inspPatente');
+      if(inp){ inp.value=patente.toUpperCase(); }
+      setTimeout(()=>buscarInspeccion(),200);
+    }
+  };
+
+  // ── Buscar patente ──
+  window.buscarInspeccion=async function(){
+    const pat=(document.getElementById('inspPatente')?.value||'').toUpperCase().replace(/\s/g,'');
+    if(!pat){ setInspMsg('Ingresa una patente','warn'); return; }
+    _inspState.patente=pat;
+    setInspMsg('Buscando...','info');
+    try{
+      const r=await apiFetch('/api/inspecciones/'+pat);
+      if(r.error){
+        // No existe aún — abrir formulario vacío en modo INGRESO
+        _inspState.record=null;
+        setInspMsg('Patente nueva — ingresa los datos de ingreso','info');
+        abrirFormulario(pat,null);
+      } else {
+        _inspState.record=r;
+        setInspMsg('','');
+        abrirFormulario(pat,r);
+      }
+    }catch(e){ setInspMsg('Error: '+e.message,'error'); }
+  };
+
+  window.nuevaInspeccion=function(){
+    document.getElementById('inspPatente').value='';
+    document.getElementById('inspForm').style.display='none';
+    document.getElementById('inspLista').innerHTML='';
+    _inspState.record=null;
+    _inspState.patente='';
+    setInspMsg('','');
+    cargarListaReciente();
+  };
+
+  function abrirFormulario(pat,rec){
+    document.getElementById('inspFichaPat').textContent=pat;
+    document.getElementById('inspForm').style.display='block';
+    document.getElementById('inspLista').innerHTML='';
+    // estados badge
+    const estDiv=document.getElementById('inspEstados');
+    if(rec){
+      let html='';
+      if(rec.ingreso) html+='<span style="background:#dcfce7;color:#166534;padding:3px 8px;border-radius:6px;font-weight:700">✅ Ingreso</span>';
+      if(rec.salida)  html+='<span style="background:#dbeafe;color:#1e40af;padding:3px 8px;border-radius:6px;font-weight:700">📤 Salida</span>';
+      estDiv.innerHTML=html;
+    } else { estDiv.innerHTML='<span style="background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:6px;font-weight:700">🆕 Nuevo</span>'; }
+    // elegir modo inicial
+    const modo=(rec&&rec.ingreso&&!rec.salida)?'salida':'ingreso';
+    setInspModo(modo,true);
+  }
+
+  window.setInspModo=function(modo,noFill){
+    _inspState.modo=modo;
+    document.getElementById('btnModoIngreso').style.background=modo==='ingreso'?'var(--ac)':'var(--bg)';
+    document.getElementById('btnModoIngreso').style.color=modo==='ingreso'?'#fff':'var(--ts)';
+    document.getElementById('btnModoIngreso').style.borderColor=modo==='ingreso'?'var(--ac)':'var(--bd)';
+    document.getElementById('btnModoSalida').style.background=modo==='salida'?'#2563eb':'var(--bg)';
+    document.getElementById('btnModoSalida').style.color=modo==='salida'?'#fff':'var(--ts)';
+    document.getElementById('btnModoSalida').style.borderColor=modo==='salida'?'#2563eb':'var(--bd)';
+    document.getElementById('inspModoLabel').textContent=
+      modo==='ingreso'?'📥 Modo INGRESO — registro cuando el vehículo llega':
+                       '📤 Modo SALIDA — registro cuando el vehículo se entrega';
+    if(!noFill) rellenarFormulario(_inspState.record,modo);
+  };
+
+  function rellenarFormulario(rec,modo){
+    const d=(rec&&rec[modo])||{};
+    const set=(id,v)=>{ const el=document.getElementById(id); if(el){ if(el.type==='checkbox') el.checked=!!v; else el.value=v||''; }};
+    // Datos básicos
+    set('iMarca',d.marca); set('iModelo',d.modelo); set('iAnio',d.anio);
+    set('iColor',d.color); set('iKm',d.km); set('iVin',d.vin);
+    set('iTipoIngreso',d.tipoIngreso);
+    set('iFecha',d.fecha||(new Date().toISOString().slice(0,16)));
+    // Documentos
+    ['dPermiso','dRevision','dSoat','dPadron','dFactura','dLlaves','dManual','dRadio'].forEach(id=>set(id,d[id]));
+    set('dLlavesN',d.dLlavesN||1);
+    // Niveles
+    ['nAceite','nRefri','nFreno','nAgua','nBateria'].forEach(id=>set(id,d[id]));
+    setGas(d.gasolina!=null?d.gasolina:'',true);
+    // Maletero
+    ['mRuedaRep','mGato','mTriangulo','mExtintor','mBotiquin'].forEach(id=>set(id,d[id]));
+    // Interior
+    ['intAsientos','intVolante','intCinturones','intAirbags','intAC','intRadio','intAlfombras','intCalefaccion'].forEach(id=>set(id,d[id]));
+    // Exterior
+    ['extLuces','extLucesT','extParabrisas','extEspejos','extNeumaticos','extRallones','extGolpes','extLimpiabrisas'].forEach(id=>set(id,d[id]));
+    // Observaciones
+    set('iObs',d.obs);
+    // Fotos
+    _inspState.fotos=(d.fotos||[]);
+    _inspState.fotosNew=[];
+    renderFotoGrid();
+    // Firma
+    if(d.firma){ document.getElementById('iFirma').value=d.firma; cargarFirmaEnCanvas(d.firma); }
+    else{ limpiarFirma(); }
+  }
+
+  // ── GAUGE GASOLINA ──
+  window.setGas=function(val,silent){
+    document.getElementById('iGasolina').value=val;
+    document.querySelectorAll('.gas-btn').forEach(b=>{
+      b.classList.toggle('selected',b.dataset.val==String(val));
+    });
+  };
+
+  // ── FOTOS ──
+  window.agregarFotos=function(input){
+    const files=Array.from(input.files||[]);
+    if(_inspState.fotosNew.length+files.length>10){ setInspMsg('Máximo 10 fotos','warn'); return; }
+    files.forEach(f=>_inspState.fotosNew.push(f));
+    renderFotoGrid();
+    input.value='';
+  };
+  function renderFotoGrid(){
+    const grid=document.getElementById('inspFotoGrid');
+    if(!grid) return;
+    let html='';
+    // Ya subidas
+    _inspState.fotos.forEach((url,i)=>{
+      html+=`<div class="insp-photo-wrap"><img src="${url}" class="insp-photo-thumb"><button class="insp-photo-del" onclick="delFotoSubida(${i})">✕</button></div>`;
+    });
+    // Nuevas (preview)
+    _inspState.fotosNew.forEach((f,i)=>{
+      const objUrl=URL.createObjectURL(f);
+      html+=`<div class="insp-photo-wrap"><img src="${objUrl}" class="insp-photo-thumb"><button class="insp-photo-del" onclick="delFotoNew(${i})">✕</button></div>`;
+    });
+    grid.innerHTML=html;
+  }
+  window.delFotoSubida=function(i){ _inspState.fotos.splice(i,1); renderFotoGrid(); };
+  window.delFotoNew=function(i){ _inspState.fotosNew.splice(i,1); renderFotoGrid(); };
+
+  // ── CANVAS FIRMA ──
+  function initCanvas(){
+    const c=document.getElementById('inspCanvas'); if(!c) return;
+    const ctx=c.getContext('2d');
+    let drawing=false, lastX=0, lastY=0;
+    function pos(e){
+      const rect=c.getBoundingClientRect();
+      const scX=c.width/rect.width, scY=c.height/rect.height;
+      if(e.touches){ return{x:(e.touches[0].clientX-rect.left)*scX,y:(e.touches[0].clientY-rect.top)*scY}; }
+      return{x:(e.clientX-rect.left)*scX,y:(e.clientY-rect.top)*scY};
+    }
+    function start(e){ e.preventDefault(); drawing=true; const p=pos(e); lastX=p.x; lastY=p.y; }
+    function move(e){ e.preventDefault(); if(!drawing) return; const p=pos(e); ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.strokeStyle='#1e293b'; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.stroke(); lastX=p.x; lastY=p.y; }
+    function end(e){ drawing=false; document.getElementById('iFirma').value=c.toDataURL(); }
+    c.addEventListener('mousedown',start); c.addEventListener('mousemove',move); c.addEventListener('mouseup',end);
+    c.addEventListener('touchstart',start,{passive:false}); c.addEventListener('touchmove',move,{passive:false}); c.addEventListener('touchend',end);
+  }
+  window.limpiarFirma=function(){ const c=document.getElementById('inspCanvas'); if(!c) return; c.getContext('2d').clearRect(0,0,c.width,c.height); document.getElementById('iFirma').value=''; };
+  function cargarFirmaEnCanvas(dataUrl){ const c=document.getElementById('inspCanvas'); if(!c||!dataUrl) return; const img=new Image(); img.onload=()=>c.getContext('2d').drawImage(img,0,0); img.src=dataUrl; }
+
+  // ── GUARDAR ──
+  window.guardarInspeccion=async function(){
+    const pat=_inspState.patente;
+    if(!pat){ setInspMsg('Selecciona una patente primero','warn'); return; }
+    const btn=document.getElementById('btnGuardarInsp');
+    const msg=document.getElementById('inspSaveMsg');
+    btn.disabled=true; btn.textContent='Guardando...'; msg.textContent='';
+    try{
+      // 1. Subir fotos nuevas
+      let urlsSubidas=[];
+      if(_inspState.fotosNew.length){
+        const fd=new FormData();
+        _inspState.fotosNew.forEach(f=>fd.append('fotos',f));
+        const r=await fetch('/api/inspecciones/upload',{method:'POST',headers:{'X-Auth-Token':localStorage.getItem('authToken')||''},body:fd});
+        const j=await r.json();
+        if(j.error) throw new Error(j.error);
+        urlsSubidas=j.urls||[];
+      }
+      const todasFotos=[..._inspState.fotos,...urlsSubidas];
+      // 2. Leer valores
+      const g=(id)=>document.getElementById(id)?.value||'';
+      const gc=(id)=>!!(document.getElementById(id)?.checked);
+      const body={
+        modo:_inspState.modo,
+        marca:g('iMarca'),modelo:g('iModelo'),anio:g('iAnio'),color:g('iColor'),
+        km:g('iKm'),vin:g('iVin'),tipoIngreso:g('iTipoIngreso'),fecha:g('iFecha'),
+        // documentos
+        dPermiso:gc('dPermiso'),dRevision:gc('dRevision'),dSoat:gc('dSoat'),
+        dPadron:gc('dPadron'),dFactura:gc('dFactura'),dLlaves:gc('dLlaves'),
+        dLlavesN:g('dLlavesN'),dManual:gc('dManual'),dRadio:gc('dRadio'),
+        // niveles
+        nAceite:gc('nAceite'),nRefri:gc('nRefri'),nFreno:gc('nFreno'),
+        nAgua:gc('nAgua'),nBateria:gc('nBateria'),
+        gasolina:g('iGasolina'),
+        // maletero
+        mRuedaRep:gc('mRuedaRep'),mGato:gc('mGato'),mTriangulo:gc('mTriangulo'),
+        mExtintor:gc('mExtintor'),mBotiquin:gc('mBotiquin'),
+        // interior
+        intAsientos:gc('intAsientos'),intVolante:gc('intVolante'),
+        intCinturones:gc('intCinturones'),intAirbags:gc('intAirbags'),
+        intAC:gc('intAC'),intRadio:gc('intRadio'),
+        intAlfombras:gc('intAlfombras'),intCalefaccion:gc('intCalefaccion'),
+        // exterior
+        extLuces:gc('extLuces'),extLucesT:gc('extLucesT'),
+        extParabrisas:gc('extParabrisas'),extEspejos:gc('extEspejos'),
+        extNeumaticos:gc('extNeumaticos'),extRallones:gc('extRallones'),
+        extGolpes:gc('extGolpes'),extLimpiabrisas:gc('extLimpiabrisas'),
+        // otros
+        obs:g('iObs'),firma:g('iFirma'),fotos:todasFotos
+      };
+      const res=await apiFetch('/api/inspecciones/'+pat,{method:'PUT',body:JSON.stringify(body)});
+      if(res.error) throw new Error(res.error);
+      _inspState.record=res.record;
+      _inspState.fotos=todasFotos;
+      _inspState.fotosNew=[];
+      renderFotoGrid();
+      // actualizar badges
+      const estDiv=document.getElementById('inspEstados');
+      let ebadge='';
+      if(res.record.ingreso) ebadge+='<span style="background:#dcfce7;color:#166534;padding:3px 8px;border-radius:6px;font-weight:700">✅ Ingreso</span>';
+      if(res.record.salida)  ebadge+='<span style="background:#dbeafe;color:#1e40af;padding:3px 8px;border-radius:6px;font-weight:700">📤 Salida</span>';
+      estDiv.innerHTML=ebadge;
+      msg.textContent='✅ Guardado exitosamente';
+      msg.style.color='#16a34a';
+      setTimeout(()=>{msg.textContent='';},3000);
+    }catch(e){
+      msg.textContent='❌ '+e.message;
+      msg.style.color='#dc2626';
+    }finally{
+      btn.disabled=false; btn.textContent='💾 Guardar Inspección';
+    }
+  };
+
+  // ── LISTA RECIENTE ──
+  async function cargarListaReciente(){
+    const cont=document.getElementById('inspLista');
+    if(!cont) return;
+    cont.innerHTML='<div style="font-size:12.5px;color:var(--tm)">Cargando inspecciones recientes...</div>';
+    try{
+      const list=await apiFetch('/api/inspecciones');
+      if(!list||!list.length){ cont.innerHTML='<div style="font-size:12.5px;color:var(--tm)">No hay inspecciones registradas aún.</div>'; return; }
+      const sorted=list.slice().sort((a,b)=>new Date(b.updatedAt||0)-new Date(a.updatedAt||0)).slice(0,20);
+      cont.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--ts);margin-bottom:8px">Últimas inspecciones</div>'+
+        '<div style="display:flex;flex-direction:column;gap:6px">'+
+        sorted.map(r=>`
+          <div onclick="cargarInspeccionDirecta('${r.patente}')"
+            style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--p);border:1px solid var(--bd);border-radius:10px;cursor:pointer;gap:8px">
+            <span style="font-size:15px;font-weight:800;letter-spacing:.07em;color:var(--ac)">${r.patente}</span>
+            <span style="font-size:12px;color:var(--ts);flex:1">${(r.ingreso?.marca||'')+' '+(r.ingreso?.modelo||'')}</span>
+            <div style="display:flex;gap:4px">
+              ${r.ingreso?'<span style="background:#dcfce7;color:#166534;padding:2px 7px;border-radius:5px;font-size:11px;font-weight:700">I</span>':''}
+              ${r.salida ?'<span style="background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:5px;font-size:11px;font-weight:700">S</span>':''}
+            </div>
+          </div>`).join('')+
+        '</div>';
+    }catch(e){ cont.innerHTML='<div style="font-size:12px;color:var(--tm)">No se pudo cargar la lista.</div>'; }
+  }
+
+  window.cargarInspeccionDirecta=function(pat){
+    const inp=document.getElementById('inspPatente');
+    if(inp) inp.value=pat;
+    buscarInspeccion();
+  };
+
+  // ── HELPERS ──
+  function setInspMsg(text,tipo){
+    const el=document.getElementById('inspMsg');
+    if(!el) return;
+    if(!text){ el.style.display='none'; el.textContent=''; return; }
+    el.style.display='block';
+    el.textContent=text;
+    el.style.background=tipo==='error'?'#fef2f2':tipo==='warn'?'#fffbeb':'#eff6ff';
+    el.style.color=tipo==='error'?'#dc2626':tipo==='warn'?'#92400e':'#1e40af';
+    el.style.border=tipo==='error'?'1px solid #fca5a5':tipo==='warn'?'1px solid #fcd34d':'1px solid #93c5fd';
+  }
+
+  async function apiFetch(url,opts){
+    const token=localStorage.getItem('authToken')||'';
+    const res=await fetch(url,{headers:{'Content-Type':'application/json','X-Auth-Token':token},...opts});
+    return res.json();
+  }
+
+  // ── Inicialización cuando se activa la pestaña ──
+  document.addEventListener('DOMContentLoaded',()=>{
+    initCanvas();
+    // Observar cuando se muestra la sección
+    const obs=new MutationObserver(()=>{
+      const sec=document.getElementById('view-inspeccion');
+      if(sec&&sec.classList.contains('active')&&!_inspState.patente){
+        cargarListaReciente();
+      }
+    });
+    const sec=document.getElementById('view-inspeccion');
+    if(sec) obs.observe(sec,{attributes:true,attributeFilter:['class']});
+  });
+})();
+</script>
+
 <section id="view-config" class="view">
 <div class="st">⚙️ Configuración</div>
 <div class="cfs"><h3>🏢 Empresa</h3><div class="cfg"><div><label class="cfl">Nombre del negocio</label><input class="cfi" id="cfgN" placeholder="RMG Autos"></div><div><label class="cfl">Color acento</label><input type="color" class="cfi" id="cfgC" value="#3b82f6" style="padding:4px;height:36px;cursor:pointer"></div></div><div style="margin-top:12px"><label class="cfl">Clave de acceso (modifica para cambiar contraseña global)</label><div style="display:flex;gap:8px;align-items:center"><input class="cfi" id="cfgClave" type="password" placeholder="Nueva clave (dejar vacío para no cambiar)" style="flex:1"><button type="button" onclick="toggleClave()" style="background:var(--p2);border:1px solid var(--bd);color:var(--tm);padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px">👁</button></div></div><div class="ca" style="margin-top:12px"><button class="bp" id="cfgSB">Guardar Empresa</button></div></div>
@@ -2575,6 +3132,7 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
           <div style="display:flex; gap:6px;">
             <button onclick="saveTiFields('${lead.id}')" style="flex:1; background:var(--ac); color:#fff; border:none; padding:6px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">💾 Guardar</button>
             <button onclick="solicitarTasacion('${lead.id}')" style="flex:1.5; background:#8b5cf6; color:#fff; border:none; padding:6px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">🔧 Solicitar Tasación</button>
+            ${ti.plate ? `<button onclick="abrirInspeccionConPatente('${ti.plate}')" style="flex:1.2;background:#0369a1;color:#fff;border:none;padding:6px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:bold;">🔍 Ver Inspección</button>` : ''}
           </div>
           ${ti.offer ? `
           <div style="margin-top:8px;padding:8px 10px;background:#dc262622;border:1px solid #dc2626;border-radius:6px;">
@@ -2744,7 +3302,7 @@ $('btnResumen').addEventListener('click',async()=>{
 const ST_COMPRA_LIBRE=['Evaluando','Peritaje','Negociando Compra','Oferta Lanzada','Comprado','Descartado'];
 $('mSv').addEventListener('click',async()=>{if(!S.mid)return;const btn=$('mSv');btn.disabled=true;btn.textContent='…';try{const l=findLead(S.mid);const st=$('mSt').value;const note=$('mNt').value.trim();const payload={}; if(st&&st!==l?.status) { const esCambioPipelineCompras=ST_COMPRA_LIBRE.includes(st); if(!esCambioPipelineCompras){ if(!note){toast('⚠️ OBLIGATORIO: Escribe una leyenda en la bitácora', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} const aT=$('agendaText').value.trim(), aD=$('agendaDate').value; if(!aT || !aD){toast('⚠️ OBLIGATORIO: Agenda una tarea (fecha/hora)', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} } if(st==='Abandonado'){const ar=$('mAbandonReason').value; if(!ar){toast('⚠️ OBLIGATORIO: Selecciona el Motivo de Abandono', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} payload.abandonReason=ar;} payload.status=st; }if(S.user&&(S.user.role==='admin'||S.user.role==='supervisor')){var _a=$('mAssign');if(_a&&_a.value&&_a.value!==l?.assignedTo)payload.assignedTo=_a.value;}if(note)payload.note=note;if(!Object.keys(payload).length){toast('Sin cambios');btn.disabled=false;btn.textContent='Guardar cambios';return;}await api('PATCH','/api/leads/'+S.mid,payload);$('mNt').value='';toast('Lead actualizado ✓');await refresh();renderModal();}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='Guardar cambios';}});
 function loadBI(t){const f=document.getElementById('biFr');const b1=document.getElementById('biT1');const b2=document.getElementById('biT2');if(!f)return;if(t==='mapa'){f.src='/mapa_zonas_v4.html';if(b1){b1.style.color='#6d28d9';b1.style.borderBottomColor='#6d28d9';}if(b2){b2.style.color='#888';b2.style.borderBottomColor='transparent';}}else{f.src='/agente_precios.html';if(b2){b2.style.color='#6d28d9';b2.style.borderBottomColor='#6d28d9';}if(b1){b1.style.color='#888';b1.style.borderBottomColor='transparent';}}}
-document.querySelectorAll('.sb nav button').forEach(btn=>{btn.addEventListener('click',async()=>{const view=btn.dataset.view;document.querySelectorAll('.sb nav button').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));btn.classList.add('active');$('view-'+view).classList.add('active');S.view=view;$('mainTb').style.display=view==='config'?'none':'';if(view==='bi'){loadBI('mapa');}else if(view==='analisis'){initAnalisisIA();}else if(view==='auditoria'){initAuditoria();}else if(view==='reporte'){initReporte();}else if(view==='config'){await loadConfig();await loadUsers();loadBackups();}else if(view==='inventario'){await renderInventario();}});});
+document.querySelectorAll('.sb nav button').forEach(btn=>{btn.addEventListener('click',async()=>{const view=btn.dataset.view;document.querySelectorAll('.sb nav button').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));btn.classList.add('active');$('view-'+view).classList.add('active');S.view=view;$('mainTb').style.display=view==='config'?'none':'';if(view==='bi'){loadBI('mapa');}else if(view==='analisis'){initAnalisisIA();}else if(view==='auditoria'){initAuditoria();}else if(view==='reporte'){initReporte();}else if(view==='config'){await loadConfig();await loadUsers();loadBackups();}else if(view==='inspeccion'){cargarListaReciente();}else if(view==='inventario'){await renderInventario();}});});
 // ── REPORTE DE LEADS ─────────────────────────────────────────────────────
 var _rpRange = 'semana';
 var _rpBtnMap = {semana:'rpFSem', mes:'rpFMes', custom:'rpFPers'};
