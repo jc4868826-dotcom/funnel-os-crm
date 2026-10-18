@@ -1197,13 +1197,7 @@ async function ejecutarAnalisisIA(){
 
   // ── Navegación a la pestaña ──
   window.abrirInspeccionConPatente=function(patente){
-    const btn=document.querySelector('.sb nav button[data-view="inspeccion"]');
-    if(btn) btn.click();
-    if(patente){
-      const inp=document.getElementById('inspPatente');
-      if(inp){ inp.value=patente.toUpperCase(); }
-      setTimeout(()=>buscarInspeccion(),200);
-    }
+    abrirModalInspeccion(patente);
   };
 
   // ── Buscar patente ──
