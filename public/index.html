@@ -976,7 +976,8 @@ async function ejecutarAnalisisIA(){
         📤 SALIDA</button>
     </div>
   </div>
-  <div id="inspModoLabel" style="font-size:11px;color:var(--tm);margin-bottom:12px"></div>
+  <div id="inspModoLabel" style="font-size:11px;color:var(--tm);margin-bottom:8px"></div>
+  <div id="inspSalidaBanner" style="display:none;margin-bottom:12px;padding:8px 12px;background:#fef3c7;border:1px solid #d97706;border-radius:7px;font-size:12px;color:#92400e;"></div>
 
   <!-- ── SECCIÓN: DATOS BÁSICOS ── -->
   <details class="insp-sec" open>
@@ -1343,7 +1344,21 @@ async function ejecutarAnalisisIA(){
   };
 
   function rellenarFormulario(rec,modo){
-    const d=(rec&&rec[modo])||{};
+    // En modo Salida sin datos guardados aún, pre-cargar Ingreso como referencia
+    const tieneSalida=rec&&rec.salida&&Object.keys(rec.salida).length>2;
+    const base=(modo==='salida'&&!tieneSalida&&rec&&rec.ingreso)?rec.ingreso:{};
+    const d=(rec&&rec[modo]&&Object.keys(rec[modo]).length>2)?rec[modo]:base;
+    // Banner de referencia cuando se pre-cargan datos del ingreso
+    const banner=document.getElementById('inspSalidaBanner');
+    if(banner){
+      if(modo==='salida'&&!tieneSalida&&rec&&rec.ingreso){
+        banner.style.display='block';
+        banner.innerHTML='⚠️ <strong>Pre-cargado desde Ingreso</strong> — revisa y corrige lo que cambió antes de guardar la Salida.';
+      } else {
+        banner.style.display='none';
+        banner.innerHTML='';
+      }
+    }
     const set=(id,v)=>{ const el=document.getElementById(id); if(el){ if(el.type==='checkbox') el.checked=!!v; else el.value=v||''; }};
     // Datos básicos
     set('iMarca',d.marca); set('iModelo',d.modelo); set('iAnio',d.anio);
