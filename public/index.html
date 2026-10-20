@@ -1360,7 +1360,7 @@ async function ejecutarAnalisisIA(){
       if(_inspState.fotosNew.length){
         const fd=new FormData();
         _inspState.fotosNew.forEach(f=>fd.append('fotos',f));
-        const r=await fetch('/api/inspecciones/upload',{method:'POST',headers:{'X-Auth-Token':localStorage.getItem('authToken')||''},body:fd});
+        const r=await fetch('/api/inspecciones/upload',{method:'POST',headers:{'X-Auth-Token':(typeof S!=='undefined'&&S.token)||localStorage.getItem('fos_token')||''},body:fd});
         const j=await r.json();
         if(j.error) throw new Error(j.error);
         urlsSubidas=j.urls||[];
@@ -1463,8 +1463,8 @@ async function ejecutarAnalisisIA(){
     el.style.border=tipo==='error'?'1px solid #fca5a5':tipo==='warn'?'1px solid #fcd34d':'1px solid #93c5fd';
   }
 
-  async function apiFetch(url,opts){
-    const token=localStorage.getItem('authToken')||'';
+  async async function apiFetch(url,opts){
+    const token=(typeof S!=='undefined'&&S.token)||localStorage.getItem('fos_token')||'';
     const res=await fetch(url,{headers:{'Content-Type':'application/json','X-Auth-Token':token},...opts});
     return res.json();
   }
