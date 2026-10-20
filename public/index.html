@@ -703,7 +703,7 @@ async function ejecutarAnalisisIA(){
 </div>
 <div id="av" class="app" style="display:none">
 <aside class="sb"><h1 id="bizName">FunnelOS</h1><div class="who" id="uBadge">—</div><nav><button class="active" data-view="dashboard">📊 Operación</button><button data-view="leads">📋 Leads</button><button data-view="chileautos" id="navCA" style="background:#e8f5e9;color:#2e7d32;font-weight:700">🏷 Chileautos</button><button data-view="espera-general" id="navEG" style="background:#ede9fe;color:#6d28d9;font-weight:700;display:none">⏳ En Espera</button><button data-view="compras" id="navCompras" style="background:#fff7ed;color:#d97706;font-weight:700">🛍 Compras RMG</button><button data-view="rmgparts" id="navRmgParts" style="background:#fef3c7;color:#b45309;font-weight:700">🛢 RMG Parts</button>
-<button data-view="pipeline">🗂 Pipeline</button><button data-view="analytics" id="navA">📈 Analítica</button><button data-view="team" id="navT">👥 Equipo</button><button data-view="inventario" id="navInv">🚗 Inventario</button><button data-view="bi" id="navBI" style="background:linear-gradient(135deg,#1a1a2e,#16213e);color:#a78bfa;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🧠 BI</button><button data-view="analisis" id="navAnalisis" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🔍 Análisis IA</button><button data-view="auditoria" id="navAuditoria" style="background:linear-gradient(135deg,#0f766e,#0891b2);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🔍 Auditoría</button><button data-view="reporte" id="navReporte" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">📊 Reporte</button><button id="navEntrega" onclick="window.open('https://claude.ai/artifact/Sdz33CKVhK7HS3EeKQbMyF','_blank')" style="background:linear-gradient(135deg,#065f46,#047857);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">📋 Entrega/Recep.</button><button data-view="inspeccion" id="navInspeccion" style="background:linear-gradient(135deg,#0369a1,#0284c7);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🚗 Inspección</button><button data-view="config" id="navC">⚙️ Config</button></nav><button onclick="syncInventario()" style="margin-top:6px;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:8px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" id="btnSyncInv">🔄 Sync RMG</button>
+<button data-view="pipeline">🗂 Pipeline</button><button data-view="analytics" id="navA">📈 Analítica</button><button data-view="team" id="navT">👥 Equipo</button><button data-view="inventario" id="navInv">🚗 Inventario</button><button data-view="bi" id="navBI" style="background:linear-gradient(135deg,#1a1a2e,#16213e);color:#a78bfa;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🧠 BI</button><button data-view="analisis" id="navAnalisis" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🔍 Análisis IA</button><button data-view="auditoria" id="navAuditoria" style="background:linear-gradient(135deg,#0f766e,#0891b2);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🔍 Auditoría</button><button data-view="reporte" id="navReporte" style="background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">📊 Reporte</button><button data-view="inspeccion" id="navInspeccion" style="background:linear-gradient(135deg,#0369a1,#0284c7);color:#fff;border:none;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px;font-family:inherit">🚗 Inspección</button><button data-view="config" id="navC">⚙️ Config</button></nav><button onclick="syncInventario()" style="margin-top:6px;width:100%;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:8px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" id="btnSyncInv">🔄 Sync RMG</button>
 <button id="btnInstallApp" onclick="installApp()" style="display:none;margin-top:8px;background:linear-gradient(135deg,#D4A843,#F2C955);color:#0f172a;border:none;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;align-items:center;gap:6px;letter-spacing:.04em">📲 Instalar App</button>
 <button class="lout" id="loutB">Cerrar sesión</button></aside>
 <main class="mn">
@@ -976,8 +976,7 @@ async function ejecutarAnalisisIA(){
         📤 SALIDA</button>
     </div>
   </div>
-  <div id="inspModoLabel" style="font-size:11px;color:var(--tm);margin-bottom:8px"></div>
-  <div id="inspSalidaBanner" style="display:none;margin-bottom:12px;padding:8px 12px;background:#fef3c7;border:1px solid #d97706;border-radius:7px;font-size:12px;color:#92400e;"></div>
+  <div id="inspModoLabel" style="font-size:11px;color:var(--tm);margin-bottom:12px"></div>
 
   <!-- ── SECCIÓN: DATOS BÁSICOS ── -->
   <details class="insp-sec" open>
@@ -1324,9 +1323,10 @@ async function ejecutarAnalisisIA(){
       if(rec.salida)  html+='<span style="background:#dbeafe;color:#1e40af;padding:3px 8px;border-radius:6px;font-weight:700">📤 Salida</span>';
       estDiv.innerHTML=html;
     } else { estDiv.innerHTML='<span style="background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:6px;font-weight:700">🆕 Nuevo</span>'; }
-    // elegir modo inicial
+    // elegir modo inicial y rellenar (siempre, para activar pre-carga de ingreso→salida)
     const modo=(rec&&rec.ingreso&&!rec.salida)?'salida':'ingreso';
     setInspModo(modo,true);
+    rellenarFormulario(rec,modo);
   }
 
   window.setInspModo=function(modo,noFill){
@@ -1344,21 +1344,7 @@ async function ejecutarAnalisisIA(){
   };
 
   function rellenarFormulario(rec,modo){
-    // En modo Salida sin datos guardados aún, pre-cargar Ingreso como referencia
-    const tieneSalida=rec&&rec.salida&&Object.keys(rec.salida).length>2;
-    const base=(modo==='salida'&&!tieneSalida&&rec&&rec.ingreso)?rec.ingreso:{};
-    const d=(rec&&rec[modo]&&Object.keys(rec[modo]).length>2)?rec[modo]:base;
-    // Banner de referencia cuando se pre-cargan datos del ingreso
-    const banner=document.getElementById('inspSalidaBanner');
-    if(banner){
-      if(modo==='salida'&&!tieneSalida&&rec&&rec.ingreso){
-        banner.style.display='block';
-        banner.innerHTML='⚠️ <strong>Pre-cargado desde Ingreso</strong> — revisa y corrige lo que cambió antes de guardar la Salida.';
-      } else {
-        banner.style.display='none';
-        banner.innerHTML='';
-      }
-    }
+    const d=(rec&&rec[modo])||{};
     const set=(id,v)=>{ const el=document.getElementById(id); if(el){ if(el.type==='checkbox') el.checked=!!v; else el.value=v||''; }};
     // Datos básicos
     set('iMarca',d.marca); set('iModelo',d.modelo); set('iAnio',d.anio);
