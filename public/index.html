@@ -956,6 +956,9 @@ async function ejecutarAnalisisIA(){
 <!-- Lista de inspecciones recientes (visible cuando no hay patente activa) -->
 <div id="inspLista" style="margin-bottom:12px"></div>
 
+<!-- Lead asociado a esta patente -->
+<div id="inspLeadAsociado" style="display:none;margin-bottom:10px;padding:10px 12px;background:var(--p3);border:1px solid var(--bd);border-radius:8px;font-size:12px;"></div>
+
 <!-- Formulario ficha -->
 <div id="inspForm" style="display:none">
   <!-- Header patente + toggle modo -->
@@ -1195,27 +1198,56 @@ async function ejecutarAnalisisIA(){
     canvasDrawing:false
   };
 
-  // ── Navegación a la pestaña ──
+  // ── Modal flotante de Inspección (no navega, se sobrepone) ──
   window.abrirInspeccionConPatente=function(patente){
-    if(!patente||!patente.trim()){alert('Ingresa la patente del vehículo primero');return;}
-    abrirModalInspeccion(patente.trim().toUpperCase());
-  };
+    const pat=(patente||'').toUpperCase().replace(/\s/g,'');
+    // Si ya existe el overlay, solo actualizamos la patente
+    let overlay=document.getElementById('inspModalOverlay');
+    if(overlay){ overlay.remove(); }
 
-  // ── Badge de inspección en el modal del lead ──
-  window.cargarBadgeInspeccion=async function(plate,containerId){
-    const el=document.getElementById(containerId);
-    if(!el||!plate) return;
-    try{
-      const r=await apiFetch('/api/inspecciones/by-plate/'+plate.toUpperCase().replace(/\s/g,''));
-      if(!r.exists){
-        el.innerHTML='<span style="font-size:10.5px;color:var(--tm);background:var(--p3);padding:3px 8px;border-radius:5px;display:inline-block">🔍 Sin inspección registrada para '+plate.toUpperCase()+'</span>';
-      } else {
-        let badges='';
-        if(r.hasIngreso) badges+='<span style="background:#dcfce7;color:#166534;padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700;margin-right:4px">✅ Ingreso registrado</span>';
-        if(r.hasSalida)  badges+='<span style="background:#dbeafe;color:#1e40af;padding:3px 8px;border-radius:5px;font-size:10.5px;font-weight:700">📤 Salida registrada</span>';
-        el.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">'+badges+'</div>';
-      }
-    }catch(e){ /* silencioso */ }
+    overlay=document.createElement('div');
+    overlay.id='inspModalOverlay';
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9900;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+    // Clonar la vista de inspección
+    const src=document.getElementById('view-inspeccion');
+    const box=document.createElement('div');
+    box.style.cssText='background:var(--p2);border-radius:14px;width:min(700px,100%);max-height:90vh;overflow-y:auto;padding:20px;position:relative;';
+
+    // Botón cerrar
+    const closeBtn=document.createElement('button');
+    closeBtn.innerHTML='✕';
+    closeBtn.style.cssText='position:absolute;top:10px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--tx);z-index:1;';
+    closeBtn.onclick=function(){ document.getElementById('inspModalOverlay').remove(); };
+    box.appendChild(closeBtn);
+
+    // Título
+    const title=document.createElement('h3');
+    title.textContent='🔍 Inspección de Vehículo';
+    title.style.cssText='margin:0 0 14px 0;font-size:16px;color:var(--tx);padding-right:30px;';
+    box.appendChild(title);
+
+    // Clonar solo el contenido interno (sin el .st header de la pestaña)
+    if(src){
+      Array.from(src.children).forEach(child=>{
+        if(child.classList&&child.classList.contains('st')) return;
+        const cl=child.cloneNode(true);
+        box.appendChild(cl);
+      });
+    }
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    // Cerrar con clic en fondo
+    overlay.addEventListener('click',function(e){ if(e.target===overlay) overlay.remove(); });
+
+    // Buscar la patente si se indicó
+    if(pat){
+      const inp=document.getElementById('inspPatente');
+      if(inp){ inp.value=pat; }
+      setTimeout(()=>{ if(typeof buscarInspeccion==='function') buscarInspeccion(); },150);
+    }
   };
 
   // ── Buscar patente ──
@@ -1243,6 +1275,8 @@ async function ejecutarAnalisisIA(){
     document.getElementById('inspPatente').value='';
     document.getElementById('inspForm').style.display='none';
     document.getElementById('inspLista').innerHTML='';
+    const ld=document.getElementById('inspLeadAsociado');
+    if(ld){ ld.style.display='none'; ld.innerHTML=''; }
     _inspState.record=null;
     _inspState.patente='';
     setInspMsg('','');
@@ -1253,6 +1287,34 @@ async function ejecutarAnalisisIA(){
     document.getElementById('inspFichaPat').textContent=pat;
     document.getElementById('inspForm').style.display='block';
     document.getElementById('inspLista').innerHTML='';
+    // Buscar lead asociado a esta patente
+    (async()=>{
+      const leadDiv=document.getElementById('inspLeadAsociado');
+      if(!leadDiv) return;
+      try{
+        const res=await apiFetch('/api/leads');
+        const arr=Array.isArray(res)?res:(res.leads||[]);
+        const match=arr.find(l=>l.tradeIn&&(l.tradeIn.plate||'').toUpperCase().replace(/\s/g,'')===(pat||'').toUpperCase().replace(/\s/g,''));
+        if(match){
+          const nombre=match.nombre||match.name||'Lead sin nombre';
+          const tel=match.telefono||match.phone||match.tel||'';
+          const estado=match.estado||match.status||'';
+          leadDiv.style.display='block';
+          leadDiv.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <div>
+              <span style="font-weight:700;color:var(--tx);">👤 Lead asociado:</span>
+              <span style="color:var(--ac);font-weight:600;margin-left:6px;">${nombre}</span>
+              ${tel?`<span style="color:var(--tm);margin-left:8px;">📞 ${tel}</span>`:''}
+              ${estado?`<span style="margin-left:8px;background:var(--p2);padding:2px 7px;border-radius:4px;font-size:11px;color:var(--ts);">${estado}</span>`:''}
+            </div>
+            <button onclick="abrirFichaLead&&abrirFichaLead('${match.id}')" style="padding:4px 10px;background:#0369a1;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:bold;cursor:pointer;">Ver ficha</button>
+          </div>`;
+        } else {
+          leadDiv.style.display='none';
+          leadDiv.innerHTML='';
+        }
+      }catch(e){ leadDiv.style.display='none'; }
+    })();
     // estados badge
     const estDiv=document.getElementById('inspEstados');
     if(rec){
@@ -1669,7 +1731,7 @@ async function ejecutarAnalisisIA(){
 <div class="ca2">
 <div><h4>Control IA</h4><div class="btw"><div class="btl"><span>🤖</span><span>Cata IA</span></div><div style="display:flex;align-items:center;gap:8px"><span class="bst" id="bTxt">ON</span><label class="bsw"><input type="checkbox" id="bChk" checked><span class="bsl"></span></label></div></div></div>
 <div><h4>Estado</h4><select id="mSt"></select></div>
-<div id="mAbandonBlock" style="display:none;background:#fef2f2;border:2px solid #ef4444;border-radius:9px;padding:10px 12px"><h4 style="color:#dc2626;margin-bottom:6px">⚠️ Motivo de Abandono <span style="font-size:11px;font-weight:400">(obligatorio)</span></h4><select id="mAbandonReason" style="width:100%;padding:8px 10px;background:#fff;border:1.5px solid #ef4444;color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
+<div id="mAbandonBlock" style="display:none"><h4>Motivo de Abandono</h4><select id="mAbandonReason" style="width:100%;padding:8px 10px;background:var(--p2);border:1px solid var(--bd);color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
 <div id="mAssignBlock" style="display:none"><h4>Reasignar a <span style="font-size:10px;background:var(--as);color:var(--ac);padding:2px 6px;border-radius:4px;font-weight:700">ADMIN</span></h4><select id="mAssign" style="width:100%;padding:8px 10px;background:var(--p2);border:1px solid var(--bd);color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
 <div>
   <h4>Notas internas</h4>
@@ -1972,14 +2034,13 @@ const ABANDON_REASONS=[
 ];
 function _abandonReasonLabel(key){const r=ABANDON_REASONS.find(x=>x.key===key);return r?r.label:(key?esc(key):'Sin motivo registrado');}
 // Muestra/oculta y llena el selector de Motivo de Abandono en la ficha del lead, según el estado elegido en #mSt.
-function renderAbandonReasonBlock(l,autoScroll){
+function renderAbandonReasonBlock(l){
   const st=$('mSt')?.value;
   const block=$('mAbandonBlock'),sel=$('mAbandonReason');
   if(!block||!sel)return;
   if(st==='Abandonado'){
     block.style.display='block';
     sel.innerHTML='<option value="">— Selecciona un motivo —</option>'+ABANDON_REASONS.map(r=>`<option value="${r.key}" ${l.abandonReason===r.key?'selected':''}>${esc(r.label)}</option>`).join('');
-    if(autoScroll){setTimeout(()=>{block.scrollIntoView({behavior:'smooth',block:'nearest'});sel.focus();},80);}
   }else{
     block.style.display='none';
   }
@@ -3099,7 +3160,7 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
   }
   $('mSt').innerHTML=html;
   renderAbandonReasonBlock(l);
-  $('mSt').onchange=function(){renderAbandonReasonBlock(l,true);};
+  $('mSt').onchange=function(){renderAbandonReasonBlock(l);};
 })();const bOn=l.botActive!==false;$('bChk').checked=bOn;$('bTxt').textContent=bOn?'ON':'OFF';$('bTxt').className='bst '+(bOn?'on':'of');$('aMsg').value=''; const isW=(l.status==='esperando_respuesta_chileautos'||l.status==='esperando_respuesta_general'); const cR=isW&&l.chatHistory?.some(m=>m.role==='user'); const blk=isW&&!cR; $('aMsg').disabled=blk; $('aSnd').disabled=blk; $('aMsg').placeholder=blk?'⏳ Bloqueado: Esperando respuesta...':'Escribe un mensaje...';
   renderAgendaDetails(l);
   renderModalCtx(l);renderModalChat(l);renderModalNotes(l);
@@ -3144,10 +3205,8 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
           <div style="display:flex; gap:6px;">
             <button onclick="saveTiFields('${lead.id}')" style="flex:1; background:var(--ac); color:#fff; border:none; padding:6px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">💾 Guardar</button>
             <button onclick="solicitarTasacion('${lead.id}')" style="flex:1.5; background:#8b5cf6; color:#fff; border:none; padding:6px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">🔧 Solicitar Tasación</button>
-            <button onclick="abrirInspeccionConPatente(document.getElementById('ti-plate').value||'${ti.plate||''}')" style="flex:1.2;background:#0369a1;color:#fff;border:none;padding:6px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:bold;">🔍 Ver Inspección</button>
+            <button onclick="abrirInspeccionConPatente((document.getElementById('ti-plate')||{}).value||'')" style="flex:1.2;background:#0369a1;color:#fff;border:none;padding:6px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:bold;">🔍 Ver Inspección</button>
           </div>
-          <div id="inspBadgeModal" style="margin-top:6px;min-height:20px;"></div>
-          ${ti.plate ? `<script>cargarBadgeInspeccion('${ti.plate}','inspBadgeModal');<\/script>` : ''}
           ${ti.offer ? `
           <div style="margin-top:8px;padding:8px 10px;background:#dc262622;border:1px solid #dc2626;border-radius:6px;">
             <span style="color:#dc2626;font-size:12px;font-weight:bold;">💰 Precio de Toma: ${offerFmt}</span>
@@ -3316,7 +3375,7 @@ $('btnResumen').addEventListener('click',async()=>{
 const ST_COMPRA_LIBRE=['Evaluando','Peritaje','Negociando Compra','Oferta Lanzada','Comprado','Descartado'];
 $('mSv').addEventListener('click',async()=>{if(!S.mid)return;const btn=$('mSv');btn.disabled=true;btn.textContent='…';try{const l=findLead(S.mid);const st=$('mSt').value;const note=$('mNt').value.trim();const payload={}; if(st&&st!==l?.status) { const esCambioPipelineCompras=ST_COMPRA_LIBRE.includes(st); if(!esCambioPipelineCompras){ if(!note){toast('⚠️ OBLIGATORIO: Escribe una leyenda en la bitácora', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} const aT=$('agendaText').value.trim(), aD=$('agendaDate').value; if(!aT || !aD){toast('⚠️ OBLIGATORIO: Agenda una tarea (fecha/hora)', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} } if(st==='Abandonado'){const ar=$('mAbandonReason').value; if(!ar){toast('⚠️ OBLIGATORIO: Selecciona el Motivo de Abandono', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} payload.abandonReason=ar;} payload.status=st; }if(S.user&&(S.user.role==='admin'||S.user.role==='supervisor')){var _a=$('mAssign');if(_a&&_a.value&&_a.value!==l?.assignedTo)payload.assignedTo=_a.value;}if(note)payload.note=note;if(!Object.keys(payload).length){toast('Sin cambios');btn.disabled=false;btn.textContent='Guardar cambios';return;}await api('PATCH','/api/leads/'+S.mid,payload);$('mNt').value='';toast('Lead actualizado ✓');await refresh();renderModal();}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='Guardar cambios';}});
 function loadBI(t){const f=document.getElementById('biFr');const b1=document.getElementById('biT1');const b2=document.getElementById('biT2');if(!f)return;if(t==='mapa'){f.src='/mapa_zonas_v4.html';if(b1){b1.style.color='#6d28d9';b1.style.borderBottomColor='#6d28d9';}if(b2){b2.style.color='#888';b2.style.borderBottomColor='transparent';}}else{f.src='/agente_precios.html';if(b2){b2.style.color='#6d28d9';b2.style.borderBottomColor='#6d28d9';}if(b1){b1.style.color='#888';b1.style.borderBottomColor='transparent';}}}
-document.querySelectorAll('.sb nav button').forEach(btn=>{btn.addEventListener('click',async()=>{const view=btn.dataset.view;document.querySelectorAll('.sb nav button').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));btn.classList.add('active');$('view-'+view).classList.add('active');S.view=view;$('mainTb').style.display=view==='config'?'none':'';if(view==='bi'){loadBI('mapa');}else if(view==='analisis'){initAnalisisIA();}else if(view==='auditoria'){initAuditoria();}else if(view==='reporte'){initReporte();}else if(view==='config'){await loadConfig();await loadUsers();loadBackups();}else if(view==='inspeccion'){cargarListaReciente();}else if(view==='inventario'){await renderInventario();}});});
+document.querySelectorAll('.sb nav button').forEach(btn=>{btn.addEventListener('click',async()=>{const view=btn.dataset.view;document.querySelectorAll('.sb nav button').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));btn.classList.add('active');$('view-'+view).classList.add('active');S.view=view;$('mainTb').style.display=view==='config'?'none':'';if(view==='bi'){loadBI('mapa');}else if(view==='analisis'){initAnalisisIA();}else if(view==='auditoria'){initAuditoria();}else if(view==='reporte'){initReporte();}else if(view==='config'){await loadConfig();await loadUsers();loadBackups();}else if(view==='inventario'){await renderInventario();}});});
 // ── REPORTE DE LEADS ─────────────────────────────────────────────────────
 var _rpRange = 'semana';
 var _rpBtnMap = {semana:'rpFSem', mes:'rpFMes', custom:'rpFPers'};
