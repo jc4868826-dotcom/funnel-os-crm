@@ -2787,7 +2787,31 @@ app.put('/api/inspecciones/:patente',auth('admin','vendedor','tasador','supervis
     all[pat][modo]={...campos,guardadoEn:new Date().toISOString(),guardadoPor:req.user};
     all[pat].updatedAt=new Date().toISOString();
     await tWrite(F.inspecciones,req.tenant,all);
+    // ── Nota automática en el lead que tenga esta patente en tradeIn ──
+    try{
+      const leads=await tRead(F.leads,req.tenant,[]);
+      const lIdx=leads.findIndex(l=>l.tradeIn&&(l.tradeIn.plate||'').toUpperCase().replace(/\s/g,'')=== pat);
+      if(lIdx!==-1){
+        const modoLabel=modo==='ingreso'?'INGRESO':'SALIDA';
+        const autor=req.user.name||req.user.username||'Sistema';
+        leads[lIdx].notes=Array.isArray(leads[lIdx].notes)?leads[lIdx].notes:[];
+        // evitar duplicado en misma hora
+        const ya=leads[lIdx].notes.some(n=>n.content&&n.content.includes('Inspección '+modoLabel)&&n.content.includes(pat)&&(Date.now()-n.ts)<60000);
+        if(!ya) leads[lIdx].notes.push({content:`🚗 Inspección ${modoLabel} registrada para patente ${pat} por ${autor}`,author:'Sistema',ts:Date.now()});
+        await tWrite(F.leads,req.tenant,leads);
+      }
+    }catch(eN){console.warn('[insp nota lead]',eN.message);}
     res.json({ok:true,record:all[pat]});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+// GET /api/inspecciones/by-plate/:patente — devuelve si existe inspección (para badge en modal lead)
+app.get('/api/inspecciones/by-plate/:patente',auth('admin','vendedor','tasador','supervisor'),async(req,res)=>{
+  try{
+    const pat=req.params.patente.toUpperCase().replace(/\s/g,'');
+    const all=await tRead(F.inspecciones,req.tenant,{});
+    const rec=all[pat]||null;
+    res.json({exists:!!rec,hasIngreso:!!(rec&&rec.ingreso),hasSalida:!!(rec&&rec.salida),record:rec});
   }catch(e){res.status(500).json({error:e.message});}
 });
 
