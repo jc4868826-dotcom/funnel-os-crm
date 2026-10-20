@@ -1197,7 +1197,13 @@ async function ejecutarAnalisisIA(){
 
   // ── Navegación a la pestaña ──
   window.abrirInspeccionConPatente=function(patente){
-    abrirModalInspeccion(patente);
+    const btn=document.querySelector('.sb nav button[data-view="inspeccion"]');
+    if(btn) btn.click();
+    if(patente){
+      const inp=document.getElementById('inspPatente');
+      if(inp){ inp.value=patente.toUpperCase(); }
+      setTimeout(()=>buscarInspeccion(),200);
+    }
   };
 
   // ── Buscar patente ──
@@ -1360,7 +1366,7 @@ async function ejecutarAnalisisIA(){
       if(_inspState.fotosNew.length){
         const fd=new FormData();
         _inspState.fotosNew.forEach(f=>fd.append('fotos',f));
-        const r=await fetch('/api/inspecciones/upload',{method:'POST',headers:{'X-Auth-Token':(typeof S!=='undefined'&&S.token)||localStorage.getItem('fos_token')||''},body:fd});
+        const r=await fetch('/api/inspecciones/upload',{method:'POST',headers:{'X-Auth-Token':localStorage.getItem('authToken')||''},body:fd});
         const j=await r.json();
         if(j.error) throw new Error(j.error);
         urlsSubidas=j.urls||[];
@@ -1463,8 +1469,8 @@ async function ejecutarAnalisisIA(){
     el.style.border=tipo==='error'?'1px solid #fca5a5':tipo==='warn'?'1px solid #fcd34d':'1px solid #93c5fd';
   }
 
-  async async function apiFetch(url,opts){
-    const token=(typeof S!=='undefined'&&S.token)||localStorage.getItem('fos_token')||'';
+  async function apiFetch(url,opts){
+    const token=localStorage.getItem('authToken')||'';
     const res=await fetch(url,{headers:{'Content-Type':'application/json','X-Auth-Token':token},...opts});
     return res.json();
   }
@@ -1651,7 +1657,7 @@ async function ejecutarAnalisisIA(){
 <div class="ca2">
 <div><h4>Control IA</h4><div class="btw"><div class="btl"><span>🤖</span><span>Cata IA</span></div><div style="display:flex;align-items:center;gap:8px"><span class="bst" id="bTxt">ON</span><label class="bsw"><input type="checkbox" id="bChk" checked><span class="bsl"></span></label></div></div></div>
 <div><h4>Estado</h4><select id="mSt"></select></div>
-<div id="mAbandonBlock" style="display:none;background:#fef2f2;border:2px solid #ef4444;border-radius:9px;padding:10px 12px"><h4 style="color:#dc2626;margin-bottom:6px">⚠️ Motivo de Abandono <span style="font-size:11px;font-weight:400">(obligatorio)</span></h4><select id="mAbandonReason" style="width:100%;padding:8px 10px;background:#fff;border:1.5px solid #ef4444;color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
+<div id="mAbandonBlock" style="display:none"><h4>Motivo de Abandono</h4><select id="mAbandonReason" style="width:100%;padding:8px 10px;background:var(--p2);border:1px solid var(--bd);color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
 <div id="mAssignBlock" style="display:none"><h4>Reasignar a <span style="font-size:10px;background:var(--as);color:var(--ac);padding:2px 6px;border-radius:4px;font-weight:700">ADMIN</span></h4><select id="mAssign" style="width:100%;padding:8px 10px;background:var(--p2);border:1px solid var(--bd);color:var(--tx);border-radius:7px;font-family:inherit;font-size:12.5px"></select></div>
 <div>
   <h4>Notas internas</h4>
@@ -1954,14 +1960,13 @@ const ABANDON_REASONS=[
 ];
 function _abandonReasonLabel(key){const r=ABANDON_REASONS.find(x=>x.key===key);return r?r.label:(key?esc(key):'Sin motivo registrado');}
 // Muestra/oculta y llena el selector de Motivo de Abandono en la ficha del lead, según el estado elegido en #mSt.
-function renderAbandonReasonBlock(l,autoScroll){
+function renderAbandonReasonBlock(l){
   const st=$('mSt')?.value;
   const block=$('mAbandonBlock'),sel=$('mAbandonReason');
   if(!block||!sel)return;
   if(st==='Abandonado'){
     block.style.display='block';
     sel.innerHTML='<option value="">— Selecciona un motivo —</option>'+ABANDON_REASONS.map(r=>`<option value="${r.key}" ${l.abandonReason===r.key?'selected':''}>${esc(r.label)}</option>`).join('');
-    if(autoScroll){setTimeout(()=>{block.scrollIntoView({behavior:'smooth',block:'nearest'});sel.focus();},80);}
   }else{
     block.style.display='none';
   }
@@ -3081,7 +3086,7 @@ function renderModal(){const l=findLead(S.mid);if(!l){closeModal();return;}$('mT
   }
   $('mSt').innerHTML=html;
   renderAbandonReasonBlock(l);
-  $('mSt').onchange=function(){renderAbandonReasonBlock(l,true);};
+  $('mSt').onchange=function(){renderAbandonReasonBlock(l);};
 })();const bOn=l.botActive!==false;$('bChk').checked=bOn;$('bTxt').textContent=bOn?'ON':'OFF';$('bTxt').className='bst '+(bOn?'on':'of');$('aMsg').value=''; const isW=(l.status==='esperando_respuesta_chileautos'||l.status==='esperando_respuesta_general'); const cR=isW&&l.chatHistory?.some(m=>m.role==='user'); const blk=isW&&!cR; $('aMsg').disabled=blk; $('aSnd').disabled=blk; $('aMsg').placeholder=blk?'⏳ Bloqueado: Esperando respuesta...':'Escribe un mensaje...';
   renderAgendaDetails(l);
   renderModalCtx(l);renderModalChat(l);renderModalNotes(l);
@@ -3296,7 +3301,7 @@ $('btnResumen').addEventListener('click',async()=>{
 const ST_COMPRA_LIBRE=['Evaluando','Peritaje','Negociando Compra','Oferta Lanzada','Comprado','Descartado'];
 $('mSv').addEventListener('click',async()=>{if(!S.mid)return;const btn=$('mSv');btn.disabled=true;btn.textContent='…';try{const l=findLead(S.mid);const st=$('mSt').value;const note=$('mNt').value.trim();const payload={}; if(st&&st!==l?.status) { const esCambioPipelineCompras=ST_COMPRA_LIBRE.includes(st); if(!esCambioPipelineCompras){ if(!note){toast('⚠️ OBLIGATORIO: Escribe una leyenda en la bitácora', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} const aT=$('agendaText').value.trim(), aD=$('agendaDate').value; if(!aT || !aD){toast('⚠️ OBLIGATORIO: Agenda una tarea (fecha/hora)', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} } if(st==='Abandonado'){const ar=$('mAbandonReason').value; if(!ar){toast('⚠️ OBLIGATORIO: Selecciona el Motivo de Abandono', true); btn.disabled=false; btn.textContent='Guardar cambios'; return;} payload.abandonReason=ar;} payload.status=st; }if(S.user&&(S.user.role==='admin'||S.user.role==='supervisor')){var _a=$('mAssign');if(_a&&_a.value&&_a.value!==l?.assignedTo)payload.assignedTo=_a.value;}if(note)payload.note=note;if(!Object.keys(payload).length){toast('Sin cambios');btn.disabled=false;btn.textContent='Guardar cambios';return;}await api('PATCH','/api/leads/'+S.mid,payload);$('mNt').value='';toast('Lead actualizado ✓');await refresh();renderModal();}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='Guardar cambios';}});
 function loadBI(t){const f=document.getElementById('biFr');const b1=document.getElementById('biT1');const b2=document.getElementById('biT2');if(!f)return;if(t==='mapa'){f.src='/mapa_zonas_v4.html';if(b1){b1.style.color='#6d28d9';b1.style.borderBottomColor='#6d28d9';}if(b2){b2.style.color='#888';b2.style.borderBottomColor='transparent';}}else{f.src='/agente_precios.html';if(b2){b2.style.color='#6d28d9';b2.style.borderBottomColor='#6d28d9';}if(b1){b1.style.color='#888';b1.style.borderBottomColor='transparent';}}}
-document.querySelectorAll('.sb nav button').forEach(btn=>{btn.addEventListener('click',async()=>{const view=btn.dataset.view;document.querySelectorAll('.sb nav button').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));btn.classList.add('active');$('view-'+view).classList.add('active');S.view=view;$('mainTb').style.display=view==='config'?'none':'';if(view==='bi'){loadBI('mapa');}else if(view==='analisis'){initAnalisisIA();}else if(view==='auditoria'){initAuditoria();}else if(view==='reporte'){initReporte();}else if(view==='config'){await loadConfig();await loadUsers();loadBackups();}else if(view==='inspeccion'){cargarListaReciente();}else if(view==='inventario'){await renderInventario();}});});
+document.querySelectorAll('.sb nav button').forEach(btn=>{btn.addEventListener('click',async()=>{const view=btn.dataset.view;document.querySelectorAll('.sb nav button').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));btn.classList.add('active');$('view-'+view).classList.add('active');S.view=view;$('mainTb').style.display=view==='config'?'none':'';if(view==='bi'){loadBI('mapa');}else if(view==='analisis'){initAnalisisIA();}else if(view==='auditoria'){initAuditoria();}else if(view==='reporte'){initReporte();}else if(view==='config'){await loadConfig();await loadUsers();loadBackups();}else if(view==='inventario'){await renderInventario();}});});
 // ── REPORTE DE LEADS ─────────────────────────────────────────────────────
 var _rpRange = 'semana';
 var _rpBtnMap = {semana:'rpFSem', mes:'rpFMes', custom:'rpFPers'};
