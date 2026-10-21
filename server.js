@@ -1859,10 +1859,41 @@ function detectSource(text){
   if(t.includes('dercocenter')||t.includes('derco')) return 'Derco';
   return null;
 }
+// ─── Número de prospección RMG Parts (+56 9 7286 4315) ─────────────────────────
+// Está en la misma cuenta de WhatsApp que Cata, así que Meta manda sus mensajes a este mismo
+// webhook. Cata NO los procesa: se reenvían al ERP de RMG Parts (pestaña "Para llamar" de Abril).
+const RMG_PARTS_PHONE_ID = (process.env.RMG_PARTS_PHONE_ID || '1336974659509279').trim();
+const RMG_PARTS_EVENTO_URL = (process.env.RMG_PARTS_EVENTO_URL || 'https://rmg-parts-erp.onrender.com/api/prospeccion-auto/evento').trim();
+async function reenviarRmgParts(payload){
+  const key=(process.env.PROSPECCION_CRON_KEY||'').trim();
+  if(!key){console.error('[RMG-PARTS] Falta PROSPECCION_CRON_KEY en Render: el mensaje NO llegó al ERP',JSON.stringify(payload).slice(0,200));return;}
+  for(let intento=1;intento<=3;intento++){
+    try{
+      const r=await fetch(RMG_PARTS_EVENTO_URL,{method:'POST',headers:{'Content-Type':'application/json','x-prospeccion-key':key},body:JSON.stringify(payload),signal:AbortSignal.timeout(20000)});
+      if(r.ok)return;
+      console.error('[RMG-PARTS] ERP respondió',r.status,(await r.text()).slice(0,200));
+      if(r.status<500)return;
+    }catch(e){console.error('[RMG-PARTS] intento',intento,e.message);}
+    await new Promise(ok=>setTimeout(ok,3000*intento));   // el ERP en Render puede estar despertando
+  }
+}
+async function webhookRmgParts(val){
+  for(const st of (val.statuses||[])) await reenviarRmgParts({tipo:'estado',wamid:st.id,estado:st.status});
+  for(const m of (val.messages||[])){
+    const texto=m.button?.text||m.interactive?.button_reply?.title||m.interactive?.list_reply?.title||m.text?.body
+      ||(m.type?`[${m.type}]`:'[mensaje]');
+    const tipo=(m.type==='button'||m.type==='interactive')?'boton':'texto';
+    await reenviarRmgParts({telefono:m.from,tipo,texto,nombre:val.contacts?.[0]?.profile?.name||null,wamid:m.id});
+    console.log('[RMG-PARTS] reenviado al ERP:',m.from,tipo,String(texto).slice(0,60));
+  }
+}
+
 app.post('/webhook',async(req,res)=>{
   if(!req.body.object)return res.sendStatus(404);res.sendStatus(200);
   try{
-    const val=req.body.entry?.[0]?.changes?.[0]?.value;const msg=val?.messages?.[0];if(!msg)return;
+    const val=req.body.entry?.[0]?.changes?.[0]?.value;
+    if(val?.metadata?.phone_number_id===RMG_PARTS_PHONE_ID){await webhookRmgParts(val);return;}
+    const msg=val?.messages?.[0];if(!msg)return;
     const from=msg.from;
     // Extracción robusta: cubre text, button, interactive (reply/list), template, order y sticker
     let body=
