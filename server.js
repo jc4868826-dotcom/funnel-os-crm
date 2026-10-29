@@ -143,24 +143,38 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource, is
       return { reply: 'Dame un segundito, estoy validando la info en el sistema...', intent_signal: 'NONE' };
     }
 
-    // Inventario: scrape en vivo → fallback BD → fallback texto
-    let invS = scrapeCache.data;
-    if (!invS) {
-      try {
-        const dbInv = await tRead(F.inventory, tenant, []);
-        if (Array.isArray(dbInv) && dbInv.length > 0) {
-          const pSign = String.fromCharCode(36);
-          invS = dbInv.map(i =>
+    // Inventario: scrape en vivo + red de seguridad de FunnelOS.
+    // ANTES: si el scraper traía CUALQUIER dato (aunque le faltaran autos — ej. una página de
+    // paginación que falló en silencio), el inventario de FunnelOS nunca se consultaba, porque el
+    // fallback solo se activaba cuando el scrape volvía TOTALMENTE vacío. Eso le ocultaba al bot
+    // autos que sí estaban publicados y sí estaban en FunnelOS (caso real: Peugeot 5008, en la
+    // página 2 de /autos-usados/, 29-oct-2026). Ahora: el scrape sigue siendo la base, pero
+    // cualquier auto del inventario de FunnelOS que no aparezca en el texto scrapeado se agrega
+    // igual — así una falla parcial del scraper nunca vuelve a esconder un auto real.
+    let invS = scrapeCache.data || '';
+    try {
+      const dbInv = await tRead(F.inventory, tenant, []);
+      if (Array.isArray(dbInv) && dbInv.length > 0) {
+        const pSign = String.fromCharCode(36);
+        const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+        const scrapedNorm = norm(invS);
+        const faltantes = dbInv.filter(i => {
+          const clave = norm(`${i.brand||''} ${i.model||''}`);
+          return clave && !scrapedNorm.includes(clave);
+        });
+        if (faltantes.length > 0) {
+          const extraLines = faltantes.map(i =>
             `- ${i.brand||''} ${i.model||''}${i.year?' '+i.year:''}`
             + (i.km ? ` | ${i.km}` : '')
             + ` | ${pSign}${(i.price||0).toLocaleString('es-CL')}`
             + (i.fuel ? ` | ${i.fuel}` : '')
             + (i.link ? ` | ${i.link}` : '')
           ).join('\n');
-          console.log('[marcela] scrapeCache vacío — usando inventario BD:', dbInv.length, 'autos');
+          invS = invS ? (invS + '\n' + extraLines) : extraLines;
+          console.log('[marcela] Inventario FunnelOS agregó', faltantes.length, 'auto(s) no visto(s) por el scraper:', faltantes.map(i => `${i.brand||''} ${i.model||''}`.trim()).join(', '));
         }
-      } catch(eInv) { console.warn('[marcela] Error leyendo inventario BD:', eInv.message); }
-    }
+      }
+    } catch(eInv) { console.warn('[marcela] Error leyendo inventario BD:', eInv.message); }
     if (!invS) invS = '(sin inventario disponible temporalmente)';
     const knowledgeRaw = botCfg?.knowledge;
     const knowledge = Array.isArray(knowledgeRaw)
