@@ -69,12 +69,11 @@ function esKeywordCalif(text) { if(!text) return false; const t = text.toLowerCa
 // ── alertStaff: WA + Push en paralelo ──
 async function alertStaff(tenant, userObj, title, body) {
   if (!userObj) return;
-  // Por pedido del cliente: las alertas por WhatsApp a vendedores/staff quedan activas SOLO para
-  // leads nuevos (cualquier alerta cuyo titulo incluya "Nuevo Lead"). El resto de eventos (reservas
-  // vencidas, reasignaciones, "Lead Asignado" por palabras clave, lead que respondio, reingresos,
-  // etc.) siguen mandando la notificacion push dentro del CRM, pero ya no disparan WhatsApp.
-  const esAlertaNuevoLead = typeof title === 'string' && title.includes('Nuevo Lead');
-  if (esAlertaNuevoLead && userObj.phone) sendWA(userObj.phone, body).catch(() => {});
+  // Por pedido del cliente (nov-2026): TODA la reportería/alerta interna al equipo (staff/vendedores)
+  // queda solo por notificación push dentro de la app. Se elimina el WhatsApp interno por completo,
+  // incluyendo la excepción que antes existía para "Nuevo Lead". Los mensajes automáticos A CLIENTES
+  // (saludo1/saludo2 de reenganche, plantillas de bienvenida, etc.) no pasan por esta función y no se
+  // ven afectados por este cambio.
   if (userObj.username && tenant) sendWebPush(tenant, userObj.username, { title, body, ts: Date.now() }).catch(() => {});
 }
 
@@ -114,7 +113,7 @@ async function sendWA(to, text, retries = 2) {
   return false;
 }
 
-async function marcela(tenant, history, msg, notes, assignedName, leadSource, isCompraRmg) {
+async function marcela(tenant, history, msg, notes, assignedName, leadSource, isCompraRmg, assignedPhone) {
   try {
     let botCfg = await tRead(F.bot, tenant, {});
     // compras_rmg y rmg_parts son personas COMPARTIDAS a nivel de archivo (no van dentro de cada tenant),
@@ -182,7 +181,9 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource, is
       : (knowledgeRaw && typeof knowledgeRaw === 'object' ? knowledgeRaw : { inventario: [], promociones: [], comportamiento: [] });
     // Incluir TODAS las notas de Sistema/Bot (sin slice para no perder la nota de portal del primer mensaje)
     const sysNotes = (notes||[]).filter(n => n.author === 'Sistema' || n.author === 'Bot').map(n => n.content).join(' | ');
-    const instrucciones = baseSysPrompt.replace(/\{nombreIA\}/g, assignedName || 'Cata');
+    const instrucciones = baseSysPrompt
+      .replace(/\{nombreIA\}/g, assignedName || 'Cata')
+      .replace(/\{telefonoIA\}/g, assignedPhone || '+56 9 5389 9970');
 
     const invNotas = (knowledge.inventario || []).map(k =>
       k.patente && k.nota ? `⚠️ ${k.patente}: ${k.nota}` : `⚠️ ${k.content || ''}`
@@ -1548,7 +1549,8 @@ app.post('/api/chat',async(req,res)=>{
     if(message.trim().toLowerCase()==='/reset'){leads.splice(idx,1);await tWrite(F.leads,tenant,leads);return res.json({reply:'🔄 Lead eliminado. Listo para nuevo ingreso desde Chileautos.',status:'eliminado',alertLevel:'none'});}
     const assignedUserChat=allUsers.find(u=>u.username===leads[idx].assignedTo)||RMG_VENDORS.find(v=>v.username===leads[idx].assignedTo);
     const assignedNameChat=leads[idx].botPersona||assignedUserChat?.name||'Cata';
-    const p=await marcela(tenant,leads[idx].chatHistory.slice(0,-1),message,leads[idx].notes,assignedNameChat,leads[idx].source,leads[idx].isCompraRmg);
+    const assignedPhoneChat=assignedUserChat?.phone;
+    const p=await marcela(tenant,leads[idx].chatHistory.slice(0,-1),message,leads[idx].notes,assignedNameChat,leads[idx].source,leads[idx].isCompraRmg,assignedPhoneChat);
     applySignal(leads[idx],p);
     
     if(p.schedule_detected && p.schedule_text) {
@@ -2084,7 +2086,8 @@ app.post('/webhook',async(req,res)=>{
           const allUsersIMG = await tRead(F.users, tenant);
           const assignedUserIMG = allUsersIMG.find(u => u.username === ld[tenant][idx].assignedTo) || RMG_VENDORS.find(v => v.username === ld[tenant][idx].assignedTo);
           const assignedNameIMG = ld[tenant][idx].botPersona || assignedUserIMG?.name || 'Cata';
-          const pImg = await marcela(tenant, ld[tenant][idx].chatHistory.slice(0, -1), photoBody, ld[tenant][idx].notes, assignedNameIMG, ld[tenant][idx].source, ld[tenant][idx].isCompraRmg);
+          const assignedPhoneIMG = assignedUserIMG?.phone;
+          const pImg = await marcela(tenant, ld[tenant][idx].chatHistory.slice(0, -1), photoBody, ld[tenant][idx].notes, assignedNameIMG, ld[tenant][idx].source, ld[tenant][idx].isCompraRmg, assignedPhoneIMG);
           if (pImg.reply && pImg.reply.trim()) {
             ld[tenant][idx].chatHistory.push({ role: 'bot', content: pImg.reply, ts: Date.now() });
             await tWrite(F.leads, tenant, ld[tenant]);
@@ -2431,7 +2434,10 @@ app.post('/webhook',async(req,res)=>{
         const esRmgPartsAd = RMG_PARTS_KEYWORDS_RE.test(titularAd) || (typeof body === 'string' && RMG_PARTS_KEYWORDS_RE.test(body));
         if (esRmgPartsAd) {
             detectedSource = 'RMG Parts';
-        } else if (HEADLINES_COMPRA.some(h => titularAd.toLowerCase().includes(h)) || (typeof body === 'string' && body.match(/compra directa|evaluar la venta|quiero vender|tasar|retoma|vender mi auto/i))) {
+        } else if (HEADLINES_COMPRA.some(h => titularAd.toLowerCase().includes(h))) {
+            // nov-2026: se quita el match por palabras sueltas en el body ("tasar", "retoma",
+            // "vender mi auto", etc.) — misrouteaba leads de venta normal que mencionaban esas
+            // palabras sin venir de un anuncio de compra. Ahora depende solo del anuncio de Meta.
             detectedSource = 'Compra Directa';
         }
 
@@ -2486,10 +2492,16 @@ app.post('/webhook',async(req,res)=>{
         initNotes = initNotes.concat({ content: '♻️ Reingreso: este lead vuelve a contactar después de un cierre anterior (lead previo #' + leadCerradoPrevioId + ').', author: 'Sistema', ts: Date.now() });
       }
 
-      // Leads de Compra Directa van siempre al usuario 'comprador'; los de RMG Parts, siempre a 'gerente' (Juan Carlos)
+      // nov-2026: RMG Parts se discontinúa como canal — ya no se auto-asigna a 'gerente' (Juan Carlos)
+      // ni a nadie en particular. Si llega un lead marcado RMG Parts (ads residuales u otra vía), se
+      // asigna igual que cualquier otro lead de Meta Ads (rotativo de vendedores activos), nunca a gerencia.
       const esCompra = detectedSource === 'Compra Directa';
       const esRmgParts = detectedSource === 'RMG Parts';
-      const assignedFinal = esRmgParts ? 'gerente' : (esCompra ? 'comprador' : assignedObj.username);
+      // nov-2026: antes iba hardcodeado al username literal 'comprador', bypaseando la config de
+      // asignación de compras. Ahora usa getComprasAssignee() — mismo criterio que el formulario web
+      // "Compramos tu Auto" — así respeta a quien esté configurado (hoy: Robert Fuentes / Rfuentes).
+      const compraAssigneeObj = esCompra ? await getComprasAssignee(tenant) : null;
+      const assignedFinal = esCompra ? compraAssigneeObj.username : assignedObj.username;
 
       ld[tenant].unshift({
         id: Date.now(), name: contactName, phone: '+'+from,
@@ -2505,12 +2517,8 @@ app.post('/webhook',async(req,res)=>{
       });
       idx = 0;
       const srcTag = detectedSource !== 'WhatsApp' ? ` [${detectedSource}]` : '';
-      if (esRmgParts) {
-        const _usersRP = await tRead(F.users, tenant);
-        const gerenteObj = _usersRP.find(u => u.username === 'gerente') || assignedObj;
-        alertStaff(tenant, gerenteObj, '🛢 Nuevo Lead RMG Parts', `🛢 NUEVO LEAD RMG PARTS asignado a ti: ${contactName} — "${detectedInterest.slice(0,60)}". Revísalo en pestaña RMG Parts.`);
-      } else if (esCompra) {
-        alertStaff(tenant, assignedObj, '🛍 Nuevo Lead Compra', `🛍 NUEVO LEAD COMPRA: ${contactName} — "${detectedInterest.slice(0,60)}" — asignado a Raúl Miño.`);
+      if (esCompra) {
+        alertStaff(tenant, compraAssigneeObj, '🛍 Nuevo Lead Compra', `🛍 NUEVO LEAD COMPRA: ${contactName} — "${detectedInterest.slice(0,60)}".`);
       } else {
         alertStaff(tenant, assignedObj, '🔔 Nuevo Lead WA', `🔔 NUEVO LEAD WA${srcTag}: ${contactName} — "${detectedInterest.slice(0,60)}" — atiéndelo ahora.`);
       }
@@ -2606,9 +2614,10 @@ app.post('/webhook',async(req,res)=>{
           const allUsersWH=await tRead(F.users,tenant);
           const assignedUserWH=allUsersWH.find(u=>u.username===ldF[tenant][idxF].assignedTo)||RMG_VENDORS.find(v=>v.username===ldF[tenant][idxF].assignedTo);
           const assignedNameWH=ldF[tenant][idxF].botPersona||assignedUserWH?.name||'Cata';
+          const assignedPhoneWH=assignedUserWH?.phone;
           const fullHistory = ldF[tenant][idxF].chatHistory;
           const lastUserMsg = fullHistory.filter(m=>m.role==='user').slice(-1)[0]?.content || body;
-          const p=await marcela(tenant,fullHistory.slice(0,-1),lastUserMsg,ldF[tenant][idxF].notes,assignedNameWH,ldF[tenant][idxF].source,ldF[tenant][idxF].isCompraRmg);
+          const p=await marcela(tenant,fullHistory.slice(0,-1),lastUserMsg,ldF[tenant][idxF].notes,assignedNameWH,ldF[tenant][idxF].source,ldF[tenant][idxF].isCompraRmg,assignedPhoneWH);
           applySignal(ldF[tenant][idxF],p);
           if(p.schedule_detected&&p.schedule_text){ldF[tenant][idxF].notes=(ldF[tenant][idxF].notes||[]);ldF[tenant][idxF].notes.push({content:'🚨 CITA AGENDADA POR IA: '+p.schedule_text,author:'Sistema',ts:Date.now()});ldF[tenant][idxF].intentSignal='BLUE';ldF[tenant][idxF].nextAction={text:'📞 Llamar al cliente: '+p.schedule_text,date:new Date(Date.now()+60000).toISOString(),createdAt:new Date().toISOString(),delegateToIA:false,iaCompleted:false};}
           let _isEnd=false;
@@ -3543,9 +3552,10 @@ setInterval(async () => {
       const users = await tRead(F.users, t);
       let changed = false;
 
-      const admins = users.filter(u => u.role === 'admin' && u.phone);
-      const avisar = async (fono, txt) => { if(fono) await sendWA(fono, txt).catch(()=>{}); };
-      const avisarAdmins = async (txt) => { for(const a of admins) await avisar(a.phone, txt); };
+      // nov-2026: toda esta reportería interna (lead nuevo, tasación, reserva vencida, SLA) se
+      // notifica solo por push dentro de la app — se quita el envío por WhatsApp (ver alertStaff()).
+      const admins = users.filter(u => u.role === 'admin');
+      const avisarAdmins = async (title, txt) => { for(const a of admins) await alertStaff(t, a, title, txt); };
 
       for (const l of leads) {
         if (!l || FINAL_ST.has(l.status)) continue;
@@ -3554,37 +3564,40 @@ setInterval(async () => {
         const ref = l.created_at || l.lastClientTs || l.lastInteraction || Date.now();
         const minsSinAtencion = businessMinutesBetween(ref, new Date());
 
-        // [PUNTO 6]: Alerta Nuevo Lead — plantilla alerta_nuevo_lead
+        // [PUNTO 6]: Alerta Nuevo Lead — solo push (vendedor asignado + admins)
         if (!l.alertaNuevoSent && l.status === 'Nuevo') {
             l.alertaNuevoSent = true; changed = true;
-            const p6 = [l.name || 'S/N', l.source || 'Directo', l.interest || 'No especificado'];
-            if (vend && vend.phone) await sendWATemplate(vend.phone, 'alerta_nuevo_lead', p6).catch(()=>{});
-            for (const a of admins) { if (a.phone) await sendWATemplate(a.phone, 'alerta_nuevo_lead', p6).catch(()=>{}); }
+            const title6 = '🆕 Nuevo Lead';
+            const body6 = `${l.name || 'S/N'} — origen: ${l.source || 'Directo'} — interés: ${l.interest || 'No especificado'}`;
+            if (vend) await alertStaff(t, vend, title6, body6);
+            for (const a of admins) await alertStaff(t, a, title6, body6);
         }
 
-        // [PUNTO 1]: Alerta Tasación (Solo Admins)
+        // [PUNTO 1]: Alerta Tasación — solo push (Solo Admins)
         if (!l.alertaTasSent && (l.source === 'Compramos tu auto' || (l.interest && l.interest.toLowerCase().includes('tasar')))) {
             l.alertaTasSent = true; changed = true;
-            await avisarAdmins(`🔔 ALERTA TASACIÓN: El usuario [${l.name || 'S/N'}] solicitó tazar su vehículo.`);
+            await avisarAdmins('🔔 Tasación solicitada', `El usuario [${l.name || 'S/N'}] solicitó tasar su vehículo.`);
         }
 
-        // [PUNTO 2]: Alerta Reserva Vencida (3 días -> Staff + Admin)
+        // [PUNTO 2]: Alerta Reserva Vencida (3 días) — solo push (Staff + Admin)
         if ((l.status === 'Reserva' || l.status === 'Reservado') && !l.alertaReserva3d) {
             const dias = (Date.now() - new Date(l.reservadoAt || l.lastInteraction).getTime()) / (1000*60*60*24);
             if (dias >= 3) {
                 l.alertaReserva3d = true; changed = true;
-                const pRV = [l.name || 'S/N'];
-                if (vend && vend.phone) await sendWATemplate(vend.phone, 'alerta_reserva_vencida', pRV).catch(()=>{});
-                for (const a of admins) { if (a.phone) await sendWATemplate(a.phone, 'alerta_reserva_vencida', pRV).catch(()=>{}); }
+                const title2 = '⏰ Reserva vencida (3 días)';
+                const body2 = `${l.name || 'S/N'}`;
+                if (vend) await alertStaff(t, vend, title2, body2);
+                for (const a of admins) await alertStaff(t, a, title2, body2);
             }
         }
 
-        /* SLA CONGELADO — modelo cambió a asignador único con reasignación manual
+        // SLA reactivado (nov-2026): avisos solo por push, nunca por WhatsApp. El rotativo de
+        // reasignación (rrNext) ya filtra solo vendedores con rol 'vendedor' y estado Activo.
         if (enHorarioHabil()) {
           // [PUNTO 4]: Alerta SLA Riesgo (20 min sin atención -> Solo Vendedor)
           if (l.status === 'Nuevo' && !l.alertaSla20 && minsSinAtencion >= 20 && minsSinAtencion < 30) {
               l.alertaSla20 = true; changed = true;
-              if (vend && vend.phone) await sendWATemplate(vend.phone, 'alerta_sla_riesgo', [l.name || 'S/N']).catch(()=>{});
+              if (vend) await alertStaff(t, vend, '⚠️ SLA en riesgo (20 min sin atender)', `${l.name || 'S/N'}`);
           }
 
           // [PUNTO 5]: Alerta Reasignación (30 min -> Al NUEVO vendedor)
@@ -3593,17 +3606,16 @@ setInterval(async () => {
               const nextObj = await rrNext(t, l.assignedTo);
               if (nextObj && nextObj.username !== l.assignedTo) {
                   l.assignedTo = nextObj.username;
-                  if (nextObj.phone) await sendWATemplate(nextObj.phone, 'alerta_reasignacion', [l.name || 'S/N', l.interest || 'No especificado']).catch(()=>{});
+                  await alertStaff(t, nextObj, '🔄 Lead reasignado por SLA', `${l.name || 'S/N'} — interés: ${l.interest || 'No especificado'}`);
               }
           }
         }
 
-        // [PUNTO 3]: Alerta Admin Sin (30 min sin atenderse -> Solo Admins)
+        // [PUNTO 3]: Alerta Admin Sin atención (30 min sin atenderse -> Solo Admins) — solo push
         if (enHorarioHabil() && l.status === 'Nuevo' && !l.alertaAdminSin30 && minsSinAtencion >= 30) {
             l.alertaAdminSin30 = true; changed = true;
-            for (const a of admins) { if (a.phone) await sendWATemplate(a.phone, 'alerta_admin_sin_atencion', [l.name || 'S/N']).catch(()=>{}); }
+            for (const a of admins) await alertStaff(t, a, '🚨 Lead sin atención (30 min)', `${l.name || 'S/N'}`);
         }
-        */
 
         // [PUNTOS 7 y 8]: Automatización Sala de Espera (Plantillas Meta a Clientes)
         if (fCliente && l.sala_espera === true && !l.replied) {
