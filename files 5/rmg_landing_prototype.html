@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RMG Parts — Todo lo que tu vehículo necesita</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#050608;
+    --panel:#0E1013;
+    --panel-2:#15181D;
+    --border:#22262E;
+    --white:#FFFFFF;
+    --text-dim:#9AA1AC;
+    --text-faint:#5C636E;
+
+    --blue:#0B7FE0;
+    --blue-bright:#3FA5F5;
+    --blue-deep:#065AA3;
+    --whatsapp:#25D366;
+    --whatsapp-deep:#1DA851;
+
+    --radius:14px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);
+    color:var(--white);
+    font-family:'Inter',sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,h4,.display{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    letter-spacing:-0.01em;
+    text-transform:uppercase;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  a{color:inherit; text-decoration:none;}
+  .container{max-width:1240px; margin:0 auto; padding:0 28px;}
+  img{max-width:100%; display:block;}
+
+  /* ===== TOPBAR ===== */
+  .topbar{background:#000; color:#8A929D; font-size:12.5px; border-bottom:1px solid var(--border);}
+  .topbar .container{display:flex; justify-content:space-between; align-items:center; height:36px;}
+  .topbar .contact{display:flex; gap:22px;}
+  .topbar strong{color:#fff;}
+
+  /* ===== HEADER ===== */
+  header{
+    position:sticky; top:0; z-index:100;
+    background:rgba(5,6,8,0.92);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border);
+  }
+  .nav-row{display:flex; align-items:center; justify-content:space-between; height:78px;}
+  .logo{display:flex; align-items:center; gap:12px;}
+  .logo-bars{display:flex; gap:3px; transform:skewX(-12deg);}
+  .logo-bars span{width:6px; height:30px; background:var(--white); display:block;}
+  .logo-bars span:nth-child(2){background:var(--blue-bright);}
+  .logo-bars span:nth-child(3){background:var(--blue);}
+  .logo-text{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:23px; letter-spacing:0.01em; line-height:1;}
+  .logo-sub{font-size:10.5px; color:var(--blue-bright); letter-spacing:0.22em; text-transform:uppercase; margin-top:3px; font-weight:700;}
+
+  nav.main-nav{display:flex; gap:30px; font-size:14px; font-weight:600; text-transform:uppercase; letter-spacing:0.02em;}
+  nav.main-nav a{color:var(--text-dim); transition:color .15s;}
+  nav.main-nav a:hover{color:var(--white);}
+
+  .nav-actions{display:flex; align-items:center; gap:12px;}
+  .icon-btn{
+    width:40px; height:40px; border-radius:10px; border:1px solid var(--border);
+    background:var(--panel); display:flex; align-items:center; justify-content:center;
+    cursor:pointer; position:relative; transition:all .15s;
+  }
+  .icon-btn:hover{border-color:var(--blue-bright);}
+  .cart-count{
+    position:absolute; top:-6px; right:-6px;
+    background:var(--blue-bright); color:#000; font-size:10.5px; font-weight:800;
+    width:19px; height:19px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  }
+  .btn{
+    background:var(--blue);
+    color:#fff; border:none; border-radius:8px;
+    padding:13px 22px; font-weight:700; font-size:13.5px; cursor:pointer;
+    font-family:'Inter',sans-serif; transition:all .15s;
+    display:inline-flex; align-items:center; gap:8px; white-space:nowrap;
+    text-transform:uppercase; letter-spacing:0.03em;
+  }
+  .btn:hover{background:var(--blue-deep);}
+  .btn-white{background:var(--white); color:#000;}
+  .btn-white:hover{background:#DDE3EA;}
+  .btn-wa{
+    background:linear-gradient(135deg,var(--whatsapp),var(--whatsapp-deep));
+    box-shadow:0 8px 22px -6px rgba(37,211,102,0.55);
+  }
+  .btn-wa:hover{filter:brightness(1.06);}
+
+  /* ===== HERO ===== */
+  .hero{
+    padding:0;
+    position:relative;
+    border-bottom:1px solid var(--border);
+    overflow:hidden;
+    min-height:540px;
+    display:flex; align-items:center;
+  }
+  .hero-bg{
+    position:absolute; inset:0; z-index:0;
+  }
+  .hero-bg img{
+    width:100%; height:100%; object-fit:cover; object-position:right center;
+  }
+  .hero-bg::after{
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(
+      95deg,
+      rgba(5,6,8,0.96) 0%,
+      rgba(5,6,8,0.88) 28%,
+      rgba(5,6,8,0.55) 50%,
+      rgba(5,6,8,0.12) 72%,
+      transparent 100%
+    );
+  }
+  .hero .container{position:relative; z-index:2; padding-top:64px; padding-bottom:64px;}
+  .hero-content{max-width:540px;}
+  .badge-row{display:flex; gap:10px; margin-bottom:22px; flex-wrap:wrap;}
+  .badge{
+    display:flex; align-items:center; gap:8px;
+    border:1px solid rgba(255,255,255,0.12); border-radius:100px; padding:8px 14px;
+    font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
+    color:rgba(255,255,255,0.65);
+    backdrop-filter:blur(8px); background:rgba(0,0,0,0.3);
+  }
+  .badge .ic{color:var(--blue-bright);}
+  .hero h1{font-size:48px; line-height:1.06; margin-bottom:16px; text-shadow:0 2px 20px rgba(0,0,0,0.5);}
+  .hero h1 .blue{color:var(--blue-bright);}
+  .hero p.lead{font-size:16px; color:rgba(255,255,255,0.6); max-width:460px; text-transform:none; margin-bottom:26px;}
+  .hero-ctas{display:flex; gap:12px; flex-wrap:wrap;}
+
+  /* Finder bar under hero */
+  .finder{
+    margin-top:30px;
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;
+  }
+  .finder-tabs{display:flex; border-bottom:1px solid var(--border);}
+  .finder-tab{
+    flex:1; padding:16px 20px; cursor:pointer;
+    font-family:'Space Grotesk',sans-serif; font-size:13.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;
+    color:var(--text-faint); border-bottom:2px solid transparent;
+    display:flex; align-items:center; gap:9px; transition:all .15s;
+  }
+  .finder-tab.active{color:var(--white); border-bottom-color:var(--blue-bright); background:var(--panel-2);}
+  .finder-tab .num{
+    font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:600; color:#000;
+    background:var(--blue-bright); padding:2px 7px; border-radius:5px;
+  }
+  .finder-body{padding:22px;}
+  .finder-search{display:flex; gap:10px;}
+  .finder-search input{
+    flex:1; background:var(--bg); border:1px solid var(--border); border-radius:8px;
+    padding:13px 16px; color:var(--white); font-size:14px; font-family:'Inter',sans-serif; text-transform:none;
+  }
+  .finder-search input::placeholder{color:var(--text-faint);}
+  .finder-search input:focus{outline:none; border-color:var(--blue-bright);}
+  .chip-row{display:flex; flex-wrap:wrap; gap:9px; margin-top:16px;}
+  .chip{
+    padding:8px 14px; border-radius:100px; border:1px solid var(--border);
+    background:var(--bg); font-size:12.5px; color:var(--text-dim); cursor:pointer; transition:all .15s;
+  }
+  .chip:hover{border-color:var(--blue-bright); color:var(--white);}
+
+  /* ===== SECTIONS ===== */
+  section{padding:60px 0;}
+  .section-head{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:28px; flex-wrap:wrap; gap:12px;}
+  .section-head h2{font-size:26px;}
+  .section-head p{color:var(--text-dim); font-size:14px; margin-top:8px; text-transform:none;}
+  .see-all{font-size:13px; color:var(--blue-bright); font-weight:700; text-transform:uppercase;}
+
+  /* ===== USE-CASE PAIR CARDS (autos vs maquinaria, como su propio material) ===== */
+  .pair-row{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;}
+  .pair-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+    padding:26px; position:relative; overflow:hidden; cursor:pointer; transition:all .18s;
+    min-height:150px;
+  }
+  .pair-card:hover{border-color:var(--blue-bright); transform:translateY(-2px);}
+  .pair-card .tag{font-size:12px; color:var(--blue-bright); font-weight:700; letter-spacing:0.05em; margin-bottom:6px;}
+  .pair-card h3{font-size:22px; margin-bottom:10px;}
+  .pair-card .count{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-faint); text-transform:none;}
+  .pair-card .bigicon{position:absolute; right:16px; bottom:6px; font-size:64px; opacity:0.14;}
+
+  /* ===== PRODUCTS ===== */
+  .prod-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:16px;}
+  .prod-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+    overflow:hidden; display:flex; flex-direction:column; transition:border-color .18s;
+  }
+  .prod-card:hover{border-color:var(--blue-bright);}
+  .prod-thumb{
+    height:118px; background:var(--panel-2); display:flex; align-items:center; justify-content:center;
+    font-size:34px; border-bottom:1px solid var(--border);
+  }
+  .prod-body{padding:16px; display:flex; flex-direction:column; gap:8px; flex:1;}
+  .prod-brand{font-size:11px; color:var(--blue-bright); text-transform:uppercase; letter-spacing:0.06em; font-weight:700;}
+  .prod-name{font-size:13px; font-weight:500; line-height:1.35; min-height:36px; text-transform:none;}
+  .prod-meta{font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-faint); text-transform:none;}
+  .prod-footer{display:flex; justify-content:space-between; align-items:center; margin-top:auto; padding-top:8px;}
+  .prod-price{font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700;}
+  .prod-price .sub{font-size:10px; color:var(--text-faint); display:block; font-weight:400; text-transform:none;}
+  .add-btn{
+    width:34px; height:34px; border-radius:8px; background:var(--blue); color:#fff;
+    border:none; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s;
+  }
+  .add-btn:hover{background:var(--blue-deep);}
+
+  /* ===== BULK BANNER ===== */
+  .bulk-banner{
+    background:linear-gradient(120deg,#0A0C10,#0C1420);
+    border:1px solid var(--border); border-radius:18px;
+    padding:36px 40px; display:flex; justify-content:space-between; align-items:center; gap:24px; flex-wrap:wrap;
+  }
+  .bulk-banner h3{font-size:22px; margin-bottom:8px;}
+  .bulk-banner p{color:var(--text-dim); font-size:14px; max-width:480px; text-transform:none;}
+  .bulk-tags{display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;}
+  .bulk-tag{
+    font-family:'JetBrains Mono',monospace; font-size:11px; padding:5px 10px;
+    border:1px solid var(--border); border-radius:6px; color:var(--text-dim); text-transform:none;
+  }
+
+  /* ===== TRUST STRIP (de su propio material) ===== */
+  .trust-strip{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+    background:var(--border); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;
+  }
+  .trust-cell{background:var(--panel); padding:24px; display:flex; align-items:center; gap:14px;}
+  .trust-cell .ic{font-size:24px; color:var(--blue-bright);}
+  .trust-cell .t1{font-size:12.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.03em;}
+  .trust-cell .t2{font-size:14px; font-weight:700; text-transform:uppercase;}
+
+  /* ===== PILLARS ===== */
+  .pillars{display:grid; grid-template-columns:repeat(3,1fr); gap:16px;}
+  .pillar{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:26px;}
+  .pillar .pnum{font-family:'JetBrains Mono',monospace; color:var(--blue-bright); font-size:12px; margin-bottom:14px; text-transform:none;}
+  .pillar h4{font-size:16px; text-transform:none; letter-spacing:0; font-family:'Inter',sans-serif; font-weight:700; margin-bottom:10px;}
+  .pillar p{font-size:13.5px; color:var(--text-dim); line-height:1.6; text-transform:none;}
+
+  /* ===== SEGMENTS ===== */
+  .seg-row{display:flex; gap:12px; flex-wrap:wrap;}
+  .seg-pill{
+    display:flex; align-items:center; gap:10px;
+    background:var(--panel); border:1px solid var(--border); border-radius:100px;
+    padding:10px 18px 10px 14px; font-size:13px; text-transform:none; font-weight:500;
+  }
+  .seg-pill .dot{width:8px; height:8px; border-radius:50%; background:var(--blue-bright);}
+
+  /* ===== FOOTER ===== */
+  footer{border-top:1px solid var(--border); padding:44px 0 26px; background:#000;}
+  .footer-grid{display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:32px; margin-bottom:32px;}
+  .footer-col h5{font-size:12px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:14px;}
+  .footer-col a, .footer-col p{display:block; font-size:13.5px; color:var(--text-dim); margin-bottom:9px; text-transform:none;}
+  .footer-col a:hover{color:#fff;}
+  .footer-bottom{
+    border-top:1px solid var(--border); padding-top:22px; display:flex; justify-content:space-between;
+    font-size:12.5px; color:var(--text-faint); flex-wrap:wrap; gap:10px; text-transform:none;
+  }
+  .footer-bottom .domain{color:var(--blue-bright); font-family:'JetBrains Mono',monospace; font-weight:700; letter-spacing:0.06em;}
+
+  /* ===== FLOATING WHATSAPP ===== */
+  .wa-float{
+    position:fixed; bottom:26px; right:26px; z-index:150;
+    background:linear-gradient(135deg,var(--whatsapp),var(--whatsapp-deep));
+    color:#fff; border-radius:100px; padding:15px 22px 15px 18px;
+    display:flex; align-items:center; gap:11px; cursor:pointer;
+    box-shadow:0 14px 32px -8px rgba(37,211,102,0.6);
+    font-weight:700; font-size:14px; border:none; text-transform:none;
+    transition:transform .15s;
+  }
+  .wa-float:hover{transform:translateY(-2px) scale(1.02);}
+  .wa-float svg{width:26px; height:26px; flex-shrink:0;}
+
+  /* ===== CART DRAWER ===== */
+  .overlay{position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; opacity:0; pointer-events:none; transition:opacity .25s;}
+  .overlay.open{opacity:1; pointer-events:auto;}
+  .drawer{
+    position:fixed; top:0; right:0; height:100%; width:420px; max-width:92vw;
+    background:var(--panel); border-left:1px solid var(--border); z-index:201;
+    display:flex; flex-direction:column; transform:translateX(100%); transition:transform .3s cubic-bezier(.4,0,.2,1);
+  }
+  .drawer.open{transform:translateX(0);}
+  .drawer-head{padding:20px 22px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;}
+  .drawer-head h3{font-size:16px;}
+  .drawer-close{background:none; border:none; color:var(--text-dim); font-size:22px; cursor:pointer;}
+  .drawer-items{flex:1; overflow-y:auto; padding:16px 22px;}
+  .cart-line{display:flex; gap:12px; padding:14px 0; border-bottom:1px solid var(--border);}
+  .cart-thumb{width:52px; height:52px; border-radius:8px; background:var(--panel-2); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;}
+  .cart-line-body{flex:1; min-width:0;}
+  .cart-line-name{font-size:13px; font-weight:500; margin-bottom:3px; text-transform:none;}
+  .cart-line-meta{font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-faint); margin-bottom:8px; text-transform:none;}
+  .qty-row{display:flex; align-items:center; gap:10px;}
+  .qty-btn{width:22px; height:22px; border-radius:5px; border:1px solid var(--border); background:var(--bg); color:var(--white); cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center;}
+  .qty-val{font-family:'JetBrains Mono',monospace; font-size:13px; min-width:16px; text-align:center;}
+  .cart-line-price{font-family:'JetBrains Mono',monospace; font-size:13px; text-align:right; white-space:nowrap;}
+  .remove-x{color:var(--text-faint); font-size:11px; cursor:pointer; margin-top:6px; display:inline-block; text-transform:none;}
+  .remove-x:hover{color:#EF4444;}
+  .empty-cart{text-align:center; padding:60px 20px; color:var(--text-faint); font-size:13.5px; text-transform:none;}
+  .drawer-foot{padding:20px 22px; border-top:1px solid var(--border);}
+  .subtotal-row{display:flex; justify-content:space-between; margin-bottom:14px; font-size:14.5px; text-transform:none;}
+  .subtotal-row .amt{font-family:'JetBrains Mono',monospace; font-weight:700; font-size:18px;}
+  .drawer-note{font-size:11.5px; color:var(--text-faint); margin-top:10px; line-height:1.5; text-transform:none;}
+
+  @media(max-width:980px){
+    nav.main-nav{display:none;}
+    .hero{min-height:420px;}
+    .hero-bg img{object-position:center center;}
+    .pair-row{grid-template-columns:1fr;}
+    .prod-grid{grid-template-columns:repeat(2,1fr);}
+    .pillars{grid-template-columns:1fr;}
+    .footer-grid{grid-template-columns:1fr 1fr;}
+    .trust-strip{grid-template-columns:1fr 1fr;}
+    .hero h1{font-size:32px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="container">
+    <div class="contact">
+      <span>📞 <strong>+56 9 XXXX XXXX</strong></span>
+      <span>✉️ contacto@rmgparts.cl</span>
+    </div>
+    <div>SANTIAGO, RM · DESPACHO A TODO CHILE</div>
+  </div>
+</div>
+
+<header>
+  <div class="container nav-row">
+    <div class="logo">
+      <div class="logo-bars"><span></span><span></span><span></span></div>
+      <div>
+        <div class="logo-text">RMG</div>
+        <div class="logo-sub">PARTS</div>
+      </div>
+    </div>
+    <nav class="main-nav">
+      <a href="#categorias">Categorías</a>
+      <a href="#marcas">Por marca de equipo</a>
+      <a href="#destacados">Destacados</a>
+      <a href="#formatos-grandes">Formatos grandes</a>
+      <a href="#segmentos">Segmentos</a>
+    </nav>
+    <div class="nav-actions">
+      <button class="icon-btn" title="Buscar">🔍</button>
+      <button class="icon-btn" onclick="openCart()" title="Carrito">
+        🛒
+        <span class="cart-count" id="cartCount">0</span>
+      </button>
+      <button class="btn btn-white">Acceso B2B</button>
+    </div>
+  </div>
+</header>
+
+<!-- ===== HERO ===== -->
+<section class="hero">
+  <div class="hero-bg">
+    <img src="rmg_brand_hero.png" alt="RMG Parts — Neumáticos, Baterías, Aceites para auto y maquinaria">
+  </div>
+  <div class="container">
+    <div class="hero-content">
+      <div class="badge-row">
+        <div class="badge"><span class="ic">●</span>653 SKU ACTIVOS</div>
+        <div class="badge"><span class="ic">●</span>3 PROVEEDORES CONSOLIDADOS</div>
+      </div>
+      <h1>Todo lo que tu<br><span class="blue">vehículo necesita</span></h1>
+      <p class="lead">Calidad, confianza y rendimiento. Neumáticos, baterías y lubricantes para autos, camiones y maquinaria — con entrega, crédito y factura bajo un solo proveedor.</p>
+      <div class="hero-ctas">
+        <button class="btn">Ver catálogo completo</button>
+        <button class="btn btn-wa">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12.001 2.003c-5.522 0-10 4.477-10 10 0 1.765.46 3.464 1.334 4.965L2 22l5.164-1.323A9.953 9.953 0 0012 22.003c5.523 0 10-4.477 10-10s-4.477-10-9.999-10zm0 18.166a8.14 8.14 0 01-4.16-1.14l-.298-.177-3.065.785.82-2.988-.194-.307a8.16 8.16 0 01-1.264-4.339c0-4.512 3.672-8.183 8.184-8.183 4.512 0 8.183 3.671 8.183 8.183-.002 4.512-3.672 8.166-8.206 8.166z"/></svg>
+          Hablar por WhatsApp
+        </button>
+      </div>
+    </div>
+
+    <div class="finder">
+      <div class="finder-tabs">
+        <div class="finder-tab active" onclick="switchFinder(0,this)">🔧 Buscar por categoría <span class="num">08</span></div>
+        <div class="finder-tab" onclick="switchFinder(1,this)">🚛 Buscar por marca de tu equipo <span class="num">NUEVO</span></div>
+      </div>
+      <div class="finder-body">
+        <div id="finder-0">
+          <div class="finder-search">
+            <input type="text" placeholder="Busca por código, descripción o marca — ej. 5W30, batería 90Ah, 195/55 R16...">
+            <button class="btn">Buscar</button>
+          </div>
+          <div class="chip-row">
+            <span class="chip">Lubricantes</span><span class="chip">Neumáticos</span><span class="chip">Baterías</span>
+            <span class="chip">Grasas</span><span class="chip">Refrigerantes</span><span class="chip">Líquido de frenos</span>
+            <span class="chip">Químicos</span><span class="chip">Aditivos</span>
+          </div>
+        </div>
+        <div id="finder-1" style="display:none;">
+          <div class="finder-search">
+            <input type="text" placeholder="¿Qué camión, camioneta o equipo tienes? Ej. Scania, Volvo, Cummins...">
+            <button class="btn">Buscar</button>
+          </div>
+          <div class="chip-row">
+            <span class="chip">Scania</span><span class="chip">Volvo</span><span class="chip">Mercedes-Benz</span>
+            <span class="chip">Cummins</span><span class="chip">Caterpillar</span><span class="chip">John Deere</span>
+            <span class="chip">Vehículo liviano</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== CATEGORIAS EN PARES (autos vs maquinaria, como su propio material) ===== -->
+<section id="categorias">
+  <div class="container">
+    <div class="section-head">
+      <div><h2>Repuestos y accesorios<br>para auto y maquinaria</h2></div>
+      <a class="see-all" href="#">Ver catálogo completo →</a>
+    </div>
+
+    <div class="pair-row">
+      <div class="pair-card"><div class="tag">NEUMÁTICOS</div><h3>Para autos</h3><div class="count">Double Star · Kumho · Kenda</div><div class="bigicon">🛞</div></div>
+      <div class="pair-card"><div class="tag">NEUMÁTICOS</div><h3>Para tractores y camiones</h3><div class="count">138 SKU en total</div><div class="bigicon">🚜</div></div>
+    </div>
+    <div class="pair-row">
+      <div class="pair-card"><div class="tag">BATERÍAS</div><h3>Para autos</h3><div class="count">Platin · Yoko G&B</div><div class="bigicon">🔋</div></div>
+      <div class="pair-card"><div class="tag">BATERÍAS</div><h3>Para tractores y maquinaria</h3><div class="count">83 SKU en total</div><div class="bigicon">⚙️</div></div>
+    </div>
+    <div class="pair-row">
+      <div class="pair-card"><div class="tag">ACEITES</div><h3>En bidón</h3><div class="count">Attom · Sintek · Auster</div><div class="bigicon">🧴</div></div>
+      <div class="pair-card"><div class="tag">ACEITES</div><h3>En tambor / IBC</h3><div class="count">239 SKU en total</div><div class="bigicon">🛢️</div></div>
+    </div>
+
+    <div class="pair-row" style="grid-template-columns:repeat(5,1fr); margin-top:6px;">
+      <div class="pair-card" style="min-height:auto; padding:18px;"><div class="tag">QUÍMICOS</div><h3 style="font-size:16px;">77 SKU</h3></div>
+      <div class="pair-card" style="min-height:auto; padding:18px;"><div class="tag">GRASAS</div><h3 style="font-size:16px;">49 SKU</h3></div>
+      <div class="pair-card" style="min-height:auto; padding:18px;"><div class="tag">REFRIGERANTES</div><h3 style="font-size:16px;">30 SKU</h3></div>
+      <div class="pair-card" style="min-height:auto; padding:18px;"><div class="tag">ADITIVOS</div><h3 style="font-size:16px;">20 SKU</h3></div>
+      <div class="pair-card" style="min-height:auto; padding:18px;"><div class="tag">FRENOS</div><h3 style="font-size:16px;">17 SKU</h3></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== DESTACADOS ===== -->
+<section id="destacados" style="background:var(--panel); border-top:1px solid var(--border); border-bottom:1px solid var(--border);">
+  <div class="container">
+    <div class="section-head">
+      <div><h2>Productos destacados</h2><p>Los más pedidos por talleres y flotas esta semana.</p></div>
+    </div>
+    <div class="prod-grid" id="prodGrid"></div>
+  </div>
+</section>
+
+<!-- ===== FORMATOS GRANDES ===== -->
+<section id="formatos-grandes">
+  <div class="container">
+    <div class="bulk-banner">
+      <div>
+        <h3>¿Necesitas tambor, bidón grande o IBC?</h3>
+        <p>Los formatos de 20L, 55 galones (208L) y contenedores de 1.000L se coordinan directo con un ejecutivo — logística de despacho y condiciones de pago a la medida de tu faena.</p>
+        <div class="bulk-tags">
+          <span class="bulk-tag">Bidón 20L</span><span class="bulk-tag">Tambor 208L</span>
+          <span class="bulk-tag">IBC 1.000L</span><span class="bulk-tag">AdBlue / Urea</span>
+        </div>
+      </div>
+      <button class="btn btn-wa">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12.001 2.003c-5.522 0-10 4.477-10 10 0 1.765.46 3.464 1.334 4.965L2 22l5.164-1.323A9.953 9.953 0 0012 22.003c5.523 0 10-4.477 10-10s-4.477-10-9.999-10zm0 18.166a8.14 8.14 0 01-4.16-1.14l-.298-.177-3.065.785.82-2.988-.194-.307a8.16 8.16 0 01-1.264-4.339c0-4.512 3.672-8.183 8.184-8.183 4.512 0 8.183 3.671 8.183 8.183-.002 4.512-3.672 8.166-8.206 8.166z"/></svg>
+        Coordinar por WhatsApp
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== TRUST STRIP (literal del material RMG) ===== -->
+<section>
+  <div class="container">
+    <div class="trust-strip">
+      <div class="trust-cell"><span class="ic">🛡️</span><div><div class="t1">Productos</div><div class="t2">De calidad</div></div></div>
+      <div class="trust-cell"><span class="ic">⚙️</span><div><div class="t1">Máximo</div><div class="t2">Rendimiento</div></div></div>
+      <div class="trust-cell"><span class="ic">🏅</span><div><div class="t1">Marcas</div><div class="t2">Confiables</div></div></div>
+      <div class="trust-cell"><span class="ic">🎧</span><div><div class="t1">Asesoría</div><div class="t2">Especializada</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== PILLARES ===== -->
+<section>
+  <div class="container">
+    <div class="section-head">
+      <div><h2>Por qué RMG</h2><p>No competimos con las marcas que vendemos — competimos en cómo te las hacemos llegar.</p></div>
+    </div>
+    <div class="pillars">
+      <div class="pillar"><div class="pnum">01 / MARCA</div><h4>Marca reconocida + marca propia</h4><p>Shell, Kumho y Platin te dan la confianza inicial. Auster, nuestra línea propia, sostiene el mejor precio en tu recompra recurrente.</p></div>
+      <div class="pillar"><div class="pnum">02 / SERVICIO</div><h4>Entrega, crédito y factura</h4><p>No vas a buscarlo tú: nosotros despachamos, con condiciones de crédito y documento tributario en cada pedido.</p></div>
+      <div class="pillar"><div class="pnum">03 / CATÁLOGO</div><h4>Todo en un solo pedido</h4><p>Aceite, batería y neumático en el mismo despacho — sin coordinar con tres proveedores distintos.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SEGMENTOS ===== -->
+<section id="segmentos" style="padding-bottom:70px;">
+  <div class="container">
+    <div class="section-head"><div><h2>Segmentos que atendemos</h2></div></div>
+    <div class="seg-row">
+      <div class="seg-pill"><span class="dot"></span>Talleres</div>
+      <div class="seg-pill"><span class="dot"></span>Concesionarios</div>
+      <div class="seg-pill"><span class="dot"></span>Flotas</div>
+      <div class="seg-pill"><span class="dot"></span>Construcción</div>
+      <div class="seg-pill"><span class="dot"></span>Agrícola</div>
+      <div class="seg-pill"><span class="dot"></span>Minería</div>
+      <div class="seg-pill"><span class="dot"></span>Industria</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <h5>RMG Parts</h5>
+        <p style="max-width:280px;">Todo lo que tu vehículo necesita. Repuestos y accesorios para auto y maquinaria — calidad, confianza y rendimiento.</p>
+      </div>
+      <div class="footer-col">
+        <h5>Catálogo</h5>
+        <a href="#">Lubricantes</a><a href="#">Neumáticos</a><a href="#">Baterías</a><a href="#">Formatos grandes</a>
+      </div>
+      <div class="footer-col">
+        <h5>Segmentos</h5>
+        <a href="#">Talleres</a><a href="#">Flotas</a><a href="#">Construcción y Minería</a><a href="#">Concesionarios</a>
+      </div>
+      <div class="footer-col">
+        <h5>Contacto</h5>
+        <a href="#">WhatsApp comercial</a><a href="#">contacto@rmgparts.cl</a><a href="#">Santiago, RM</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 RMG Parts · Precios netos, no incluyen IVA</span>
+      <span class="domain">RMGPARTS.CL</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ===== WHATSAPP FLOTANTE ===== -->
+<button class="wa-float" onclick="alert('Esto abriría wa.me con el numero comercial de RMG')">
+  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12.001 2.003c-5.522 0-10 4.477-10 10 0 1.765.46 3.464 1.334 4.965L2 22l5.164-1.323A9.953 9.953 0 0012 22.003c5.523 0 10-4.477 10-10s-4.477-10-9.999-10zm0 18.166a8.14 8.14 0 01-4.16-1.14l-.298-.177-3.065.785.82-2.988-.194-.307a8.16 8.16 0 01-1.264-4.339c0-4.512 3.672-8.183 8.184-8.183 4.512 0 8.183 3.671 8.183 8.183-.002 4.512-3.672 8.166-8.206 8.166z"/></svg>
+  Habla con un ejecutivo
+</button>
+
+<!-- ===== CART DRAWER ===== -->
+<div class="overlay" id="overlay" onclick="closeCart()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head"><h3>Tu pedido</h3><button class="drawer-close" onclick="closeCart()">×</button></div>
+  <div class="drawer-items" id="drawerItems"></div>
+  <div class="drawer-foot">
+    <div class="subtotal-row"><span>Subtotal neto</span><span class="amt mono" id="subtotal">$0</span></div>
+    <button class="btn" style="width:100%; justify-content:center;">Ir a pagar</button>
+    <div class="drawer-note">Precios netos, sin IVA. El subtotal se convierte en cotización formal — no es un cobro inmediato. Formatos grandes (tambor/IBC) no se agregan aquí, se coordinan con un ejecutivo.</div>
+  </div>
+</div>
+
+<script>
+  const products = [
+    { id:'1000570', brand:'ATTOM', name:'Attom S320 5W30 ACEA C3/API SN', meta:'Frasco 1L · Vistony', price:4657, icon:'🛢️' },
+    { id:'1000544', brand:'ATTOM', name:'Attom S320 5W-30, caja x4', meta:'Bidón 5L · Vistony', price:22823, icon:'🛢️' },
+    { id:'7000044', brand:'AUSTER', name:'Auster 20W50 SL/CF', meta:'Bidón 4L · SalfaSur', price:12160, icon:'🛢️' },
+    { id:'1000806', brand:'BLINDAX', name:'Blindax Duo SAE 10W40', meta:'Bidón 4L · Vistony', price:12617, icon:'🛢️' },
+    { id:'210061', brand:'DOUBLE STAR', name:'195/55 R16 DH05 87V', meta:'Unidad · SalfaSur', price:38587, icon:'🛞' },
+    { id:'352439', brand:'YOKO G&B', name:'Batería KR 90AMP NX120-7L', meta:'Unidad · SalfaSur', price:92095, icon:'🔋' },
+    { id:'1200105', brand:'VISTONY', name:'Coolant Ice Freeze OAT 50/50', meta:'Caja x6, 4L c/u · Vistony', price:9473, icon:'❄️' },
+    { id:'1100253', brand:'VISTONY', name:'Grasa EP-2 Lithium Multiprop.', meta:'Balde 35 lb · Vistony', price:73457, icon:'🧯' },
+  ];
+
+  const fmt = n => '$' + n.toLocaleString('es-CL');
+  const grid = document.getElementById('prodGrid');
+  products.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'prod-card';
+    card.innerHTML = `
+      <div class="prod-thumb">${p.icon}</div>
+      <div class="prod-body">
+        <div class="prod-brand">${p.brand}</div>
+        <div class="prod-name">${p.name}</div>
+        <div class="prod-meta mono">${p.meta} · SKU ${p.id}</div>
+        <div class="prod-footer">
+          <div class="prod-price">${fmt(p.price)}<span class="sub">neto / unidad</span></div>
+          <button class="add-btn" onclick="addToCart('${p.id}')">+</button>
+        </div>
+      </div>`;
+    grid.appendChild(card);
+  });
+
+  let cart = {};
+  function addToCart(id){ cart[id] = (cart[id] || 0) + 1; renderCart(); openCart(); }
+  function changeQty(id, delta){ cart[id] = (cart[id] || 0) + delta; if(cart[id] <= 0) delete cart[id]; renderCart(); }
+  function removeItem(id){ delete cart[id]; renderCart(); }
+
+  function renderCart(){
+    const items = Object.keys(cart);
+    const container = document.getElementById('drawerItems');
+    document.getElementById('cartCount').textContent = items.reduce((s,id)=>s+cart[id],0);
+
+    if(items.length === 0){
+      container.innerHTML = `<div class="empty-cart">Tu pedido está vacío.<br>Agrega productos desde el catálogo.</div>`;
+      document.getElementById('subtotal').textContent = fmt(0);
+      return;
+    }
+    let subtotal = 0;
+    container.innerHTML = items.map(id => {
+      const p = products.find(pr => pr.id === id);
+      const qty = cart[id];
+      const lineTotal = p.price * qty;
+      subtotal += lineTotal;
+      return `
+        <div class="cart-line">
+          <div class="cart-thumb">${p.icon}</div>
+          <div class="cart-line-body">
+            <div class="cart-line-name">${p.name}</div>
+            <div class="cart-line-meta">${p.meta}</div>
+            <div class="qty-row">
+              <button class="qty-btn" onclick="changeQty('${id}',-1)">−</button>
+              <span class="qty-val">${qty}</span>
+              <button class="qty-btn" onclick="changeQty('${id}',1)">+</button>
+            </div>
+            <span class="remove-x" onclick="removeItem('${id}')">Quitar</span>
+          </div>
+          <div class="cart-line-price mono">${fmt(lineTotal)}</div>
+        </div>`;
+    }).join('');
+    document.getElementById('subtotal').textContent = fmt(subtotal);
+  }
+
+  function openCart(){ document.getElementById('drawer').classList.add('open'); document.getElementById('overlay').classList.add('open'); }
+  function closeCart(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('overlay').classList.remove('open'); }
+  function switchFinder(i, el){
+    document.querySelectorAll('.finder-tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('finder-0').style.display = i===0 ? 'block':'none';
+    document.getElementById('finder-1').style.display = i===1 ? 'block':'none';
+  }
+
+  renderCart();
+</script>
+</body>
+</html>
