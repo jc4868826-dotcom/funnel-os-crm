@@ -8,5 +8,19 @@ data/leads.json
 data/users.json
 data/rr.json
 data/spend.json
-data/bot.jsonnode_modules/
-node_modules/
+data/bot.json
+
+# Datos de clientes y respaldos: nunca al repositorio (07-11-2026)
+*.csv
+leads_unificado_solo_array.json
+restore_body.json
+bot_old_backup.json
+logs_render.txt
+reporte_*.txt
+*.pdf
+files.zip
+files/
+files 2/
+files 3/
+files 4/
+files 5/
