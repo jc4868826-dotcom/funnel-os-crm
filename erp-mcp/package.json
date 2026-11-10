@@ -1,0 +1,12 @@
+{
+  "name": "erp-mcp",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Conector MCP (solo lectura) del ERP de RMG Autos, montado en FunnelOS en /erp-mcp. Aislado: no usa /var/data.",
+  "type": "module",
+  "main": "index.cjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^3.23.0"
+  }
+}
