@@ -1,0 +1,13 @@
+{
+  "baseUrl": "https://gestion.rmgautos.cl/api/controller.php",
+  "login": {
+    "url": "https://gestion.rmgautos.cl/api/access-control.php",
+    "method": "POST",
+    "body": {
+      "codigo": "{{USER}}",
+      "password": "{{PASS_MD5}}"
+    },
+    "tokenPath": "auto",
+    "authHeaderPrefix": "Bearer "
+  }
+}
