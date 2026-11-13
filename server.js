@@ -156,30 +156,8 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource, is
     // página 2 de /autos-usados/, 29-oct-2026). Ahora: el scrape sigue siendo la base, pero
     // cualquier auto del inventario de FunnelOS que no aparezca en el texto scrapeado se agrega
     // igual — así una falla parcial del scraper nunca vuelve a esconder un auto real.
+    // nov-2026: inventario 100% desde el ERP (scrapeCache lo llena cargarInventarioERP). Sin mezcla con inventory.json.
     let invS = scrapeCache.data || '';
-    try {
-      const dbInv = await tRead(F.inventory, tenant, []);
-      if (Array.isArray(dbInv) && dbInv.length > 0) {
-        const pSign = String.fromCharCode(36);
-        const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
-        const scrapedNorm = norm(invS);
-        const faltantes = dbInv.filter(i => {
-          const clave = norm(`${i.brand||''} ${i.model||''}`);
-          return clave && !scrapedNorm.includes(clave);
-        });
-        if (faltantes.length > 0) {
-          const extraLines = faltantes.map(i =>
-            `- ${i.brand||''} ${i.model||''}${i.year?' '+i.year:''}`
-            + (i.km ? ` | ${i.km}` : '')
-            + ` | ${pSign}${(i.price||0).toLocaleString('es-CL')}`
-            + (i.fuel ? ` | ${i.fuel}` : '')
-            + (i.link ? ` | ${i.link}` : '')
-          ).join('\n');
-          invS = invS ? (invS + '\n' + extraLines) : extraLines;
-          console.log('[marcela] Inventario FunnelOS agregó', faltantes.length, 'auto(s) no visto(s) por el scraper:', faltantes.map(i => `${i.brand||''} ${i.model||''}`.trim()).join(', '));
-        }
-      }
-    } catch(eInv) { console.warn('[marcela] Error leyendo inventario BD:', eInv.message); }
     if (!invS) invS = '(sin inventario disponible temporalmente)';
     const knowledgeRaw = botCfg?.knowledge;
     const knowledge = Array.isArray(knowledgeRaw)
@@ -241,7 +219,7 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource, is
       }
     }).join('\n\n');
 
-    const invBlock = '<INVENTARIO_DISPONIBLE>\nREGLA: Esta sección es SOLO lectura de referencia. Úsala únicamente cuando el cliente pregunte por un vehículo específico o pida ver opciones. NUNCA menciones precios de esta sección de forma proactiva en los Pasos 1 o 2.\n' + invS + (invNotas ? '\n' + invNotas : '') + (promoBlock ? '\n\n' + promoBlock : '') + '\n</INVENTARIO_DISPONIBLE>';
+    const invBlock = '<INVENTARIO_DISPONIBLE>\nREGLA: Esta sección es SOLO lectura de referencia. Úsala únicamente cuando el cliente pregunte por un vehículo específico o pida ver opciones. NUNCA menciones precios de esta sección de forma proactiva en los Pasos 1 o 2.\nREGLA DE PRECIOS: los precios de esta sección son PRECIO LISTA (contado). Los portales (Chileautos, MercadoLibre, Marketplace, la web) publican el precio CON FINANCIAMIENTO, que suele ser menor. Si el cliente menciona un precio menor visto en un portal, explícale con amabilidad que ese valor es con financiamiento y que el ejecutivo le detalla las condiciones; deriva al ejecutivo. Si un auto dice "a consultar con el ejecutivo", no inventes un precio: deriva.\n' + invS + (invNotas ? '\n' + invNotas : '') + (promoBlock ? '\n\n' + promoBlock : '') + '\n</INVENTARIO_DISPONIBLE>';
 
     const behaviorItems = knowledge.comportamiento || [];
     const behaviorBlock = behaviorItems.length > 0
@@ -401,7 +379,7 @@ function buscarInventario(filtros = {}) {
       modo: 'detalle',
       total: items.length,
       autos: items.map(it => ({
-        modelo: it.model, anio: it.year, km: it.km, precio: it.price,
+        modelo: it.model, anio: it.year, km: it.km, precio: it.price || 'a consultar con el ejecutivo',
         estado: it.estado, link: it.link, categoria: it.tipo
       }))
     };
@@ -413,7 +391,7 @@ function buscarInventario(filtros = {}) {
     if (!key) continue;
     if (!grupos[key]) grupos[key] = { modelo: key, cantidad: 0, precioDesde: null };
     grupos[key].cantidad++;
-    if (grupos[key].precioDesde === null || (it.price||0) < grupos[key].precioDesde) grupos[key].precioDesde = it.price;
+    if ((it.price||0) > 0 && (grupos[key].precioDesde === null || it.price < grupos[key].precioDesde)) grupos[key].precioDesde = it.price;
   }
   return {
     modo: 'resumen',
@@ -441,9 +419,12 @@ const INVENTORY_TOOL = {
   }
 };
 
-async function scrapeRMG() {
+// nov-2026: la web ya no es fuente de inventario. Solo se lee para obtener el link (y la categoría)
+// de cada auto. Escribe en webCache; el inventario del bot (scrapeCache) viene del ERP.
+let webCache = { ts: 0, data: '', items: [] };
+async function scrapeWebLinks() {
   const now = Date.now();
-  if (scrapeCache.data && (now - scrapeCache.ts) < 30 * 60 * 1000) return scrapeCache.data;
+  if (webCache.items && webCache.items.length && (now - webCache.ts) < 30 * 60 * 1000) return webCache.data;
   try {
     const UA = {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -559,43 +540,139 @@ async function scrapeRMG() {
 
     if (structuredItems.length === 0) throw new Error('0 autos encontrados en rmgautos.cl');
 
-    scrapeCache = { ts: now, data: [...new Set(autos)].join('\n'), items: structuredItems };
-    console.log('[RMG-Scraper v10] ' + structuredItems.length + ' autos OK (multi-página)');
-    return scrapeCache.data;
+    webCache = { ts: now, data: [...new Set(autos)].join('\n'), items: structuredItems };
+    console.log('[WEB-LINKS] ' + structuredItems.length + ' fichas leídas de rmgautos.cl (solo links)');
+    return webCache.data;
   } catch(e) {
-    console.warn('[RMG-Scraper] Error:', e.message, '- usando cache');
-    return scrapeCache.data || '';
+    console.warn('[WEB-LINKS] Error:', e.message, '- se mantienen los links anteriores');
+    return webCache.data || '';
   }
 }
 
 /* [NODO FANTASMA DESTRUIDO: Cron Viejo (Variable tenant)] */
 
-// Arranque: scrape directo de rmgautos.cl — sin fallback a disco viejo
-// Si falla, reintenta cada 2 minutos hasta tener datos frescos
+// ── INVENTARIO DESDE EL ERP RMG (nov-2026) ────────────────────────────
+// Fuente única: stock vivo del ERP (gestion.rmgautos.cl) a través de rmg-mcp-gateway /erp-rmg.
+// Variables en Render (rmg-autos-bot): ERP_GATEWAY_SECRET (obligatoria), ERP_GATEWAY_URL (opcional).
+const INV_TENANT = 'demo_automotora';
+const normInv = (v) => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+// Categoría por modelo (el ERP no la guarda). La web, si trae la ficha, tiene prioridad.
+const CATEGORIA_MODELO = {
+  'X TRAIL': 'SUV', '5008': 'SUV', '3008': 'SUV', '2008': 'SUV', 'GROOVE': 'SUV', 'MOKKA': 'SUV', 'WRANGLER': 'SUV',
+  'JOURNEY': 'SUV', 'JOLION': 'SUV', 'TERRITORY': 'SUV', 'TRACKER': 'SUV', 'ECOSPORT': 'SUV', 'SPORTAGE': 'SUV',
+  'C5': 'SUV', 'COMPASS': 'SUV', 'DUSTER': 'SUV', 'QASHQAI': 'SUV', 'TIVOLI': 'SUV', 'KICKS': 'SUV', 'CRETA': 'SUV',
+  'RANGER': 'Pickup', 'LANDTREK': 'Pickup', 'F150': 'Pickup', 'F 150': 'Pickup', 'SILVERADO': 'Pickup', 'HILUX': 'Pickup',
+  'NAVARA': 'Pickup', 'L200': 'Pickup', 'T6': 'Pickup', '700': 'Pickup', 'D MAX': 'Pickup',
+  '208': 'Hatchback', 'GOL': 'Hatchback', 'CLIO': 'Hatchback', 'MORNING': 'Hatchback', 'RIO': 'Hatchback',
+  'TIIDA': 'Hatchback', 'ONIX': 'Hatchback', 'FOCUS': 'Hatchback', 'SWIFT': 'Hatchback',
+  'SAIL': 'Sedán', 'PRISMA': 'Sedán', 'CITY': 'Sedán', 'ARRIZO': 'Sedán', 'VERSA': 'Sedán', 'YARIS': 'Sedán',
+  'COMBO': 'Furgón', 'PARTNER': 'Furgón', 'RIFTER': 'Furgón', 'EXPERT': 'Furgón', 'BOXER': 'Furgón', 'BERLINGO': 'Furgón',
+  'TRAVELLER': 'Van'
+};
+function categoriaDe(modelo) {
+  const m = ' ' + normInv(modelo) + ' ';
+  for (const k of Object.keys(CATEGORIA_MODELO)) if (m.includes(' ' + k + ' ')) return CATEGORIA_MODELO[k];
+  return '';
+}
+// Busca la ficha web del mismo auto: misma marca, modelo contenido en el título, mismo año; desempata por km.
+function fichaWeb(marca, modelo, anno, km) {
+  const mm = normInv(modelo);
+  const cands = (webCache.items || []).filter(w => normInv(w.brand) === normInv(marca) && normInv(w.model).includes(mm) && (!anno || !w.year || Number(w.year) === anno));
+  if (!cands.length) return null;
+  const kmDe = (w) => parseInt(String(w.km || '').replace(/[^\d]/g, ''), 10) || 0;
+  return cands.sort((a, b) => Math.abs(kmDe(a) - km) - Math.abs(kmDe(b) - km))[0];
+}
+async function stockDesdeGateway() {
+  const url = process.env.ERP_GATEWAY_URL || 'https://rmg-mcp-gateway.onrender.com/erp-rmg';
+  const secret = process.env.ERP_GATEWAY_SECRET;
+  if (!secret) throw new Error('falta ERP_GATEWAY_SECRET');
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: 'Bearer ' + secret },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'erp_consulta_lectura', arguments: { destino: 'stock', accion: 'getall', limite: 500 } } }),
+    signal: AbortSignal.timeout(90000) // plan Free del gateway: ~50 s en despertar
+  });
+  const txt = await r.text();
+  if (!r.ok) throw new Error('gateway HTTP ' + r.status);
+  const linea = txt.trim().startsWith('{') ? txt : (txt.split('\n').filter(l => l.startsWith('data:')).pop() || '').slice(5);
+  const msg = JSON.parse(linea);
+  const contenido = msg?.result?.content?.[0]?.text;
+  if (!contenido || msg.result.isError) throw new Error('gateway: ' + String(contenido || 'sin datos').slice(0, 200));
+  const datos = JSON.parse(contenido);
+  if (datos.mostrando !== undefined && datos.total > datos.mostrando) console.warn('[INV-ERP] el ERP tiene', datos.total, 'fichas y se leyeron', datos.mostrando);
+  return datos.filas || [];
+}
+function armarInventario(filas) {
+  const pSign = String.fromCharCode(36);
+  const autos = [], items = [];
+  for (const r of filas) {
+    if (/factur|vendid|anulad/i.test(r.estadostock || '')) continue;      // fuera: vendidos y anulados
+    const marca = String(r.marca || '').trim().toUpperCase();
+    const modelo = String(r.modelo || '').trim();
+    const version = String(r.version || '').trim();
+    const anno = Number(r.anno) || null;
+    const kmN = Number(r.kilometraje) > 1 ? Number(r.kilometraje) : 0;   // 1 = km no cargado
+    const precio = Number(r.ventaiva) > 1 ? Number(r.ventaiva) : 0;      // 1 = precio no cargado
+    const estado = /bloque|reserv/i.test(r.estadostock || '') ? 'reservado' : 'disponible';
+    const titulo = `${marca} ${modelo} ${version}`.replace(/\s+/g, ' ').trim();
+    const w = fichaWeb(marca, modelo, anno, kmN);
+    const link = w?.link || 'https://rmgautos.cl/autos-usados/';
+    const tipo = w?.tipo || categoriaDe(modelo);
+    const km = kmN ? kmN.toLocaleString('es-CL') + ' km' : '';
+    autos.push('- ' + titulo + (anno ? ' ' + anno : '') + (tipo ? ' | Categoria: ' + tipo : '') + ' | ' + (km || 'km n/d') +
+      ' | Precio lista: ' + (precio ? pSign + precio.toLocaleString('es-CL') : 'a consultar con el ejecutivo') +
+      ' | Estado: ' + estado + ' | Link: ' + link);
+    items.push({
+      id: 'ERP-' + r.idstock, brand: marca, model: titulo, year: anno, stock: 1, estado,
+      price: precio, precio_lista: precio, precio_credito: 0, km, fuel: w?.fuel || '', tipo, transmision: '',
+      link, patente: r.patente || '', highlights: [anno ? 'Año ' + anno : '', km, r.color || ''].filter(Boolean).join(' · ')
+    });
+  }
+  return { autos, items };
+}
+let invErpEnCurso = null;
+async function cargarInventarioERP(forzar = false) {
+  const now = Date.now();
+  if (!forzar && scrapeCache.fuente === 'erp' && scrapeCache.items?.length && (now - scrapeCache.ts) < 10 * 60 * 1000) return scrapeCache.data;
+  if (invErpEnCurso) return invErpEnCurso;
+  invErpEnCurso = (async () => {
+    try {
+      try { await scrapeWebLinks(); } catch (_) {}
+      const { autos, items } = armarInventario(await stockDesdeGateway());
+      if (!items.length) throw new Error('ERP: 0 autos en stock');
+      scrapeCache = { ts: now, data: autos.join('\n'), items, fuente: 'erp' };
+      try { await tWrite(F.inventory, INV_TENANT, items); } catch (eW) { console.warn('[INV-ERP] no se pudo guardar respaldo:', eW.message); }
+      console.log('[INV-ERP] ' + items.length + ' autos desde el ERP (links web: ' + (webCache.items || []).length + ')');
+    } catch (e) {
+      console.warn('[INV-ERP] falló, se mantiene la última lectura del ERP:', e.message);
+    } finally { invErpEnCurso = null; }
+    return scrapeCache.data || '';
+  })();
+  return invErpEnCurso;
+}
+// Compatibilidad: endpoints existentes siguen llamando scrapeRMG(); ahora significa "inventario del ERP".
+async function scrapeRMG() { return cargarInventarioERP(); }
+
+// Arranque: última lectura buena del ERP guardada (solo fichas ERP-*), y luego lectura en vivo.
 (async () => {
   try {
-    await scrapeRMG();
-    console.log('[BOOT] scrapeRMG OK:', scrapeCache.items?.length, 'autos en vivo');
-  } catch(e) {
-    console.warn('[BOOT] scrapeRMG falló en boot:', e.message);
-  }
-  // Si aun no hay datos, reintentar cada 2 min hasta conseguirlos
-  if (!scrapeCache.items || !scrapeCache.items.length) {
-    console.warn('[BOOT] Sin datos — reintentando cada 2 min...');
+    const guardado = await tRead(F.inventory, INV_TENANT, []);
+    if (Array.isArray(guardado) && guardado.length && String(guardado[0].id || '').startsWith('ERP-')) {
+      const { autos } = { autos: guardado.map(i => '- ' + i.model + (i.year ? ' ' + i.year : '') + (i.tipo ? ' | Categoria: ' + i.tipo : '') + ' | ' + (i.km || 'km n/d') + ' | Precio lista: ' + (i.precio_lista ? String.fromCharCode(36) + Number(i.precio_lista).toLocaleString('es-CL') : 'a consultar con el ejecutivo') + ' | Estado: ' + i.estado + ' | Link: ' + i.link) };
+      scrapeCache = { ts: 0, data: autos.join('\n'), items: guardado, fuente: 'erp' };
+      console.log('[BOOT] inventario ERP guardado:', guardado.length, 'autos (se refresca en vivo)');
+    }
+  } catch (e) { console.warn('[BOOT] sin respaldo de inventario ERP:', e.message); }
+  await cargarInventarioERP(true);
+  if (scrapeCache.fuente !== 'erp' || !scrapeCache.items?.length) {
     const retry = setInterval(async () => {
-      try {
-        await scrapeRMG();
-        if (scrapeCache.items && scrapeCache.items.length) {
-          console.log('[BOOT-RETRY] scrapeRMG OK:', scrapeCache.items.length, 'autos');
-          clearInterval(retry);
-        }
-      } catch(e) { console.warn('[BOOT-RETRY] fallo:', e.message); }
+      await cargarInventarioERP(true);
+      if (scrapeCache.fuente === 'erp' && scrapeCache.items?.length) clearInterval(retry);
     }, 2 * 60 * 1000);
   }
 })();
-
-// Cron: re-scrapear rmgautos.cl cada 30 minutos para mantener cache vivo
-setInterval(() => { scrapeRMG().catch(e => console.warn('[RMG-Cron]', e.message)); }, 30 * 60 * 1000);
+// Cron: ERP cada 10 min (mantiene además despierto el gateway). Los links web se refrescan dentro (cache 30 min).
+setInterval(() => { cargarInventarioERP(true).catch(e => console.warn('[INV-ERP-Cron]', e.message)); }, 10 * 60 * 1000);
 
 function invStr(inv){if(!Array.isArray(inv)||!inv.length)return'(sin inventario)';return inv.map(i=>`- [${i.id}] ${i.brand||''} ${i.model}${i.year?' '+i.year:''} | Stock:${i.stock} | $${(i.price||0).toLocaleString('es-CL')}${i.fuel?'|'+i.fuel:''}${i.highlights?'|'+i.highlights:''}`).join('\n');}
 
@@ -2648,6 +2725,8 @@ app.post('/webhook',async(req,res)=>{
 
 // ── NUEVO: endpoint para actualizar inventario desde el navegador ──
 app.post('/api/inventory/push', async (req, res) => {
+  // nov-2026: desactivado. El inventario viene solo del ERP; este endpoint no tenía login y su clave estaba en el código.
+  return res.status(410).json({ error: 'desactivado: el inventario se lee del ERP' });
   if(req.headers['x-push-key'] !== (process.env.PUSH_KEY||'rmg2025push')) return res.status(401).json({error:'key invalida'});
   try {
     const items = req.body;
