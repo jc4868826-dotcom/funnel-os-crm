@@ -261,6 +261,14 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource, is
           let filtrosTool = {};
           try { filtrosTool = JSON.parse(toolCall.function.arguments || '{}'); } catch(eParse) { console.warn('[marcela] Error parseando argumentos de tool:', eParse.message); }
           try { resultadoTool = buscarInventario(filtrosTool); } catch(eBusq) { console.error('[marcela] Error en buscarInventario:', eBusq.message); resultadoTool = { error: 'error interno buscando inventario' }; }
+          // Paso (b): si el match determinista no encontro nada, el LLM revisa el stock completo.
+          // Cata solo puede decir "no lo tenemos" cuando TAMBIEN este paso confirma que no hay ninguno.
+          if (resultadoTool && !resultadoTool.error && (resultadoTool.total === 0 || resultadoTool.totalUnidades === 0)) {
+            try {
+              const alt = await buscarStockPorLLM(msg, scrapeCache.items || [], filtrosTool);
+              if (alt) resultadoTool = alt;
+            } catch (eLLM) { console.warn('[CATA-STOCK-LLM-ERROR]', eLLM.message); }
+          }
         }
         msgsIA.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(resultadoTool) });
       }
@@ -360,13 +368,130 @@ let scrapeCache = { ts: 0, data: '' };
 // y el filtrado (marca, modelo, categoría, rango de precio) se hacen aquí en código,
 // de forma determinística, y el resultado exacto se le entrega a la IA para redactar.
 const _normInv = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '');
+// ── Normalizacion + match difuso de stock (nov-2026) ──────────────────────
+// Problema que resuelve: el cliente escribe "2022 Nissan X-Trail 2.5 SENSE",
+// "xtrail", "X trail", "equis trail" o con typos, y un unico includes() sobre el
+// titulo del ERP fallaba -> Cata decia "no lo tenemos" con el auto en stock.
+const RELLENO_Q = new Set(['hola','buenas','buenos','dias','tardes','noches','gracias','porfa','favor',
+'tengo','tienes','tiene','tienen','hay','queda','quedan','esta','estan','existe','existen','disponible',
+'disponibles','stock','busco','buscaba','quiero','quisiera','necesito','interesa','interesaria','interesado',
+'me','te','se','le','lo','la','el','los','las','un','una','unos','unas','de','del','al','para','por','con',
+'sin','en','y','o','u','que','cual','cuales','cuanto','cuanta','cuesta','vale','valor','precio','pesos',
+'auto','autos','vehiculo','vehiculos','camioneta','camionetas','modelo','modelos','version','versiones',
+'marca','ano','anno','year','km','kilometraje','kilometros','mil','info','informacion','mas','ver','saber',
+'decir','consultar','puedes','podrias','podria','seria','serian','si','no','ok','aun','todavia','ese','esa',
+'eso','este','algo','alguno','alguna','tal','vez','buena','bueno','usted','ustedes','uds','ahi','aca','alla']);
+// Escritura hablada / fonetica chilena
+const ALIAS_Q = [[/\bequis\b/g,'x'],[/\bdoble\s*cabina\b/g,'dc'],[/\bautomatic[oa]\b/g,'at'],
+  [/\bmecanic[oa]\b/g,'mt'],[/\bdiesel\b/g,'dsl'],[/\bcuatro\s*por\s*cuatro\b/g,'4x4'],[/\bcuatro\s*por\s*dos\b/g,'4x2']];
+
+function tokenizarQ(texto) {
+  if (texto === null || texto === undefined) return [];
+  let t = String(texto).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ñ/g, 'n');
+  for (const [re, rep] of ALIAS_Q) t = t.replace(re, rep);
+  t = t.replace(/[^a-z0-9]+/g, ' ');
+  return t.split(' ').filter(x => x && !RELLENO_Q.has(x));
+}
+// minusculas, sin tildes, sin guiones/puntos/espacios, sin relleno
+function normalizar(texto) { return tokenizarQ(texto).join(''); }
+const esAnnoQ = t => /^(19|20)\d{2}$/.test(t);
+
+function levQ(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i), cur = new Array(n + 1);
+  for (let i = 1; i <= m; i++) {
+    cur[0] = i;
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    const tmp = prev; prev = cur; cur = tmp;
+  }
+  return prev[n];
+}
+const tolQ = len => (len <= 3 ? 0 : len <= 5 ? 1 : len <= 8 ? 2 : 3);
+
+// ¿aparece `aguja` dentro de `pajar` aceptando errores de tipeo?
+function contieneDifuso(pajar, aguja) {
+  if (!aguja || aguja.length < 3) return false;
+  if (pajar.includes(aguja)) return true;
+  if (/^\d+$/.test(aguja)) return false;              // 3008 != 2008 != 5008
+  const tol = tolQ(aguja.length);
+  if (!tol) return false;
+  for (let L = aguja.length - tol; L <= aguja.length + tol; L++) {
+    if (L < 3) continue;
+    for (let i = 0; i + L <= pajar.length; i++) if (levQ(aguja, pajar.substr(i, L)) <= tol) return true;
+  }
+  return false;
+}
+
+// Cada token de 3+ caracteres debe calzar (exacto, difuso o como subcadena difusa).
+// El año se ignora aqui: el año iba dentro de `modelo` y rompia el includes() anterior.
+function calzaTexto(consulta, ...campos) {
+  const toks = tokenizarQ(consulta).filter(t => !esAnnoQ(t));
+  if (!toks.length) return false;
+  const tCampos = campos.flatMap(c => tokenizarQ(c));
+  const compacto = campos.map(c => normalizar(c)).join('');
+  let fuertes = 0;
+  for (const qt of toks) {
+    const ok = tCampos.includes(qt)
+      || contieneDifuso(compacto, qt)
+      || (!/^\d+$/.test(qt) && tCampos.some(t => t.length >= 3 && !/^\d+$/.test(t) && levQ(qt, t) <= tolQ(Math.max(qt.length, t.length))));
+    if (qt.length >= 3) { if (!ok) return false; if (ok) fuertes++; }
+  }
+  return fuertes > 0;
+}
+
+// ── Paso (b): el LLM revisa el stock DISPONIBLE completo ──────────────────
+const PROMPT_STOCK = 'Eres el buscador de stock de una automotora chilena.\n' +
+'Recibes el mensaje de un cliente y la lista COMPLETA de autos en stock.\n' +
+'Identifica que auto o autos de la lista pide, aunque lo escriba mal, abreviado,\n' +
+'foneticamente, en otro orden o con otro nombre comercial.\n' +
+'Responde SOLO JSON: {"patentes":["AAAA11"],"razon":"breve"}\n' +
+'Si de verdad ninguno corresponde: {"patentes":[],"razon":"breve"}.\n' +
+'No inventes autos que no esten en la lista.';
+
+function fichaStock(it) {
+  return { patente: it.patente, marca: it.brand, modelo: it.model, anio: it.year,
+    km: it.km, color: it.color || '', precio: it.price || 'a consultar con el ejecutivo', estado: it.estado };
+}
+
+async function buscarStockPorLLM(mensajeCliente, items, filtros) {
+  const dispo = (items || []).filter(it => it.estado !== 'vendido');
+  if (!dispo.length) return null;
+  const r = await openai.chat.completions.create({
+    model: 'gpt-4o-mini', temperature: 0,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: PROMPT_STOCK },
+      { role: 'user', content: JSON.stringify({ mensaje: mensajeCliente, filtros_intentados: filtros || {}, stock: dispo.map(fichaStock) }) }
+    ]
+  });
+  const j = JSON.parse(r.choices[0].message.content || '{}');
+  const pats = new Set((Array.isArray(j.patentes) ? j.patentes : []).map(p => normalizar(p)));
+  const autos = dispo.filter(it => it.patente && pats.has(normalizar(it.patente)));
+  if (!autos.length) {
+    console.log('[CATA-STOCK-SIN-MATCH] msg="' + String(mensajeCliente).slice(0, 160) + '" norm="' + normalizar(mensajeCliente) + '" razon="' + (j.razon || '') + '"');
+    return null;
+  }
+  // Variante de escritura nueva: el paso difuso no la encontro y el LLM si.
+  console.log('[CATA-STOCK-VARIANTE] msg="' + String(mensajeCliente).slice(0, 160) + '" norm="' + normalizar(mensajeCliente) +
+    '" filtros=' + JSON.stringify(filtros || {}) + ' resuelto_por=LLM patentes=' + autos.map(a => a.patente).join(',') + ' razon="' + (j.razon || '') + '"');
+  return {
+    modo: 'detalle', via: 'llm', total: autos.length,
+    autos: autos.map(it => ({ modelo: it.model, anio: it.year, km: it.km, color: it.color || '',
+      precio: it.price || 'a consultar con el ejecutivo', estado: it.estado, link: it.link, categoria: it.tipo })),
+    aviso: 'COINCIDENCIA CONFIRMADA en stock. Ofrece estos autos con sus datos exactos (año, version, km, color, precio). NO digas que no esta disponible.'
+  };
+}
+
 function buscarInventario(filtros = {}) {
   const todos = scrapeCache.items || [];
   const nMarca = _normInv(filtros.marca), nModelo = _normInv(filtros.modelo), nCat = _normInv(filtros.categoria);
   const noDisp = it => it.estado === 'vendido' || it.estado === 'reservado';
   const coincide = it => {
-    if (nMarca && !(_normInv(it.brand) === nMarca || _normInv(it.model).includes(nMarca))) return false;
-    if (nModelo && !_normInv(it.model).includes(nModelo)) return false;
+    // Match normalizado + difuso (tildes, guiones, espacios, typos, "equis trail", año dentro del modelo)
+    if (nMarca && !(calzaTexto(filtros.marca, it.brand) || calzaTexto(filtros.marca, it.model))) return false;
+    if (nModelo && !calzaTexto(filtros.modelo, it.model)) return false;
     if (nCat && !_normInv(it.tipo).includes(nCat)) return false;
     // El precio solo filtra cuando se busca por criterio; si el cliente ya nombró un modelo NO se descarta
     // por precio (el precio del aviso en Chileautos/ML casi nunca coincide con el del sitio).
@@ -384,7 +509,7 @@ function buscarInventario(filtros = {}) {
     return {
       modo: 'detalle', total: 0, autos: [],
       reservadosOVendidos: noDispon.map(it => ({ modelo: it.model, anio: it.year, estado: it.estado })),
-      aviso: 'Sin coincidencia para ese modelo en la búsqueda. ANTES de decir que no está disponible, revisa <INVENTARIO_DISPONIBLE> completo (el nombre del aviso puede venir con otra grafía o versión). Solo afirma "no disponible" si realmente no aparece o su Estado es reservado/vendido.',
+      aviso: 'NO AFIRMES QUE NO ESTA DISPONIBLE. Sin coincidencia para ese modelo en la búsqueda. ANTES de decir que no está disponible, revisa <INVENTARIO_DISPONIBLE> completo (el nombre del aviso puede venir con otra grafía o versión). Solo afirma "no disponible" si realmente no aparece o su Estado es reservado/vendido.',
       otrosDeLaMarca: nMarca ? todos.filter(it => !noDisp(it) && (_normInv(it.brand) === nMarca || _normInv(it.model).includes(nMarca))).slice(0, 8).map(it => it.model) : undefined
     };
   }
@@ -394,7 +519,7 @@ function buscarInventario(filtros = {}) {
       modo: 'detalle',
       total: items.length,
       autos: items.map(it => ({
-        modelo: it.model, anio: it.year, km: it.km, precio: it.price || 'a consultar con el ejecutivo',
+        modelo: it.model, anio: it.year, km: it.km, color: it.color || '', precio: it.price || 'a consultar con el ejecutivo',
         estado: it.estado, link: it.link, categoria: it.tipo
       }))
     };
@@ -640,7 +765,7 @@ function armarInventario(filas) {
     items.push({
       id: 'ERP-' + r.idstock, brand: marca, model: titulo, year: anno, stock: 1, estado,
       price: precio, precio_lista: precio, precio_credito: 0, km, fuel: w?.fuel || '', tipo, transmision: '',
-      link, patente: r.patente || '', highlights: [anno ? 'Año ' + anno : '', km, r.color || ''].filter(Boolean).join(' · ')
+      link, patente: r.patente || '', color: String(r.color || '').trim(), highlights: [anno ? 'Año ' + anno : '', km, r.color || ''].filter(Boolean).join(' · ')
     });
   }
   return { autos, items };
