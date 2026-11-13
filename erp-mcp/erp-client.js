@@ -73,14 +73,34 @@ async function login() {
   session = { token, cookies: setCookies.map((c) => c.split(';')[0]), prefix: null };
 }
 
+// Acciones de lectura que no empiezan con "get" (verificadas en el ERP).
+const LECTURA_EXTRA = new Set(['notaventa.estadoresultado']);
+
+export const esLectura = (destino, accion) =>
+  /^get\w*$/i.test(accion) || LECTURA_EXTRA.has(`${destino}.${accion}`);
+
 /**
  * Llama a una acción de LECTURA del ERP.
- * Solo se permiten acciones que empiezan con "get": la escritura queda bloqueada en esta versión.
+ * Solo se permiten acciones "get*" y las de LECTURA_EXTRA: la escritura queda bloqueada en esta versión.
  */
 export async function call(destino, accion, dataForm = {}, extra = {}) {
   if (!/^\w+$/.test(destino)) throw new Error('destino inválido');
-  if (!/^get\w*$/i.test(accion)) throw new Error('Solo se permiten acciones de lectura (get*) en esta versión');
+  if (!esLectura(destino, accion)) throw new Error('Solo se permiten acciones de lectura en esta versión');
+  const json = await peticion(destino, accion, dataForm, extra);
+  if (json === null) return [];
+  return json.data;
+}
 
+// Única lista de escrituras permitidas. Cualquier otra acción de escritura queda bloqueada.
+export const ESCRITURAS_PERMITIDAS = new Set(['gastosingresos.add', 'notaventa.updateEstado']);
+
+/** Escribe en el ERP: solo acciones de ESCRITURAS_PERMITIDAS. Devuelve el JSON completo del ERP. */
+export async function escribir(destino, accion, dataForm = {}, extra = {}) {
+  if (!ESCRITURAS_PERMITIDAS.has(`${destino}.${accion}`)) throw new Error(`Escritura no permitida: ${destino}.${accion}`);
+  return peticion(destino, accion, dataForm, extra);
+}
+
+async function peticion(destino, accion, dataForm, extra) {
   let fallos = 0;
   while (true) {
     if (!session.token) await login();
@@ -110,7 +130,8 @@ export async function call(destino, accion, dataForm = {}, extra = {}) {
     const authFail =
       res.status === 401 ||
       res.status === 403 ||
-      (json && json.estado === 'NOK' && /token|sesi[oó]n|autoriz|expir/i.test(json.message || ''));
+      (json && json.estado === 'NOK' && /token|sesi[oó]n|autoriz|expir/i.test(json.message || '')) ||
+      (json && /access denied|acceso denegado|login failed|no autorizado/i.test(json.message || ''));
 
     if (authFail) {
       fallos++;
@@ -129,9 +150,9 @@ export async function call(destino, accion, dataForm = {}, extra = {}) {
 
     if (json.estado === 'NOK') {
       const msg = json.message || 'Error del ERP';
-      if (/no se encontraron/i.test(msg)) return []; // lista vacía, no es error
+      if (/no se encontraron/i.test(msg)) return null; // lista vacía, no es error
       throw new Error(msg);
     }
-    return json.data;
+    return json;
   }
 }
