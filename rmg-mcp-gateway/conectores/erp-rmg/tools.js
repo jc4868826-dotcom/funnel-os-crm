@@ -6,7 +6,7 @@ import { registrarAnalisis, limpiarCache } from './analisis.js';
 
 // Crea un servidor MCP con todas las herramientas del ERP (solo lectura). Montos en pesos chilenos (CLP).
 export function createServer() {
-  const server = new McpServer({ name: 'erp-rmg-autos', version: '0.5.0' });
+  const server = new McpServer({ name: 'erp-rmg-autos', version: '0.6.0' });
 
   const ok = (data) => ({
     content: [{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data ?? null) }],
@@ -738,6 +738,105 @@ export function createServer() {
         fs.appendFileSync(BITACORA, JSON.stringify({ ts: new Date().toISOString(), accion: 'gastosingresos.add', registro: vista, id: creado?.idgastosingresos ?? null, respuesta: res?.message ?? null }) + '\n');
       } catch { /* la bitácora es best-effort */ }
       return { estado: res?.estado === 'OK' ? 'GUARDADO' : 'RESPUESTA_INESPERADA', mensaje_erp: res?.message ?? null, id_registro: creado?.idgastosingresos ?? null, verificado: Boolean(creado), registro: vista };
+    },
+  );
+
+
+  tool(
+    'erp_facturar_nota_venta',
+    'ESCRIBE en el ERP: cambia el estado de una nota de venta y su N° y fecha de factura (acción notaventa.updateEstado). Flujo obligatorio en dos pasos: 1) llamar con confirmar=false (por defecto) para obtener la VISTA PREVIA con el cuadre de ingresos y mostrársela al usuario; 2) solo después de que el usuario diga explícitamente que sí, llamar de nuevo con confirmar=true. Nunca usar confirmar=true sin la aprobación explícita del usuario en este turno. Antes de facturar valida que los ingresos VALIDADOS cubran el total a pagar de la nota (precio con descuentos + gastos que paga el cliente); si no cuadra, no guarda salvo forzar=true. Recordar la regla del negocio: la venta se asigna al mes según la FECHA DE FACTURA. Queda registro en una bitácora local.',
+    {
+      id: z.number().int().describe('idnotaventa'),
+      nrofactura: z.number().int().min(0).optional().describe('N° de factura; si se omite, mantiene el actual'),
+      fechafactura: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('AAAA-MM-DD; por defecto hoy al facturar'),
+      estado: z.enum(['FACTURADA', 'VIGENTE', 'ANULADA']).default('FACTURADA'),
+      forzar: z.boolean().default(false).describe('Permite guardar aunque los ingresos validados no cubran el total'),
+      confirmar: z.boolean().default(false),
+    },
+    async (a) => {
+      const nota = await call('notaventa', 'getid', {}, { id: a.id });
+      if (!nota || !nota.idnotaventa) throw new Error(`No existe la nota de venta ${a.id}`);
+
+      const estados = lista(await call('estadonv', 'getall'));
+      const est = elegir(estados, 'idestadonv', 'estadonv', a.estado, 'Estado de nota de venta');
+
+      // Cuadre de ingresos: solo cuentan los validados por administración.
+      const ingresos = lista(await call('ingresos', 'getid', {}, { id: a.id }));
+      const validados = ingresos.filter((i) => txt(i.validado) === 'S' && txt(i.remove) !== 'S');
+      const recaudado = sumar(validados, 'valor');
+      const aPagar = num(nota.ventadescuentosyotros) || precioReal(nota) + num(nota.gastossuman);
+      const diferencia = aPagar - recaudado;
+
+      const facturando = txt(est.estadonv) === 'FACTURADA';
+      const fecha = a.fechafactura ?? (facturando ? hoyISO() : (nota.fechafactura ?? '').slice(0, 10) || hoyISO());
+      const nro = a.nrofactura ?? num(nota.nrofactura);
+
+      const vista = {
+        nota: a.id,
+        cliente: nota.cliente,
+        auto: `${nota.marca ?? ''} ${nota.modelo ?? ''} ${nota.patente ?? ''}`.trim(),
+        estado_actual: nota.estadonv,
+        estado_nuevo: est.estadonv,
+        nrofactura_actual: num(nota.nrofactura),
+        nrofactura_nuevo: nro,
+        fechafactura_actual: (nota.fechafactura ?? '').slice(0, 10) || null,
+        fechafactura_nueva: fecha,
+        a_pagar: aPagar,
+        ingresos_validados: recaudado,
+        ingresos_sin_validar: sumar(ingresos.filter((i) => txt(i.validado) !== 'S' && txt(i.remove) !== 'S'), 'valor'),
+        diferencia_pendiente: diferencia,
+      };
+
+      if (facturando && diferencia !== 0 && !a.forzar) {
+        return {
+          estado: 'BLOQUEADO (no se ha guardado nada)',
+          motivo: diferencia > 0
+            ? `Faltan $${diferencia.toLocaleString('es-CL')} de ingresos validados para cubrir el total de la nota.`
+            : `Los ingresos validados superan en $${Math.abs(diferencia).toLocaleString('es-CL')} el total de la nota.`,
+          registro: vista,
+          siguiente_paso: 'Revisar los ingresos con el usuario. Si aun así quiere facturar, repetir con forzar=true y confirmar=true.',
+        };
+      }
+
+      if (!a.confirmar) {
+        return {
+          estado: 'VISTA_PREVIA (no se ha guardado nada)',
+          registro: vista,
+          siguiente_paso: 'Mostrar al usuario y pedir confirmación explícita; luego repetir con confirmar=true.',
+        };
+      }
+
+      // El ERP espera el objeto completo de la nota; se omiten los campos de auditoría que la UI tampoco envía.
+      const dataForm = { ...nota };
+      for (const k of ['registro', 'usuregistro', 'idusuarios_crea_fk', 'idusuarios_cierra_fk1']) delete dataForm[k];
+      dataForm.idestadonv_fk = num(est.idestadonv);
+      dataForm.estadonv = est.estadonv;
+      dataForm.nrofactura = String(nro);
+      dataForm.fechafactura = fecha;
+
+      const res = await escribir('notaventa', 'updateEstado', dataForm, { id: a.id });
+      limpiarCache();
+
+      // Verificación: relee la nota desde el ERP.
+      const despues = await call('notaventa', 'getid', {}, { id: a.id });
+      const guardado = {
+        estado: despues?.estadonv ?? null,
+        nrofactura: num(despues?.nrofactura),
+        fechafactura: (despues?.fechafactura ?? '').slice(0, 10) || null,
+      };
+      const verificado = guardado.estado === est.estadonv && guardado.nrofactura === nro && guardado.fechafactura === fecha;
+
+      try {
+        fs.appendFileSync(BITACORA, JSON.stringify({ ts: new Date().toISOString(), accion: 'notaventa.updateEstado', registro: vista, id: a.id, respuesta: res?.message ?? null }) + '\n');
+      } catch { /* la bitácora es best-effort */ }
+
+      return {
+        estado: verificado ? 'GUARDADO' : 'RESPUESTA_INESPERADA',
+        mensaje_erp: res?.message ?? null,
+        verificado,
+        quedo_en: guardado,
+        registro: vista,
+      };
     },
   );
 

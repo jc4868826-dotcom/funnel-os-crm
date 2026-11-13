@@ -92,7 +92,7 @@ export async function call(destino, accion, dataForm = {}, extra = {}) {
 }
 
 // Única lista de escrituras permitidas. Cualquier otra acción de escritura queda bloqueada.
-export const ESCRITURAS_PERMITIDAS = new Set(['gastosingresos.add']);
+export const ESCRITURAS_PERMITIDAS = new Set(['gastosingresos.add', 'notaventa.updateEstado']);
 
 /** Escribe en el ERP: solo acciones de ESCRITURAS_PERMITIDAS. Devuelve el JSON completo del ERP. */
 export async function escribir(destino, accion, dataForm = {}, extra = {}) {
