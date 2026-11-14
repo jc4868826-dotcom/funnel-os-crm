@@ -11,11 +11,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Generado por herramientas/envolver.mjs desde:
-//   /mnt/user-data/uploads/erp-parts-mcp/server.js
-// Única diferencia con el conector local: se quitó el transporte stdio y el
-// cuerpo quedó dentro de createServer(). La lógica y las herramientas son
-// idénticas — no editar a mano, regenerar con el script.
+// ESTE ES EL CÓDIGO VIVO. Se edita acá.
+//
+// Nació de una migración única con herramientas/envolver.mjs, que tomó el
+// conector stdio local y le quitó el transporte. Esa ruta de origen apuntaba a
+// un contenedor de la sesión de migración y no existe en ninguna máquina; el
+// conector local que le servía de fuente ya fue retirado del Mac. El
+// encabezado anterior decía "no editar a mano, regenerar con el script": eso
+// quedó obsoleto y mandaba a editar un archivo que ya no manda nada.
 // ─────────────────────────────────────────────────────────────────────────────
 export function createServer() {
 
@@ -65,6 +68,19 @@ const WRITE_ALLOW = [
   { method: 'POST', re: /^\/api\/oc\/[^/]+\/recepcion$/ },      // recepción de mercadería
   { method: 'POST', re: /^\/api\/oc\/[^/]+\/factura$/ },    // factura de compra contra una OC recibida
   { method: 'PATCH', re: /^\/api\/oc\/[^/]+\/estado$/ },    // solo se usa para pasar a 'pagada' (ver parts_registrar_pago_oc)
+
+  // Flujo comercial completo desde una cotización ganada (nov 2026).
+  // Orden real del ERP, verificado en los controllers:
+  //   cotización → adjuntar OC del cliente → NV → autorización → OC proveedor
+  //   → validar OC (acá NACE la venta) → facturar.
+  { method: 'POST',  re: /^\/api\/documentos\/(cotizacion|pedido|venta|orden_compra)\/[^/]+\/json$/ },
+  { method: 'POST',  re: /^\/api\/pedidos\/from-cotizacion\/[^/]+$/ },
+  { method: 'POST',  re: /^\/api\/pedidos\/[^/]+\/enviar-autorizacion$/ },
+  { method: 'POST',  re: /^\/api\/pedidos\/[^/]+\/validar-oc$/ },
+  { method: 'POST',  re: /^\/api\/ventas\/[^/]+\/facturar$/ },
+  // Trazabilidad de costo para líneas compradas fuera de catálogo.
+  { method: 'PATCH', re: /^\/api\/cotizaciones\/items\/[^/]+\/vincular-oc$/ },
+  { method: 'POST',  re: /^\/api\/ventas\/[^/]+\/recalcular-costo-oc$/ },
 ];
 
 async function erp(method, url, body) {
@@ -101,6 +117,30 @@ const hoy = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sa
 const ok = (obj) => ({ content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2) }] });
 const fail = (e) => ({ isError: true, content: [{ type: 'text', text: `Error: ${e.message}` }] });
 const safe = (fn) => async (args) => { try { return ok(await fn(args || {})); } catch (e) { return fail(e); } };
+
+// Artículos que no están en el maestro: se compran recién al ganar, a cualquier
+// proveedor. Se cotizan a costo + 10%. El prefijo del SKU es la marca.
+const ES_EXTERNO = (codigo) => /^EXT-/i.test(String(codigo || ''));
+const MARGEN_EXTERNO = 1.10;
+
+// Punto 3 del patrón de escritura: releer desde el ERP y decir si quedó.
+// `esperado` es un objeto campo→valor; devuelve qué se comparó y el veredicto.
+async function verificar(ruta, esperado) {
+  try {
+    const despues = await erp('GET', ruta);
+    const comparado = {};
+    let ok_ = true;
+    for (const [k, v] of Object.entries(esperado)) {
+      const real = despues?.[k] ?? null;
+      const coincide = String(real ?? '') === String(v ?? '');
+      comparado[k] = { esperado: v ?? null, quedo: real, coincide };
+      if (!coincide) ok_ = false;
+    }
+    return { verificado: ok_, comparado };
+  } catch (e) {
+    return { verificado: false, error_verificacion: e.message };
+  }
+}
 
 // Recorta listas grandes y avisa el total real.
 function lista(d, { q, campos, limite = 50 } = {}) {
@@ -259,10 +299,21 @@ server.tool('parts_crear_cotizacion',
   },
   safe(async (a) => {
     if (!a.cliente_id && !a.cliente) throw new Error('Falta cliente_id o cliente');
-    const items = a.items.map(i => ({
-      ...i,
-      subtotal: Math.round(i.cantidad * i.precio_unitario * (1 - (i.descuento_pct || 0) / 100)),
-    }));
+    // Artículos fuera de catálogo (SKU EXT-): en Mercado Público se cotizan
+    // buscando precio en la web y agregando MARGEN_EXTERNO. Si no viene costo,
+    // se deriva del precio para que el margen no nazca inflado — el costo real
+    // entra después con parts_recalcular_costo_venta, contra la OC efectiva.
+    const items = a.items.map(i => {
+      const costo = (!i.costo_unitario && ES_EXTERNO(i.codigo))
+        ? Math.round(i.precio_unitario / MARGEN_EXTERNO)
+        : (i.costo_unitario || 0);
+      return {
+        ...i,
+        costo_unitario: costo,
+        subtotal: Math.round(i.cantidad * i.precio_unitario * (1 - (i.descuento_pct || 0) / 100)),
+      };
+    });
+    const externos = items.filter(i => ES_EXTERNO(i.codigo) && !a.items.find(x => x.codigo === i.codigo)?.costo_unitario);
     const neto = items.reduce((s, i) => s + i.subtotal, 0);
     const iva = Math.round(neto * 0.19);
     const payload = {
@@ -271,7 +322,10 @@ server.tool('parts_crear_cotizacion',
       neto, iva, total: neto + iva, items,
     };
     if (!a.confirmar) {
-      return { vista_previa: payload, aviso: 'NO creada. Pide confirmación al usuario y vuelve a llamar con confirmar=true.' };
+      const avisos = externos.length
+        ? [`Costo estimado (precio / ${MARGEN_EXTERNO}) para ${externos.length} línea(s) fuera de catálogo: ${externos.map(i => `${i.codigo} $${i.costo_unitario.toLocaleString('es-CL')}`).join(', ')}. Se corrige con la OC real.`]
+        : [];
+      return { vista_previa: payload, avisos, aviso: 'NO creada. Pide confirmación al usuario y vuelve a llamar con confirmar=true.' };
     }
     const creada = await erp('POST', '/api/cotizaciones', payload);
     bitacora({ accion: 'cotizacion.crear', numero: creada?.numero, total: payload.total });
@@ -579,6 +633,196 @@ server.tool('parts_avanzar_oc',
     return { actualizada: resumenOC(r) };
   }));
 
+
+// ───────────────────────────────────────────────────────────────────────────
+// Flujo comercial desde una cotización ganada (nov 2026)
+//
+// Secuencia real del ERP, verificada en los controllers — importa el orden:
+//   1. parts_crear_cotizacion
+//   2. parts_adjuntar_documento   (OC del cliente sobre la cotización)
+//   3. parts_crear_nota_venta     (aprueba la cotización de paso)
+//   4. parts_enviar_a_autorizacion
+//   5. parts_autorizar_nota_venta (ya existía)
+//   6. parts_crear_oc             (ya existía; una por proveedor)
+//   7. parts_validar_oc           ← acá NACE la venta
+//   8. parts_facturar_venta
+// La venta NO nace al autorizar, aunque un comentario del ERP diga lo
+// contrario: nace en validar-oc. Y ventas/desde-pedido es solo recuperación.
+// ───────────────────────────────────────────────────────────────────────────
+
+server.tool('parts_adjuntar_documento',
+  'Adjunta un documento (PDF, Excel, Word o imagen) a una cotización, nota de venta, venta u OC, mandando el contenido en base64. Úsalo para la OC DEL CLIENTE sobre la cotización: es requisito para crear la nota de venta. Paso único (no tiene vista previa): subir un documento es aditivo y se puede borrar desde el ERP, y repetir el envío duplicaría megabytes de base64.',
+  {
+    entidad: z.enum(['cotizacion', 'pedido', 'venta', 'orden_compra']),
+    entidad_id: z.string().describe('id de la cotización / NV / venta / OC'),
+    nombre_archivo: z.string().min(1).describe('Ej: OC-ChileCompra-1234.pdf'),
+    mime_type: z.string().describe('application/pdf, image/jpeg, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, ...'),
+    contenido_base64: z.string().min(16).describe('Contenido del archivo en base64 (acepta data URL)'),
+    categoria: z.enum(['oc_cliente', 'respaldo_costos', 'comprobante_pago', 'factura', 'guia_despacho', 'otro'])
+      .describe('oc_cliente habilita crear la NV; respaldo_costos hace que los costos salgan de lo negociado y no de la lista'),
+  },
+  safe(async (a) => {
+    const r = await erp('POST',
+      `/api/documentos/${a.entidad}/${encodeURIComponent(a.entidad_id)}/json`,
+      { nombre_archivo: a.nombre_archivo, mime_type: a.mime_type, contenido_base64: a.contenido_base64, categoria: a.categoria });
+    bitacora({ accion: 'documento.adjuntar', entidad: a.entidad, entidad_id: a.entidad_id, nombre: a.nombre_archivo, categoria: a.categoria, bytes: r?.bytes });
+    const lista = await erp('GET', `/api/documentos/${a.entidad}/${encodeURIComponent(a.entidad_id)}?categoria=${a.categoria}`);
+    const quedo = (rowsOf(lista) || []).some(d => d.id === r?.id);
+    return { adjuntado: { id: r?.id, nombre: r?.nombre_archivo, tipo: r?.tipo, categoria: r?.categoria, bytes: r?.bytes }, verificado: quedo };
+  }));
+
+server.tool('parts_crear_nota_venta',
+  'Crea la NOTA DE VENTA desde una cotización ganada y de paso marca la cotización como aprobada. EXIGE que la cotización tenga adjunta la OC del cliente (categoria oc_cliente): si falta, el ERP responde FALTA_OC_CLIENTE — súbela antes con parts_adjuntar_documento. Dos pasos: vista previa y luego confirmar=true con el "sí" del usuario.',
+  {
+    cotizacion: z.string().describe('id de la cotización (usa parts_cotizaciones para obtenerlo)'),
+    notas: z.string().optional().describe('Ej: "Negocio ganado Mercado Público — ID proceso XXXX"'),
+    condicion_pago: z.string().optional(),
+    direccion_entrega: z.string().optional(),
+    fecha_entrega_programada: z.string().regex(FECHA_RE).optional().describe('AAAA-MM-DD'),
+    confirmar: z.boolean().default(false),
+  },
+  safe(async (a) => {
+    const cot = await erp('GET', `/api/cotizaciones/${encodeURIComponent(a.cotizacion)}`);
+    const avisos = [];
+    const docs = rowsOf(await erp('GET', `/api/documentos/cotizacion/${encodeURIComponent(cot.id)}?categoria=oc_cliente`)) || [];
+    if (!docs.length) avisos.push('BLOQUEADO: falta la OC del cliente adjunta a la cotización. Súbela con parts_adjuntar_documento (categoria=oc_cliente) antes de crear la nota de venta.');
+    const respaldo = rowsOf(await erp('GET', `/api/documentos/cotizacion/${encodeURIComponent(cot.id)}?categoria=respaldo_costos`)) || [];
+    if (!respaldo.length) avisos.push('Sin respaldo_costos adjunto: los costos de las líneas sin costo propio saldrán de la lista de precios. Las líneas EXT- conservan el costo estimado de la cotización.');
+    if (cot.estado === 'aprobada') avisos.push(`La cotización ya está en estado "${cot.estado}" — verifica que no tenga ya una nota de venta.`);
+
+    const vista = {
+      cotizacion: cot.numero, id: cot.id, cliente: cot.cliente,
+      neto: cot.neto, iva: cot.iva, total: cot.total,
+      lineas: (cot.items || []).length,
+      oc_cliente_adjunta: docs[0]?.nombre_archivo || null,
+      origen_costos: respaldo.length ? 'respaldo' : 'lista',
+      notas: a.notas || null,
+    };
+    if (!a.confirmar) {
+      return { vista_previa: vista, avisos, aviso: 'NO creada. Pide confirmación al usuario y vuelve a llamar con confirmar=true.' };
+    }
+    if (!docs.length) throw new Error(avisos[0]);
+
+    const nv = await erp('POST', `/api/pedidos/from-cotizacion/${encodeURIComponent(cot.id)}`, {
+      notas: a.notas, condicion_pago: a.condicion_pago,
+      direccion_entrega: a.direccion_entrega, fecha_entrega_programada: a.fecha_entrega_programada,
+    });
+    bitacora({ accion: 'nv.crear_desde_cotizacion', cotizacion: cot.numero, nota_venta: nv?.numero, total: nv?.total });
+    const v = await verificar(`/api/pedidos/${encodeURIComponent(nv.id)}`, { estado: 'pendiente', cotizacion_id: cot.id });
+    return { creada: { nota_venta: nv?.numero, id: nv?.id, estado: nv?.estado, cliente: nv?.cliente, neto: nv?.neto, total: nv?.total }, ...v,
+             siguiente_paso: 'parts_enviar_a_autorizacion' };
+  }));
+
+server.tool('parts_enviar_a_autorizacion',
+  'Manda la NOTA DE VENTA a autorización del administrador (pendiente/confirmado/rechazado → en_autorizacion). Paso previo obligatorio: sin esto no se puede autorizar ni emitir la OC. Dos pasos: vista previa y luego confirmar=true con el "sí" del usuario.',
+  { nota_venta: z.string().describe('Número (NV-2026-010) o id'), confirmar: z.boolean().default(false) },
+  safe(async (a) => {
+    const nv = await erp('GET', `/api/pedidos/${encodeURIComponent(a.nota_venta.trim())}`);
+    const avisos = [];
+    if (!['pendiente', 'confirmado', 'rechazado'].includes(nv.estado)) avisos.push(`BLOQUEADO: la nota de venta está en "${nv.estado}"; esta vía solo sirve desde pendiente, confirmado o rechazado.`);
+    if (!nv.oc_cliente_doc_id) avisos.push('BLOQUEADO: falta la OC del cliente adjunta.');
+    const vista = { nota_venta: nv.numero, estado: nv.estado, cliente: nv.cliente, total: nv.total };
+    if (!a.confirmar) return { vista_previa: vista, avisos, aviso: 'NO enviada. Pide confirmación al usuario y vuelve a llamar con confirmar=true.' };
+    if (avisos.length) throw new Error(avisos[0]);
+    await erp('POST', `/api/pedidos/${encodeURIComponent(nv.id)}/enviar-autorizacion`, {});
+    bitacora({ accion: 'nv.enviar_autorizacion', nota_venta: nv.numero });
+    const v = await verificar(`/api/pedidos/${encodeURIComponent(nv.id)}`, { estado: 'en_autorizacion' });
+    return { nota_venta: nv.numero, ...v, siguiente_paso: 'parts_autorizar_nota_venta (administrador)' };
+  }));
+
+server.tool('parts_validar_oc',
+  'VALIDA la OC del proveedor de una nota de venta: el proveedor confirmó precio y plazo. Es el paso donde NACE LA VENTA, en estado "por facturar". Requiere al menos una OC vigente emitida desde la NV. Dos pasos: vista previa y luego confirmar=true con el "sí" del usuario.',
+  { nota_venta: z.string().describe('Número (NV-2026-010) o id'), confirmar: z.boolean().default(false) },
+  safe(async (a) => {
+    const nv = await erp('GET', `/api/pedidos/${encodeURIComponent(a.nota_venta.trim())}`);
+    const avisos = [];
+    const ocs = rowsOf(await erp('GET', '/api/oc')) || [];
+    const propias = ocs.filter(o => String(o.pedido_id || '') === String(nv.id));
+    if (!propias.length) avisos.push('BLOQUEADO: no hay OC emitida desde esta nota de venta. Emítela con parts_crear_oc.');
+    if (nv.venta_id) avisos.push(`La nota de venta ya tiene la venta ${nv.venta_id} asociada: validar de nuevo no creará otra.`);
+    const vista = {
+      nota_venta: nv.numero, estado: nv.estado, cliente: nv.cliente, total: nv.total,
+      ocs: propias.map(o => ({ numero: o.numero, proveedor: o.proveedor, estado: o.estado, total: o.total })),
+    };
+    if (!a.confirmar) return { vista_previa: vista, avisos, aviso: 'NO validada. Pide confirmación al usuario y vuelve a llamar con confirmar=true.' };
+    if (!propias.length) throw new Error(avisos[0]);
+    const r = await erp('POST', `/api/pedidos/${encodeURIComponent(nv.id)}/validar-oc`, {});
+    bitacora({ accion: 'nv.validar_oc', nota_venta: nv.numero, venta: r?.venta?.numero_documento || null });
+    const v = await verificar(`/api/pedidos/${encodeURIComponent(nv.id)}`, { estado: 'oc_validada' });
+    return { nota_venta: nv.numero, venta_creada: r?.venta ? { id: r.venta.id, numero: r.venta.numero_documento, total: r.venta.total, costo_total: r.venta.costo_total } : null,
+             ...v, siguiente_paso: 'emitir la factura en el SII y registrarla con parts_facturar_venta' };
+  }));
+
+server.tool('parts_facturar_venta',
+  'Registra en el ERP el N° de la factura YA EMITIDA en el sitio del SII (por_facturar → facturada). NO emite ninguna factura: la emisión es externa. Requiere rol facturador, gerente o administrador. Dos pasos: vista previa y luego confirmar=true con el "sí" del usuario.',
+  {
+    venta: z.string().describe('id de la venta (usa parts_ventas para obtenerlo)'),
+    numero_factura: z.string().min(1).describe('N° de la factura emitida en el SII'),
+    fecha_factura: z.string().regex(FECHA_RE).optional().describe('AAAA-MM-DD; por defecto hoy'),
+    confirmar: z.boolean().default(false),
+  },
+  safe(async (a) => {
+    const venta = await erp('GET', `/api/ventas/${encodeURIComponent(a.venta.trim())}`);
+    const fecha = a.fecha_factura || hoy();
+    const avisos = [];
+    if (venta.estado === 'Anulado') avisos.push('BLOQUEADO: la venta está anulada.');
+    if (venta.estado_facturacion === 'facturada') avisos.push(`La venta ya figura facturada con el N° ${venta.numero_factura}. Volver a llamar la re-registra con el número nuevo.`);
+    const margen = (Number(venta.total) || 0) - (Number(venta.costo_total) || 0);
+    if (!venta.costo_total) avisos.push('La venta tiene costo 0: el margen que quede registrado será falso. Revisa si falta parts_recalcular_costo_venta.');
+    const vista = {
+      venta: venta.numero_documento, id: venta.id, cliente: venta.cliente_nombre,
+      total: venta.total, costo_total: venta.costo_total, margen,
+      numero_factura: a.numero_factura, fecha_factura: fecha,
+      nota: 'La venta se asigna al mes según la FECHA DE FACTURA.',
+    };
+    if (!a.confirmar) return { vista_previa: vista, avisos, aviso: 'NO registrada. Pide confirmación al usuario y vuelve a llamar con confirmar=true.' };
+    if (venta.estado === 'Anulado') throw new Error(avisos[0]);
+    await erp('POST', `/api/ventas/${encodeURIComponent(venta.id)}/facturar`, { numero_factura: a.numero_factura, fecha_factura: fecha });
+    bitacora({ accion: 'venta.facturar', venta: venta.numero_documento, numero_factura: a.numero_factura, fecha_factura: fecha, total: venta.total });
+    const v = await verificar(`/api/ventas/${encodeURIComponent(venta.id)}`,
+      { estado_facturacion: 'facturada', numero_factura: a.numero_factura, fecha_factura: fecha });
+    return { venta: venta.numero_documento, ...v };
+  }));
+
+server.tool('parts_vincular_item_oc',
+  'Liga una línea de COTIZACIÓN a una línea de OC, para que el costo real de la compra llegue a la venta. Sin este vínculo parts_recalcular_costo_venta no hace nada: empareja por oc_item_id. Úsalo sobre todo en líneas EXT-, cuyo costo inicial es una estimación. Dos pasos: vista previa y luego confirmar=true.',
+  {
+    cotizacion_item_id: z.string().describe('id de la línea de cotización'),
+    oc_item_id: z.string().nullable().describe('id de la línea de OC; null para desvincular'),
+    confirmar: z.boolean().default(false),
+  },
+  safe(async (a) => {
+    const vista = { cotizacion_item_id: a.cotizacion_item_id, oc_item_id: a.oc_item_id };
+    if (!a.confirmar) return { vista_previa: vista, aviso: 'NO vinculada. Pide confirmación al usuario y vuelve a llamar con confirmar=true.' };
+    const r = await erp('PATCH', `/api/cotizaciones/items/${encodeURIComponent(a.cotizacion_item_id)}/vincular-oc`, { oc_item_id: a.oc_item_id });
+    bitacora({ accion: 'cotizacion.vincular_oc', cotizacion_item_id: a.cotizacion_item_id, oc_item_id: a.oc_item_id });
+    return { vinculada: r, siguiente_paso: 'parts_recalcular_costo_venta' };
+  }));
+
+server.tool('parts_recalcular_costo_venta',
+  'Recalcula el costo de las líneas de una venta desde las OC vinculadas en su cotización de origen, y actualiza el costo total. NO toca el monto de venta: solo corrige el costo y por lo tanto el margen. Pensado para líneas EXT-, que nacen con costo estimado. Dos pasos: vista previa y luego confirmar=true.',
+  { venta: z.string().describe('id de la venta'), confirmar: z.boolean().default(false) },
+  safe(async (a) => {
+    const antes = await erp('GET', `/api/ventas/${encodeURIComponent(a.venta.trim())}`);
+    const avisos = [];
+    if (!antes.cotizacion_id) avisos.push('BLOQUEADO: esta venta no viene de una cotización, no hay OC que recalcular.');
+    const vista = {
+      venta: antes.numero_documento, total: antes.total,
+      costo_total_actual: antes.costo_total,
+      margen_actual: (Number(antes.total) || 0) - (Number(antes.costo_total) || 0),
+    };
+    if (!a.confirmar) return { vista_previa: vista, avisos, aviso: 'NO recalculada. Pide confirmación al usuario y vuelve a llamar con confirmar=true.' };
+    if (!antes.cotizacion_id) throw new Error(avisos[0]);
+    const r = await erp('POST', `/api/ventas/${encodeURIComponent(antes.id)}/recalcular-costo-oc`, {});
+    bitacora({ accion: 'venta.recalcular_costo', venta: antes.numero_documento, antes: antes.costo_total, despues: r?.costo_total, lineas: r?.lineas_actualizadas });
+    return {
+      venta: antes.numero_documento,
+      lineas_actualizadas: r?.lineas_actualizadas ?? 0,
+      costo_total: { antes: antes.costo_total, despues: r?.costo_total },
+      margen: { antes: vista.margen_actual, despues: (Number(r?.total) || 0) - (Number(r?.costo_total) || 0) },
+      verificado: r?.costo_total != null,
+    };
+  }));
 
 
   return server;
