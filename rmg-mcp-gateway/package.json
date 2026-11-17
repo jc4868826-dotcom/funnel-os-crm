@@ -2,7 +2,7 @@
   "name": "rmg-mcp-gateway",
   "version": "1.0.0",
   "private": true,
-  "description": "Publica los conectores MCP de RMG (erp-parts, funnelos, erp-rmg) como URL, para usarlos desde el telefono y modo voz igual que en el Mac.",
+  "description": "Publica los conectores MCP de RMG (erp-parts, funnelos, erp-rmg, mail-rmg) como URL, para usarlos desde el telefono y modo voz igual que en el Mac.",
   "type": "module",
   "main": "index.mjs",
   "scripts": { "start": "node index.mjs" },
@@ -10,6 +10,9 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "express": "^4.22.2",
+    "imapflow": "^2.12.1",
+    "mailparser": "^3.14.5",
+    "nodemailer": "^10.6.0",
     "zod": "^3.23.8"
   }
 }

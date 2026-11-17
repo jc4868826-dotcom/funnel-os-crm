@@ -5,6 +5,7 @@
 //   POST /erp-parts              ERP RMG Parts    (lectura + escrituras del conector)
 //   POST /funnelos               CRM FunnelOS     (solo lectura)
 //   POST /erp-rmg                ERP RMG Autos
+//   POST /mail-rmg               Correo RMG Autos (IMAP/SMTP de mail.rmgautos.cl)
 //
 // IDENTIDADES
 // Cada ruta acepta varios secretos, y cada secreto entra al sistema con SUS PROPIAS
@@ -70,6 +71,16 @@ const CONECTORES = [
     prefijoSecreto: 'MCP_SECRET_RMG',
     credenciales: { obligatorias: ['ERP_USER', 'ERP_PASS'], opcionales: ['ERP_BASE_URL', 'ERP_LOGIN_URL'] },
     cargar: () => import('./conectores/erp-rmg/tools.js'),
+  },
+  {
+    ruta: 'mail-rmg',
+    titulo: 'Correo RMG Autos',
+    prefijoSecreto: 'MCP_SECRET_MAIL',
+    credenciales: {
+      obligatorias: ['MAIL_USER', 'MAIL_PASS'],
+      opcionales: ['MAIL_IMAP_HOST', 'MAIL_IMAP_PORT', 'MAIL_SMTP_HOST', 'MAIL_SMTP_PORT', 'MAIL_FROM'],
+    },
+    cargar: () => import('./conectores/mail-rmg.mjs'),
   },
 ];
 

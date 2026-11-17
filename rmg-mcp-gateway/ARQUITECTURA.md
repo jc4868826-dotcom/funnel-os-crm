@@ -3,7 +3,7 @@
 Documento maestro. Si vas a tocar cualquier conector MCP (erp-rmg, erp-parts, funnelos),
 lee esto primero: evita redescubrir desde cero dónde vive el código y cómo se despliega.
 
-Última actualización: 13-11-2026.
+Última actualización: 17-11-2026.
 
 ---
 
@@ -39,7 +39,8 @@ rmg-mcp-gateway/
 │   │   ├── analisis.js    #   motor de análisis genérico
 │   │   └── erp-config.json
 │   ├── erp-parts.mjs
-│   └── funnelos.mjs
+│   ├── funnelos.mjs
+│   └── mail-rmg.mjs       # ← correo de RMG Autos por IMAP/SMTP (ver sección 8)
 ├── package.json
 └── LEEME.md
 ```
@@ -239,3 +240,97 @@ tool nueva **no aparece en el chat donde se hizo el cambio** — hay que abrir u
 `ERP_USER`, `ERP_PASS` por identidad, y los secretos que `index.mjs` usa para resolver
 identidad. No viven en el repo. Si faltan, el conector responde 503 y lo informa en
 `/health` con `listo: false`.
+
+---
+
+## 8. El conector de correo (`mail-rmg`)
+
+Cuarta ruta del gateway: `/mail-rmg`. Correo de RMG Autos, el mismo buzón que se ve en
+`mail.rmgautos.cl` vía Roundcube.
+
+### Por qué IMAP y no Roundcube
+
+**Roundcube no tiene API.** Es un cliente web sobre el buzón, igual que el conector: la URL
+`.../3rdparty/roundcube/?_task=mail` incluye un `cpsess` que es un token de sesión de cPanel
+y caduca. Automatizar contra esa URL obligaría a mantener una sesión de navegador viva, y
+eso no existe en el móvil ni en voz.
+
+El conector habla **IMAP** (lectura, puerto 993 SSL) y **SMTP** (envío, puerto 465 SSL)
+directo contra el servidor de correo. Es el mismo protocolo que usa Roundcube por debajo,
+sin navegador en medio. Lo que se hace desde el conector se ve en Roundcube y al revés.
+
+### Tools (8: 4 de lectura, 4 de escritura)
+
+**Lectura:**
+
+| Tool | Qué hace |
+|---|---|
+| `mail_carpetas` | Carpetas con total y no leídos; resuelve los nombres reales de Enviados/Papelera/Spam |
+| `mail_buscar` | Lista cabeceras con filtros combinables (fechas, de, para, asunto, texto, no leídos, con adjuntos). **No trae el cuerpo** |
+| `mail_leer` | Un mensaje completo por `uid`: cabeceras, cuerpo en texto, nombres de adjuntos |
+| `mail_resumen` | Panorama de un rango: recibidos, sin leer, por día y remitentes más frecuentes |
+
+**Escritura:**
+
+| Tool | Qué hace | Confirmación |
+|---|---|---|
+| `mail_enviar` | Correo nuevo por SMTP | Dos pasos |
+| `mail_responder` | Responde manteniendo el hilo (`In-Reply-To`/`References`), cita el original y marca `\Answered` | Dos pasos |
+| `mail_mover` | Mueve mensajes entre carpetas, incluida la papelera | Dos pasos |
+| `mail_marcar` | Leído / no leído / destacado | **Directa** |
+
+`mail_marcar` es una **excepción deliberada** al patrón de dos pasos de la sección 5:
+cambiar una marca es reversible y no manda nada al exterior. Pedir confirmación por
+mensaje haría la tool inútil. Las otras tres sí cumplen el patrón completo: vista previa
+con `confirmar=false`, verificación posterior y línea en `bitacora-escrituras.jsonl`.
+
+**`mail_leer` no marca como leído por defecto** (`marcar_leido=false`). Es a propósito:
+revisar el correo desde Claude no debe hacer desaparecer los no leídos de Roundcube sin
+que JC lo decida.
+
+**Los adjuntos no se descargan.** `mail_leer` los nombra, con tipo y tamaño. Para bajar uno
+hay que abrir Roundcube.
+
+### Identidad del buzón
+
+`MAIL_USER` es **una casilla concreta**, no el dominio. El conector ve solo ese buzón. Para
+operar dos casillas (ej. `ventas@` y `contacto@`) se montan dos identidades con el esquema
+de la sección 1: `MCP_SECRET_MAIL_VENTAS` → `MAIL_USER_VENTAS` / `MAIL_PASS_VENTAS`.
+
+Ojo con cPanel: si la clave de la cuenta de correo se cambia desde cPanel, el conector
+responde error de login hasta que se actualice `MAIL_PASS` en Render.
+
+### Variables en Render
+
+| Variable | Obligatoria | Por defecto |
+|---|---|---|
+| `MCP_SECRET_MAIL` | sí | — (mínimo 32 caracteres) |
+| `MAIL_USER` | sí | — dirección completa |
+| `MAIL_PASS` | sí | — |
+| `MAIL_IMAP_HOST` | no | `mail.rmgautos.cl` |
+| `MAIL_IMAP_PORT` | no | `993` |
+| `MAIL_SMTP_HOST` | no | `mail.rmgautos.cl` |
+| `MAIL_SMTP_PORT` | no | `465` |
+| `MAIL_FROM` | no | el valor de `MAIL_USER` |
+
+### Dependencias nuevas
+
+`imapflow` (IMAP), `nodemailer` (SMTP) y `mailparser` (parseo de MIME) se agregaron a
+`package.json`. El build de Render corre `npm install`, así que las instala solo; no hace
+falta tocar `package-lock.json` a mano.
+
+### Si el conector no conecta
+
+En orden de probabilidad:
+
+1. **Puerto bloqueado por el plan de Render.** El plan Free permite salida TCP, pero si el
+   host de correo filtra por IP hay que habilitar la IP de salida de Render en cPanel.
+2. **Clave incorrecta** en `MAIL_PASS`, o la casilla pide clave de aplicación.
+3. **Nombre de carpeta.** Dovecot/cPanel usa el prefijo `INBOX.` (`INBOX.Sent`, no `Sent`).
+   Por eso `mail_carpetas` existe: resuelve los nombres reales antes de buscar.
+
+Verificar siempre primero:
+
+```bash
+curl -s https://rmg-mcp-gateway.onrender.com/mail-rmg/health
+```
