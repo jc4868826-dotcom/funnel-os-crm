@@ -152,7 +152,10 @@ const estado = (c) => {
 
 for (const c of CONECTORES) {
   let modulo = null;
-  const cargar = () => (modulo ||= c.cargar());
+  // Si el import falla, se descarta la promesa rechazada para que el siguiente intento
+  // vuelva a probar en vez de quedar pegado con el error cacheado.
+  const cargar = () => (modulo ||= c.cargar().catch((e) => { modulo = null; throw e; }));
+  c.precargar = cargar;
 
   app.get(`/${c.ruta}/health`, (req, res) => res.json({ conector: c.ruta, titulo: c.titulo, ...estado(c) }));
 
@@ -161,7 +164,16 @@ for (const c of CONECTORES) {
     if (!lista.some((i) => i.listo)) return rpcError(res, 503, `${c.titulo} sin configurar`);
 
     const identidad = autenticar(req, lista);
-    if (!identidad) return rpcError(res, 401, 'No autorizado');
+    if (!identidad) {
+      console.log(`[${c.ruta}] 401 metodo=${req.body?.method || '?'}`);
+      return rpcError(res, 401, 'No autorizado');
+    }
+
+    // Traza mínima por petición: sin secretos, sin cuerpo. Sirve para distinguir
+    // "no llegó" de "llegó y fue lento" cuando un cliente MCP no logra conectar.
+    const t0 = Date.now();
+    res.on('finish', () =>
+      console.log(`[${c.ruta}] ${res.statusCode} metodo=${req.body?.method || '?'} identidad=${identidad.nombre} ${Date.now() - t0}ms`));
 
     try {
       const { createServer } = await cargar();
@@ -205,5 +217,25 @@ app.listen(PORT, () => {
     const st = estado(c);
     const detalle = st.identidades.map((i) => (i.listo ? i.nombre : `${i.nombre} (${i.motivo})`)).join(', ');
     console.log(`  /${c.ruta.padEnd(10)} ${st.listo ? 'listo' : 'SIN CONFIGURAR'} — identidades: ${detalle || 'ninguna'}`);
+  }
+
+  // Pre-carga de los módulos de cada conector.
+  //
+  // Sin esto el import ocurre DENTRO de la primera petición de cada conector. Para los
+  // conectores livianos da igual (~3 ms), pero mail-rmg arrastra imapflow, mailparser y
+  // nodemailer: ~1 s en una máquina rápida y bastante más en el plan Free, con CPU
+  // compartida. El cliente MCP corta por timeout antes de recibir respuesta, y como no
+  // hay excepción no queda nada en los logs — el síntoma es "no se pudo conectar al
+  // servidor" con el gateway aparentemente sano.
+  //
+  // Precargando aquí, ese costo se paga en el arranque y la primera petición real ya
+  // encuentra el módulo en memoria. Un fallo de pre-carga se informa y no tumba el
+  // proceso: el conector lo reintenta solo en la primera petición.
+  for (const c of CONECTORES) {
+    const t0 = Date.now();
+    c.precargar().then(
+      () => console.log(`  /${c.ruta.padEnd(10)} modulo precargado en ${Date.now() - t0}ms`),
+      (e) => console.error(`  /${c.ruta.padEnd(10)} fallo la pre-carga: ${e.message}`),
+    );
   }
 });

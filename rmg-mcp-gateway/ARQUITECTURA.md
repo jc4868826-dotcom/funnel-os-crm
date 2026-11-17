@@ -1,7 +1,8 @@
 # Conectores MCP de RMG — arquitectura y operación
 
-Documento maestro. Si vas a tocar cualquier conector MCP (erp-rmg, erp-parts, funnelos),
-lee esto primero: evita redescubrir desde cero dónde vive el código y cómo se despliega.
+Documento maestro. Si vas a tocar cualquier conector MCP (erp-rmg, erp-parts, funnelos,
+mail-rmg), lee esto primero: evita redescubrir desde cero dónde vive el código y cómo se
+despliega.
 
 Última actualización: 17-11-2026.
 
@@ -9,7 +10,7 @@ lee esto primero: evita redescubrir desde cero dónde vive el código y cómo se
 
 ## 1. Dónde vive todo
 
-Un solo servicio en Render sirve los tres conectores.
+Un solo servicio en Render sirve los cuatro conectores.
 
 | Qué | Valor |
 |---|---|
@@ -24,6 +25,15 @@ Un solo servicio en Render sirve los tres conectores.
 El **Root Directory** es clave: Render solo construye desde `rmg-mcp-gateway/` y solo
 auto-despliega cuando cambia algo **dentro de esa carpeta**. Un commit que toque otra
 parte del repo no dispara despliegue del gateway.
+
+### Ojo: hay otro servicio en Render que NO es este
+
+`rmg-autos-bot` (`srv-d7ptvcgk1i2s738cadj0`) es un servicio aparte, con su propio juego de
+variables (`IMAP_*`, `WA_*`, `OPENAI_API_KEY`, `MCP_SECRET` a secas, etc.). **No es el
+gateway.** El 17-11-2026 las variables del correo se cargaron ahí por error y el conector
+no levantaba; el síntoma fue `/mail-rmg/health` respondiendo `no hay ningun
+MCP_SECRET_MAIL configurado` con el código ya desplegado. Antes de pelear con el código,
+confirmar que las variables están en el servicio correcto.
 
 ### Estructura del gateway
 
@@ -248,6 +258,10 @@ identidad. No viven en el repo. Si faltan, el conector responde 503 y lo informa
 Cuarta ruta del gateway: `/mail-rmg`. Correo de RMG Autos, el mismo buzón que se ve en
 `mail.rmgautos.cl` vía Roundcube.
 
+**Estado:** creado y probado el 17-11-2026 contra `juancarlos.contreras@rmgautos.cl`.
+Lectura IMAP verificada de punta a punta (`mail_carpetas` devolvió las 8 carpetas de la
+cuenta). Commit `2320926`.
+
 ### Por qué IMAP y no Roundcube
 
 **Roundcube no tiene API.** Es un cliente web sobre el buzón, igual que el conector: la URL
@@ -291,14 +305,55 @@ que JC lo decida.
 **Los adjuntos no se descargan.** `mail_leer` los nombra, con tipo y tamaño. Para bajar uno
 hay que abrir Roundcube.
 
-### Identidad del buzón
+**No hay borrado definitivo.** `mail_mover` a la papelera es lo más destructivo que existe,
+y es recuperable. No se implementó `expunge` a propósito.
 
-`MAIL_USER` es **una casilla concreta**, no el dominio. El conector ve solo ese buzón. Para
-operar dos casillas (ej. `ventas@` y `contacto@`) se montan dos identidades con el esquema
-de la sección 1: `MCP_SECRET_MAIL_VENTAS` → `MAIL_USER_VENTAS` / `MAIL_PASS_VENTAS`.
+### Cómo son las carpetas de verdad en este cPanel
 
-Ojo con cPanel: si la clave de la cuenta de correo se cambia desde cPanel, el conector
-responde error de login hasta que se actualice `MAIL_PASS` en Render.
+Confirmado el 17-11-2026 en la cuenta de JC:
+
+```
+INBOX            (\Inbox)
+INBOX.Sent       (\Sent)        INBOX.Drafts   (\Drafts)
+INBOX.Trash      (\Trash)       INBOX.Archive  (\Archive)
+INBOX.spam       (\Junk)        INBOX.Junk     (sin atributo, vacía)
+INBOX.Notes      (sin atributo)
+```
+
+Dos cosas que importan:
+
+1. **Todo cuelga del prefijo `INBOX.`** — es `INBOX.Sent`, nunca `Sent`.
+2. **Hay dos carpetas de spam.** La real es `INBOX.spam` (lleva el atributo `\Junk`);
+   `INBOX.Junk` existe y está vacía. Por eso `especiales` se resuelve **por atributo IMAP
+   y nunca por nombre**: resolver por nombre elegiría la carpeta vacía y el spam se vería
+   siempre en cero. Si alguna vez se toca esa lógica en `especiales()`, no cambiarla a
+   coincidencia por nombre.
+
+### Una casilla por persona (decisión, 17-11-2026)
+
+Cada persona usa **su propia casilla** a través de su propia identidad. Raúl ve solo la
+suya, Victor la suya, JC la suya. Nadie lee el correo de otro.
+
+Esto **no requiere código**: es el mismo esquema de identidades de la sección 1. Agregar a
+alguien son tres variables en Render, con el sufijo en mayúsculas:
+
+```
+MCP_SECRET_MAIL_RAUL   / MAIL_USER_RAUL   / MAIL_PASS_RAUL
+MCP_SECRET_MAIL_VICTOR / MAIL_USER_VICTOR / MAIL_PASS_VICTOR
+```
+
+Cada uno registra la **misma URL** en su cuenta de claude.ai con **su propio secreto**.
+Para cortarle el acceso a alguien se borra su `MCP_SECRET_MAIL_*` y listo; los demás no se
+tocan. Una identidad con sufijo no hereda nada de la principal: si le falta
+`MAIL_PASS_VICTOR` no se monta, y `/mail-rmg/health` dice exactamente qué falta.
+
+Se evaluó y se descartó la alternativa de que una identidad opere varias casillas (un
+parámetro `casilla` en las 8 tools). Si alguna vez hace falta, eso sí requiere cambiar el
+conector **y** `index.mjs`, porque hoy el gateway solo pasa al conector las variables
+declaradas en `credenciales.obligatorias` y `.opcionales`.
+
+Ojo con cPanel: si la clave de una casilla se cambia desde cPanel, el conector responde
+error de login hasta que se actualice el `MAIL_PASS*` correspondiente en Render.
 
 ### Variables en Render
 
