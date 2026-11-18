@@ -158,7 +158,7 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource, is
     // igual — así una falla parcial del scraper nunca vuelve a esconder un auto real.
     // nov-2026: inventario 100% desde el ERP (scrapeCache lo llena cargarInventarioERP). Sin mezcla con inventory.json.
     let invS = scrapeCache.data || '';
-    if (!invS) invS = '(sin inventario disponible temporalmente)';
+    if (!invS) invS = 'INVENTARIO NO DISPONIBLE POR FALLA TECNICA. No afirmes que un auto no esta disponible ni que no hay stock; di que estas confirmando con un ejecutivo y que le responden en unos minutos.';
     const knowledgeRaw = botCfg?.knowledge;
     const knowledge = Array.isArray(knowledgeRaw)
       ? { inventario: [], promociones: [], comportamiento: knowledgeRaw }
@@ -263,7 +263,7 @@ async function marcela(tenant, history, msg, notes, assignedName, leadSource, is
           try { resultadoTool = buscarInventario(filtrosTool); } catch(eBusq) { console.error('[marcela] Error en buscarInventario:', eBusq.message); resultadoTool = { error: 'error interno buscando inventario' }; }
           // Paso (b): si el match determinista no encontro nada, el LLM revisa el stock completo.
           // Cata solo puede decir "no lo tenemos" cuando TAMBIEN este paso confirma que no hay ninguno.
-          if (resultadoTool && !resultadoTool.error && (resultadoTool.total === 0 || resultadoTool.totalUnidades === 0)) {
+          if (resultadoTool && !resultadoTool.error && resultadoTool.modo !== 'sin_inventario' && (resultadoTool.total === 0 || resultadoTool.totalUnidades === 0)) {
             try {
               const alt = await buscarStockPorLLM(msg, scrapeCache.items || [], filtrosTool);
               if (alt) resultadoTool = alt;
@@ -426,6 +426,24 @@ function contieneDifuso(pajar, aguja) {
 
 // Cada token de 3+ caracteres debe calzar (exacto, difuso o como subcadena difusa).
 // El año se ignora aqui: el año iba dentro de `modelo` y rompia el includes() anterior.
+// Sinonimos de categoria: el cliente dice "camioneta", el inventario dice "Pickup".
+const SINON_CAT = {
+  pickup:    ['camioneta','camionetas','pickup','pickups','pick up','doble cabina','dc'],
+  suv:       ['suv','suvs','jeep','todoterreno','campero'],
+  hatchback: ['hatchback','hatch','citycar','city car','auto chico','compacto','urbano'],
+  sedan:     ['sedan','sedanes','4 puertas'],
+  'furgon':  ['furgon','furgoneta','van','carga','utilitario','reparto'],
+  van:       ['van','minibus','furgon','9 asientos','transporte de pasajeros']
+};
+function calzaCategoria(filtroCat, tipo) {
+  const f = _normInv(filtroCat);
+  if (!f) return true;
+  const t = _normInv(tipo);
+  if (!t) return false;
+  if (t.includes(f) || f.includes(t)) return true;
+  return (SINON_CAT[t] || []).some(sn => { const n = _normInv(sn); return n === f || f.includes(n); });
+}
+
 function calzaTexto(consulta, ...campos) {
   const toks = tokenizarQ(consulta).filter(t => !esAnnoQ(t));
   if (!toks.length) return false;
@@ -486,13 +504,26 @@ async function buscarStockPorLLM(mensajeCliente, items, filtros) {
 
 function buscarInventario(filtros = {}) {
   const todos = scrapeCache.items || [];
+  // Fail-safe: si el ERP no se pudo leer, el bot NO puede concluir que un auto no existe.
+  // Un fallo de lectura se veia igual que "no hay stock" y Cata respondia "no lo tenemos".
+  if (!todos.length) {
+    console.error('[INV-VACIO] consulta con inventario sin cargar — filtros=' + JSON.stringify(filtros) +
+      ' | fuente=' + (scrapeCache.fuente || 'ninguna') + ' | ts=' + (scrapeCache.ts || 0));
+    return {
+      modo: 'sin_inventario', total: 0, autos: [],
+      aviso: 'INVENTARIO NO DISPONIBLE POR UNA FALLA TECNICA DE LECTURA DEL ERP. ' +
+        'PROHIBIDO decir, insinuar o dar a entender que el auto no esta disponible, que no lo tenemos o que no hay stock. ' +
+        'Responde que estas confirmando la disponibilidad y los datos exactos con un ejecutivo y que le avisan en unos minutos. ' +
+        'Si el cliente no dijo marca/modelo, pideselo para dejarlo registrado.'
+    };
+  }
   const nMarca = _normInv(filtros.marca), nModelo = _normInv(filtros.modelo), nCat = _normInv(filtros.categoria);
   const noDisp = it => it.estado === 'vendido' || it.estado === 'reservado';
   const coincide = it => {
     // Match normalizado + difuso (tildes, guiones, espacios, typos, "equis trail", año dentro del modelo)
     if (nMarca && !(calzaTexto(filtros.marca, it.brand) || calzaTexto(filtros.marca, it.model))) return false;
     if (nModelo && !calzaTexto(filtros.modelo, it.model)) return false;
-    if (nCat && !_normInv(it.tipo).includes(nCat)) return false;
+    if (nCat && !calzaCategoria(filtros.categoria, it.tipo)) return false;
     // El precio solo filtra cuando se busca por criterio; si el cliente ya nombró un modelo NO se descarta
     // por precio (el precio del aviso en Chileautos/ML casi nunca coincide con el del sitio).
     if (!nModelo) {
