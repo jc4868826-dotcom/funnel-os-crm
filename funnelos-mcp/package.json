@@ -1,0 +1,12 @@
+{
+  "name": "funnelos-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Conector MCP (solo lectura) de FunnelOS (CRM RMG Autos), montado en /funnelos-mcp. Aislado: no usa /var/data.",
+  "type": "module",
+  "main": "index.cjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^3.23.0"
+  }
+}

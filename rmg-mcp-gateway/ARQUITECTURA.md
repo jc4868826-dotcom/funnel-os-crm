@@ -258,9 +258,9 @@ identidad. No viven en el repo. Si faltan, el conector responde 503 y lo informa
 Cuarta ruta del gateway: `/mail-rmg`. Correo de RMG Autos, el mismo buzón que se ve en
 `mail.rmgautos.cl` vía Roundcube.
 
-**Estado:** creado y probado el 17-11-2026 contra `juancarlos.contreras@rmgautos.cl`.
-Lectura IMAP verificada de punta a punta (`mail_carpetas` devolvió las 8 carpetas de la
-cuenta). Commit `2320926`.
+**Estado:** operativo desde el 17-11-2026 contra `juancarlos.contreras@rmgautos.cl`.
+Lectura IMAP verificada de punta a punta y conector registrado en claude.ai. Commits
+`2320926` (conector) y el de precarga + traza. **SMTP todavía sin probar.**
 
 ### Por qué IMAP y no Roundcube
 
@@ -374,18 +374,105 @@ error de login hasta que se actualice el `MAIL_PASS*` correspondiente en Render.
 `package.json`. El build de Render corre `npm install`, así que las instala solo; no hace
 falta tocar `package-lock.json` a mano.
 
+### Registrar el conector en claude.ai (leer esto antes de pelear con el formulario)
+
+La ruta cambió: ya **no** es Configuración → Conectores. Ahora es
+**Plugins → Agregar → Agregar conector personalizado**.
+
+Procedimiento que funciona, con las trampas marcadas:
+
+1. Nombre y URL (`https://rmg-mcp-gateway.onrender.com/<ruta>`) → **Continuar**.
+2. claude.ai sondea el servidor. Como el gateway responde 401 sin credenciales, marca
+   **"Iniciar sesión ahora" como "Detectado"**. *Es OAuth y está mal para este gateway.*
+   Cambiar a **"Sin inicio de sesión"**.
+3. Agregar encabezado. **Usar `x-api-key`, no `authorization`.** El gateway acepta los
+   dos (`index.mjs` → `autenticar()`), pero con `authorization` hay que escribir
+   `Bearer ` + secreto, y el espacio que falta o sobra es la causa más común de 401. Con
+   `x-api-key` se pega el secreto crudo y no hay nada más que equivocar.
+4. El valor se copia **con el botón de copiar de Render**, nunca seleccionando el texto a
+   mano ni regenerándolo. Tiene que ser exactamente el `MCP_SECRET_MAIL` que está en el
+   servicio, byte a byte.
+5. Llenar el campo Valor **antes** de apretar Agregar.
+
+Tres cosas que confunden y hacen perder horas:
+
+- **El panel del conector muestra "Autorización: Requiere iniciar sesión" aunque hayas
+  elegido "Sin inicio de sesión".** Es el resultado del sondeo, no la configuración
+  guardada. No sirve como indicador de que algo quedó mal.
+- **claude.ai reporta un 401 como "No se pudo conectar al servidor".** No distingue entre
+  servidor caído, URL mala y secreto incorrecto. El mensaje engaña: manda a revisar la URL
+  cuando el problema es la credencial.
+- **Un conector no se puede editar.** El menú solo ofrece Desconectar y Quitar. Si quedó
+  mal configurado hay que quitarlo y rehacerlo — y **quitarlo desenlaza las tareas
+  programadas que lo usaban** (el diálogo de confirmación las nombra; hay que volver a
+  asociarlas después).
+
+### Diagnosticar con los logs del gateway
+
+`index.mjs` deja una línea por petición, sin secretos ni cuerpo:
+
+```
+[mail-rmg] 200 metodo=tools/list identidad=principal 31ms
+[mail-rmg] 401 metodo=initialize
+```
+
+Con eso el diagnóstico es de tres salidas, sin adivinar:
+
+| Qué se ve en los logs | Qué significa |
+|---|---|
+| `401` | El secreto del encabezado no coincide con el de Render |
+| `200` y claude.ai igual falla | El gateway respondió bien; el problema es del cliente |
+| Nada | La petición nunca llegó al servidor |
+
+Fue exactamente así como se resolvió el 17-11-2026: tres `401 metodo=initialize` en los
+logs cerraron un problema que llevaba una hora pareciendo timeout, OAuth mal configurado
+y módulo pesado.
+
+### Pre-carga de módulos
+
+`index.mjs` precarga los módulos de los cuatro conectores al arrancar. Antes el import
+ocurría dentro de la primera petición: ~3 ms para los conectores livianos, pero **1703 ms
+para mail-rmg en Render** (imapflow + mailparser + nodemailer). No fue la causa del
+problema de registro, pero sí un riesgo real de timeout en el plan Free. El tiempo de
+pre-carga de cada conector queda en el log de arranque.
+
+### Probar el conector sin registrarlo en claude.ai
+
+Prueba directa contra el endpoint MCP, útil para separar "falla el correo" de "falla
+claude.ai":
+
+```bash
+printf 'MCP_SECRET_MAIL: '; read -s SEC; echo
+curl -sN https://rmg-mcp-gateway.onrender.com/mail-rmg \
+  -H "Authorization: Bearer $SEC" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"mail_carpetas","arguments":{}}}' \
+  | sed -n 's/^data: //p'
+```
+
+Devuelve la cuenta y las carpetas. Si eso responde, IMAP está bien y cualquier problema
+restante es del registro del conector en claude.ai.
+
 ### Si el conector no conecta
 
 En orden de probabilidad:
 
-1. **Puerto bloqueado por el plan de Render.** El plan Free permite salida TCP, pero si el
-   host de correo filtra por IP hay que habilitar la IP de salida de Render en cPanel.
-2. **Clave incorrecta** en `MAIL_PASS`, o la casilla pide clave de aplicación.
-3. **Nombre de carpeta.** Dovecot/cPanel usa el prefijo `INBOX.` (`INBOX.Sent`, no `Sent`).
-   Por eso `mail_carpetas` existe: resuelve los nombres reales antes de buscar.
+1. **Las variables están en el servicio equivocado.** Ver la sección 1. Fue la causa real
+   la primera vez.
+2. **Clave incorrecta** en `MAIL_PASS`, o la casilla pide clave de aplicación. Síntoma:
+   `Invalid credentials` / `AUTHENTICATIONFAILED`.
+3. **Puerto bloqueado o IP filtrada.** Síntoma: timeout o `ECONNREFUSED`. El plan Free de
+   Render permite salida TCP, pero si el host de correo filtra por IP hay que habilitar la
+   IP de salida de Render en cPanel.
+4. **Nombre de carpeta.** Usar siempre `mail_carpetas` antes de buscar en una carpeta que
+   no sea INBOX.
 
 Verificar siempre primero:
 
 ```bash
 curl -s https://rmg-mcp-gateway.onrender.com/mail-rmg/health
 ```
+
+Recordar que `/health` solo confirma que las variables **existen**, no que cPanel acepte la
+clave. La prueba real es el `curl` de más arriba.

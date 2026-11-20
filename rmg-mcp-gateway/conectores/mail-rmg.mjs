@@ -19,6 +19,7 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
 import fs from "node:fs";
+import { guardarAdjunto, enlaceDe } from "../herramientas/adjuntos.mjs";
 
 export function createServer() {
 
@@ -162,7 +163,7 @@ server.tool("mail_carpetas",
   })));
 
 server.tool("mail_buscar",
-  "Busca correos en una carpeta y devuelve la cabecera de cada uno (uid, fecha, de, para, asunto, leido, adjuntos). NO devuelve el cuerpo: para eso usa mail_leer con el uid. Los filtros se combinan con Y.",
+  "Busca correos en una carpeta y devuelve la cabecera de cada uno (uid, fecha, de, para, asunto, leido, adjuntos). NO devuelve el cuerpo ni descarga adjuntos: para el cuerpo usa mail_leer con el uid, y para bajar un adjunto mail_adjuntos. Los filtros se combinan con Y.",
   {
     carpeta: z.string().default("INBOX").describe("Carpeta IMAP, ej. INBOX o INBOX.Sent. Ver mail_carpetas."),
     desde: fechaOpt.describe("Recibidos desde esta fecha, AAAA-MM-DD"),
@@ -237,7 +238,7 @@ function adjuntosDe(nodo, acc = []) {
 }
 
 server.tool("mail_leer",
-  "Lee un correo completo por uid: cabeceras, cuerpo en texto y lista de adjuntos. No descarga los adjuntos, solo los nombra. Por defecto NO marca el mensaje como leido.",
+  "Lee un correo completo por uid: cabeceras, cuerpo en texto y lista de adjuntos. NO descarga los adjuntos, solo los nombra y numera: para bajar uno usa mail_adjuntos con el mismo uid y el numero o el nombre. Por defecto NO marca el mensaje como leido.",
   {
     uid: z.number().int().describe("uid del mensaje, tal como lo devuelve mail_buscar"),
     carpeta: z.string().default("INBOX"),
@@ -249,6 +250,10 @@ server.tool("mail_leer",
       const bajada = await client.download(String(uid), undefined, { uid: true });
       if (!bajada || !bajada.content) throw new Error(`No existe el mensaje uid ${uid} en ${carpeta}`);
       const msg = await simpleParser(bajada.content);
+      // La estructura da el numero de parte IMAP de cada adjunto, que es lo que necesita
+      // mail_adjuntos para bajar uno solo sin traerse el mensaje entero otra vez.
+      const estructura = await client.fetchOne(String(uid), { bodyStructure: true }, { uid: true });
+      const adj = adjuntosDe(estructura?.bodyStructure).map((a, i) => ({ n: i + 1, ...a }));
 
       if (marcar_leido) {
         await client.messageFlagsAdd({ uid: String(uid) }, ["\\Seen"], { uid: true });
@@ -269,13 +274,179 @@ server.tool("mail_leer",
         cuerpo: recorta(cuerpo, cuerpo_max),
         tiene_html: !!msg.html,
         marcado_leido: marcar_leido,
-        adjuntos: (msg.attachments || []).map((a) => ({
-          nombre: a.filename || null,
-          tipo: a.contentType || null,
-          tamano_kb: a.size ? Math.round(a.size / 1024) : null,
-        })),
+        adjuntos: adj,
+        aviso_adjuntos: adj.length
+          ? "No se descargo ningun adjunto. Si el usuario los pide, llama mail_adjuntos con este uid y el n o el nombre."
+          : null,
       };
     }))));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Adjuntos, solo a peticion
+//
+// Ni mail_buscar ni mail_leer bajan adjuntos: solo los nombran. Bajarlos siempre seria
+// carisimo e inutil — la mayoria de los correos del buzon traen firmas, logos y PDF que
+// nadie pidio. Esta tool es la unica que mueve bytes, y aun asi no descarga nada si no se
+// le dice cual: sin 'cual' ni todos=true devuelve el listado y se detiene.
+//
+// El modo por defecto es "enlace": el archivo se guarda en el gateway y vuelve una URL.
+// Los modos "texto", "imagen" y "base64" meten el contenido en la conversacion, asi que
+// tienen topes propios mas bajos. Son para cuando hay que LEER el adjunto (el XML de una
+// factura, la foto de un siniestro), no para entregarlo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TOPE_MB = { enlace: 25, texto: 5, imagen: 3, base64: 1 };
+
+const esTexto = (t) => /^text\//i.test(t || "") || /(json|xml|csv|html|plain)/i.test(t || "");
+const esImagen = (t) => /^image\//i.test(t || "");
+
+const recortaTexto = (s, n) => {
+  const t = String(s ?? "").replace(/\r\n/g, "\n").trim();
+  return t.length > n ? `${t.slice(0, n)}\n[... ${t.length - n} caracteres mas; sube texto_max o usa devolver="enlace"]` : t;
+};
+
+// Lee el flujo del adjunto cortando en seco si pasa el tope, para que un archivo grande
+// no se cargue entero en memoria antes de rechazarlo.
+async function aBuffer(flujo, topeBytes, nombre) {
+  const trozos = [];
+  let n = 0;
+  for await (const t of flujo) {
+    n += t.length;
+    if (n > topeBytes) {
+      if (typeof flujo.destroy === "function") flujo.destroy();
+      throw new Error(`El adjunto "${nombre}" supera el tope de ${(topeBytes / 1048576).toFixed(1)} MB de este modo. Usa devolver="enlace" o sube max_mb.`);
+    }
+    trozos.push(t);
+  }
+  return Buffer.concat(trozos);
+}
+
+// Resuelve 'cual' contra la lista: numero de parte IMAP, nombre exacto, indice n, o
+// coincidencia parcial del nombre. En ese orden, para que "2" nunca sea ambiguo.
+function elegir(lista, cual) {
+  const q = String(cual).trim();
+  const bajo = q.toLowerCase();
+  const porParte = lista.filter((a) => String(a.parte).toLowerCase() === bajo);
+  if (porParte.length) return porParte;
+  const exacto = lista.filter((a) => (a.nombre || "").toLowerCase() === bajo);
+  if (exacto.length) return exacto;
+  if (/^\d+$/.test(q)) {
+    const x = lista[Number(q) - 1];
+    if (x) return [x];
+  }
+  const parcial = lista.filter((a) => (a.nombre || "").toLowerCase().includes(bajo));
+  if (parcial.length) return parcial;
+  throw new Error(`Ningun adjunto coincide con "${cual}". Hay ${lista.length}: ${lista.map((a, i) => `${i + 1}=${a.nombre || a.parte}`).join(", ")}`);
+}
+
+server.tool("mail_adjuntos",
+  "Descarga adjuntos de un correo, SOLO cuando el usuario lo pide. Sin 'cual' ni todos=true no descarga nada: devuelve el listado y se detiene. Por defecto entrega un enlace de descarga y no mete el archivo en la conversacion. Usa devolver='texto' o 'imagen' unicamente si hay que leer el contenido del adjunto.",
+  {
+    uid: z.number().int().describe("uid del mensaje, tal como lo devuelve mail_buscar o mail_leer"),
+    carpeta: z.string().default("INBOX"),
+    cual: z.union([z.number().int(), z.string()]).optional()
+      .describe("Que adjunto bajar: el n que muestra mail_leer, su nombre de archivo, o el numero de parte IMAP. Omitelo para solo listar."),
+    todos: z.boolean().default(false).describe("Baja todos los adjuntos del correo. Pidelo solo si el usuario lo pidio asi."),
+    devolver: z.enum(["enlace", "texto", "imagen", "base64"]).default("enlace")
+      .describe("enlace = URL de descarga (por defecto, no gasta contexto). texto = contenido de un adjunto de texto/csv/xml/json. imagen = la imagen para poder verla. base64 = bytes crudos, solo si el usuario lo pide."),
+    texto_max: z.number().int().min(200).max(100000).default(8000).describe("Solo con devolver='texto': maximo de caracteres por archivo"),
+    max_mb: z.number().min(0.1).max(25).default(25).describe("Tope de tamano por adjunto, en MB. Cada modo aplica ademas su propio tope mas bajo."),
+  },
+  async ({ uid, carpeta, cual, todos, devolver, texto_max, max_mb }) => {
+    try {
+      const datos = await conIMAP(async (client) =>
+        enCarpeta(client, carpeta, true, async () => {
+          const est = await client.fetchOne(String(uid), { bodyStructure: true, envelope: true }, { uid: true });
+          if (!est) throw new Error(`No existe el mensaje uid ${uid} en ${carpeta}`);
+          const lista = adjuntosDe(est.bodyStructure).map((a, i) => ({ n: i + 1, ...a }));
+          const cab = {
+            uid, carpeta,
+            asunto: est.envelope?.subject || "(sin asunto)",
+            de: dir(est.envelope?.from),
+            fecha: horaCL(est.envelope?.date),
+            adjuntos: lista.length,
+          };
+
+          if (!lista.length) {
+            return { ...cab, descargado: false, listado: [], aviso: "Este correo no trae adjuntos." };
+          }
+          if (cual === undefined && !todos) {
+            return {
+              ...cab, descargado: false, listado: lista,
+              aviso: "Solo listado: no se descargo nada. Si el usuario quiere alguno, vuelve a llamar con cual=<n o nombre>, o todos=true.",
+            };
+          }
+
+          const tope = Math.min(max_mb, TOPE_MB[devolver]) * 1048576;
+          const elegidos = todos ? lista : elegir(lista, cual);
+          const bajados = [];
+          for (const a of elegidos) {
+            const bajada = await client.download(String(uid), a.parte, { uid: true });
+            if (!bajada || !bajada.content) throw new Error(`No se pudo bajar la parte ${a.parte} del uid ${uid}`);
+            const nombre = bajada.meta?.filename || a.nombre || `adjunto-${a.parte}`;
+            const tipo = bajada.meta?.contentType || a.tipo || "application/octet-stream";
+            const buffer = await aBuffer(bajada.content, tope, nombre);
+            bajados.push({ n: a.n, parte: a.parte, nombre, tipo, tamano_kb: Math.round(buffer.length / 1024), bytes: buffer.length, buffer });
+          }
+          return { ...cab, descargado: true, bajados };
+        }));
+
+      if (!datos.descargado) return out(datos);
+
+      const { bajados, ...cab } = datos;
+      const ficha = (a) => ({ n: a.n, nombre: a.nombre, tipo: a.tipo, tamano_kb: a.tamano_kb });
+
+      if (devolver === "imagen") {
+        const malos = bajados.filter((a) => !esImagen(a.tipo));
+        if (malos.length) {
+          throw new Error(`devolver="imagen" sirve solo para imagenes. No lo son: ${malos.map((a) => `${a.nombre} (${a.tipo})`).join(", ")}. Usa devolver="enlace".`);
+        }
+        return {
+          content: [
+            { type: "text", text: JSON.stringify({ ...cab, modo: "imagen", archivos: bajados.map(ficha) }, null, 1) },
+            ...bajados.map((a) => ({ type: "image", data: a.buffer.toString("base64"), mimeType: a.tipo })),
+          ],
+        };
+      }
+
+      if (devolver === "texto") {
+        const malos = bajados.filter((a) => !esTexto(a.tipo));
+        if (malos.length) {
+          throw new Error(`devolver="texto" sirve solo para adjuntos de texto, csv, xml, json o html. No lo son: ${malos.map((a) => `${a.nombre} (${a.tipo})`).join(", ")}. Usa devolver="enlace".`);
+        }
+        return out({
+          ...cab, modo: "texto",
+          archivos: bajados.map((a) => ({ ...ficha(a), contenido: recortaTexto(a.buffer.toString("utf8"), texto_max) })),
+        });
+      }
+
+      if (devolver === "base64") {
+        return out({
+          ...cab, modo: "base64",
+          aviso: 'base64 consume mucho contexto; para entregar el archivo al usuario es mejor devolver="enlace".',
+          archivos: bajados.map((a) => ({ ...ficha(a), base64: a.buffer.toString("base64") })),
+        });
+      }
+
+      // enlace (por defecto)
+      const archivos = bajados.map((a) => {
+        const g = guardarAdjunto({ nombre: a.nombre, tipo: a.tipo, buffer: a.buffer, uid: cab.uid, carpeta: cab.carpeta });
+        bitacora({ accion: "descargar_adjunto", carpeta: cab.carpeta, uid: cab.uid, nombre: a.nombre, bytes: a.bytes });
+        return {
+          ...ficha(a),
+          enlace: enlaceDe("mail-rmg", g.token),
+          vence_en_minutos: g.vence_en_minutos,
+          descargas_disponibles: g.descargas_disponibles,
+        };
+      });
+      return out({
+        ...cab, modo: "enlace", archivos,
+        aviso: "Entrega los enlaces tal cual al usuario. Vencen en 30 minutos y el archivo no queda guardado en el servidor.",
+      });
+    } catch (e) {
+      return fail(e);
+    }
+  });
 
 server.tool("mail_resumen",
   "Resumen de actividad del correo en un rango de fechas: cuantos llegaron, cuantos sin leer, y los remitentes y asuntos mas frecuentes. Para ver el panorama sin leer mensajes uno por uno.",

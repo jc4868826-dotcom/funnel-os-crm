@@ -23,6 +23,7 @@ import crypto from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import express from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { rutaAdjuntos, estadoAlmacen } from './herramientas/adjuntos.mjs';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Credenciales por peticion.
@@ -81,6 +82,9 @@ const CONECTORES = [
       opcionales: ['MAIL_IMAP_HOST', 'MAIL_IMAP_PORT', 'MAIL_SMTP_HOST', 'MAIL_SMTP_PORT', 'MAIL_FROM'],
     },
     cargar: () => import('./conectores/mail-rmg.mjs'),
+    // Habilita GET /mail-rmg/adjunto/<token>: la descarga de adjuntos por enlace.
+    // Solo este conector mueve archivos, asi que solo este expone la ruta.
+    adjuntos: true,
   },
 ];
 
@@ -157,7 +161,13 @@ for (const c of CONECTORES) {
   const cargar = () => (modulo ||= c.cargar().catch((e) => { modulo = null; throw e; }));
   c.precargar = cargar;
 
-  app.get(`/${c.ruta}/health`, (req, res) => res.json({ conector: c.ruta, titulo: c.titulo, ...estado(c) }));
+  app.get(`/${c.ruta}/health`, (req, res) =>
+    res.json({ conector: c.ruta, titulo: c.titulo, ...estado(c), ...(c.adjuntos ? { almacen_adjuntos: estadoAlmacen() } : {}) }));
+
+  // Descarga de adjuntos. Va sin Bearer a proposito: el enlace tiene que abrirse con un
+  // clic desde el telefono. Lo protege el token aleatorio, el vencimiento y el tope de
+  // descargas (ver herramientas/adjuntos.mjs).
+  if (c.adjuntos) app.use(rutaAdjuntos(c.ruta));
 
   app.post(`/${c.ruta}`, async (req, res) => {
     const lista = identidades(c);
